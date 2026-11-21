@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FreeKeep — Réglages</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main class="wrap">
+    <header class="head">
+      <img src="../icons/icon128.png" alt="" width="44" height="44">
+      <div>
+        <h1>Réglages de FreeKeep</h1>
+        <p>Les changements sont enregistrés automatiquement.</p>
+      </div>
+    </header>
+
+    <section class="panel">
+      <h2>Stores surveillés</h2>
+      <div id="stores" class="store-grid"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Vérification</h2>
+      <label class="line">
+        <span>
+          <strong>Fréquence</strong>
+          <small>Vérification automatique en arrière-plan, même popup fermé, tant que le navigateur est ouvert.
+            Les erreurs de prix partent vite : 30 min ou 1 h conseillé.</small>
+        </span>
+        <select id="intervalHours">
+          <option value="0.5">Toutes les 30 minutes</option>
+          <option value="1">Toutes les heures</option>
+          <option value="3">Toutes les 3 heures</option>
+          <option value="6">Toutes les 6 heures</option>
+          <option value="12">Toutes les 12 heures</option>
+          <option value="24">Une fois par jour</option>
+        </select>
+      </label>
+      <label class="line">
+        <span>
+          <strong>Afficher les jeux à venir</strong>
+          <small>Epic annonce le jeu de la semaine suivante à l'avance.</small>
+        </span>
+        <input type="checkbox" id="showUpcoming" class="switch">
+      </label>
+    </section>
+
+    <section class="panel">
+      <h2>État des sources</h2>
+      <div class="status-head">
+        <span id="next-check">Prochaine vérification : …</span>
+        <button id="btn-check" class="btn">Vérifier maintenant</button>
+      </div>
+      <div id="sources" class="sources-list"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Notifications</h2>
+      <label class="line">
+        <span>
+          <strong>Nouveau jeu gratuit</strong>
+          <small>Une notification dès qu'un jeu à garder à vie apparaît.</small>
+        </span>
+        <input type="checkbox" id="notifyNew" class="switch">
+      </label>
+      <label class="line">
+        <span>
+          <strong>Rappel du dernier jour</strong>
+          <small>Si un jeu non récupéré expire dans moins de 24 h.</small>
+        </span>
+        <input type="checkbox" id="notifyLastDay" class="switch">
+      </label>
+      <label class="line">
+        <span>
+          <strong>Affaires exceptionnelles</strong>
+          <small>Erreurs de prix, chutes soudaines, plus bas historiques à -75 % et plus, deals hot à -60 % et plus.</small>
+        </span>
+        <input type="checkbox" id="notifyDeals" class="switch">
+      </label>
+      <div class="line">
+        <span><strong>Tester</strong><small>Envoie une notification d'exemple.</small></span>
+        <button id="btn-test" class="btn">Envoyer un test</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Récupération</h2>
+      <label class="line">
+        <span>
+          <strong>Clic automatique sur « Obtenir »</strong>
+          <small>Quand tu cliques « Récupérer » dans FreeKeep, la page du store s'ouvre et FreeKeep clique le bouton pour toi.
+            Les captchas et confirmations restent à faire à la main. Rien n'est jamais acheté : sur Epic, la commande n'est validée que si le total est à 0.</small>
+        </span>
+        <input type="checkbox" id="autoClick" class="switch">
+      </label>
+      <label class="line">
+        <span>
+          <strong>Détecter mes jeux Steam déjà possédés</strong>
+          <small>Utilise ta session Steam du navigateur (rien n'est envoyé ailleurs).</small>
+        </span>
+        <input type="checkbox" id="steamOwnedSync" class="switch">
+      </label>
+    </section>
+
+    <section class="panel">
+      <h2>Promos PC</h2>
+      <label class="line">
+        <span>
+          <strong>Afficher les promos PC</strong>
+          <small>Uniquement les gros jeux bien notés et les pépites adorées par les joueurs, sur 30+ stores officiels (Steam, GOG, Humble, Fanatical, GMG…).</small>
+        </span>
+        <input type="checkbox" id="pcDeals" class="switch">
+      </label>
+      <label class="line">
+        <span>
+          <strong>Remise mini sur les gros jeux</strong>
+          <small>Jeux vendus 29 $ ou plus, Metacritic 75+ ou avis Steam 80 %+.</small>
+        </span>
+        <select id="pcMinDiscount" data-number>
+          <option value="50">-50 %</option><option value="60">-60 %</option><option value="70">-70 %</option>
+          <option value="75">-75 %</option><option value="80">-80 %</option><option value="90">-90 %</option>
+        </select>
+      </label>
+      <label class="line">
+        <span>
+          <strong>Pépites : note Steam mini</strong>
+          <small>Jeux plus modestes mais très bien notés (3 000 avis minimum).</small>
+        </span>
+        <select id="gemMinRating" data-number>
+          <option value="85">85 %</option><option value="90">90 %</option><option value="95">95 %</option>
+        </select>
+      </label>
+      <label class="line">
+        <span><strong>Pépites : remise mini</strong></span>
+        <select id="gemMinDiscount" data-number>
+          <option value="50">-50 %</option><option value="60">-60 %</option><option value="70">-70 %</option>
+          <option value="75">-75 %</option><option value="80">-80 %</option>
+        </select>
+      </label>
+      <label class="line column">
+        <span>
+          <strong>Clé API GG.deals (facultatif)</strong>
+          <small>Active la surveillance des sites de clés (Eneba, Instant Gaming, G2A, Kinguin…) : prix « clé » à côté de chaque promo,
+            et alerte si un gros jeu chute soudainement. Clé gratuite : crée un compte sur
+            <a href="https://gg.deals/settings/" target="_blank" rel="noopener">gg.deals</a>, puis Settings → API.</small>
+        </span>
+        <input type="text" id="ggdealsKey" placeholder="Colle ta clé ici" autocomplete="off" spellcheck="false">
+      </label>
+    </section>
+
+    <section class="panel">
+      <h2>Switch</h2>
+      <label class="line">
+        <span>
+          <strong>Afficher les promos Switch</strong>
+          <small>eShop officiel (jeux jouables sur Switch 1), jeux en boîte et clés via Dealabs.</small>
+        </span>
+        <input type="checkbox" id="switchDeals" class="switch">
+      </label>
+      <label class="line">
+        <span>
+          <strong>Remise mini sur l'eShop</strong>
+          <small>Les petits jeux inconnus bradés sont écartés ; les jeux Nintendo sont gardés dès -20 %.</small>
+        </span>
+        <select id="switchMinDiscount" data-number>
+          <option value="30">-30 %</option><option value="40">-40 %</option><option value="50">-50 %</option>
+          <option value="60">-60 %</option><option value="70">-70 %</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="panel">
+      <h2>Dealabs (boîtes, sites de clés, erreurs de prix)</h2>
+      <label class="line">
+        <span>
+          <strong>Utiliser Dealabs</strong>
+          <small>Bons plans postés et votés par la communauté : Amazon, Fnac, Leclerc, Micromania, Eneba, Instant Gaming…</small>
+        </span>
+        <input type="checkbox" id="dealabs" class="switch">
+      </label>
+      <label class="line">
+        <span>
+          <strong>Seulement les deals « hot »</strong>
+          <small>Validés par la communauté (+ les erreurs de prix, toujours affichées). Désactive pour tout voir.</small>
+        </span>
+        <input type="checkbox" id="dealabsOnlyHot" class="switch">
+      </label>
+      <label class="line">
+        <span>
+          <strong>Départements pour les deals en magasin</strong>
+          <small>Les promos valables dans un seul magasin ne sont gardées que pour ces départements (ex. 80, 60, 62).</small>
+        </span>
+        <input type="text" id="departments" class="short" placeholder="80" autocomplete="off">
+      </label>
+      <label class="line">
+        <span><strong>Garder les deals pendant</strong></span>
+        <select id="dealMaxAgeDays" data-number>
+          <option value="3">3 jours</option><option value="7">7 jours</option><option value="14">14 jours</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="panel danger">
+      <h2>Données</h2>
+      <div class="line">
+        <span>
+          <strong>Tout réinitialiser</strong>
+          <small>Efface l'historique des jeux récupérés, les jeux masqués et le cache. Les réglages sont conservés.</small>
+        </span>
+        <button id="btn-reset" class="btn warn">Réinitialiser</button>
+      </div>
+    </section>
+
+    <p class="credits">
+      Sources : API officielle Epic Games Store, recherche Steam,
+      <a href="https://www.gamerpower.com" target="_blank" rel="noopener">GamerPower</a> (giveaways),
+      <a href="https://www.cheapshark.com" target="_blank" rel="noopener">CheapShark</a> (promos PC, prix en $ US),
+      eShop Nintendo, <a href="https://www.dealabs.com" target="_blank" rel="noopener">Dealabs</a> et
+      <a href="https://gg.deals" target="_blank" rel="noopener">GG.deals</a> (sites de clés).
+      FreeKeep n'est affilié à aucun de ces services.
+    </p>
+  </main>
+  <div id="saved" class="saved" hidden>Enregistré ✓</div>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

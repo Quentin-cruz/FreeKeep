@@ -1,0 +1,61 @@
+{
+  "manifest_version": 3,
+  "name": "FreeKeep — Jeux gratuits & vrais bons plans",
+  "short_name": "FreeKeep",
+  "version": "2.1.0",
+  "description": "Jeux PC offerts à garder (Epic, Steam, GOG, Alienware, Fanatical…) + vraies grosses promos PC et Switch.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "FreeKeep",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "options_page": "options/options.html",
+  "permissions": [
+    "storage",
+    "alarms",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://*.epicgames.com/*",
+    "https://store.steampowered.com/*",
+    "https://www.gamerpower.com/*",
+    "https://www.gog.com/*",
+    "https://store.ubisoft.com/*",
+    "https://register.ubisoft.com/*",
+    "https://www.cheapshark.com/*",
+    "https://searching.nintendo-europe.com/*",
+    "https://api.ec.nintendo.com/*",
+    "https://www.dealabs.com/*",
+    "https://api.gg.deals/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://store.epicgames.com/*",
+        "https://www.epicgames.com/store/*",
+        "https://store.steampowered.com/app/*",
+        "https://www.gog.com/*",
+        "https://store.ubisoft.com/*",
+        "https://register.ubisoft.com/*"
+      ],
+      "js": [
+        "content/claim.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}

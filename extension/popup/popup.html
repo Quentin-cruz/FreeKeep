@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FreeKeep</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <img class="logo" src="../icons/icon48.png" alt="" width="28" height="28">
+      <div class="brand">
+        <h1>FreeKeep</h1>
+        <p id="subtitle" class="subtitle">Chargement…</p>
+      </div>
+      <button id="btn-refresh" class="icon-btn" title="Vérifier maintenant" aria-label="Vérifier maintenant">
+        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20 11a8 8 0 0 0-14.9-3.9M4 4v4h4M4 13a8 8 0 0 0 14.9 3.9M20 20v-4h-4"/></svg>
+      </button>
+      <button id="btn-options" class="icon-btn" title="Réglages" aria-label="Réglages">
+        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+      </button>
+    </header>
+
+    <nav class="sections" role="tablist" aria-label="Sections">
+      <button class="section" data-section="free">🎁 Gratuits <span class="count">0</span></button>
+      <button class="section" data-section="pc">💻 Promos PC <span class="count">0</span></button>
+      <button class="section" data-section="switch">🎮 Switch <span class="count">0</span></button>
+    </nav>
+
+    <nav class="tabs" id="free-tabs" role="tablist">
+      <button class="tab" role="tab" data-tab="active">Disponibles <span class="count" data-count="active">0</span></button>
+      <button class="tab" role="tab" data-tab="upcoming">Bientôt <span class="count" data-count="upcoming">0</span></button>
+      <button class="tab" role="tab" data-tab="claimed">Récupérés <span class="count" data-count="claimed">0</span></button>
+    </nav>
+
+    <div id="filters" class="filters"></div>
+    <div id="banner"></div>
+
+    <main id="list" class="list" aria-live="polite"></main>
+
+    <footer class="foot">
+      <span id="last-check"></span>
+      <span class="sources"></span>
+    </footer>
+  </div>
+  <div id="snackbar" class="snackbar" hidden></div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
