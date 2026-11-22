@@ -14,7 +14,7 @@ import { refreshDeals } from './src/refresh-deals.js';
 import { isExceptional, scoreDeal } from './src/deals.js';
 import { effective, wants, hiddenReason, makeOwnedIndex, sameGameStrict, showsGame } from './src/prefs.js';
 import {
-  getSettings, getData, saveData, stateFor, patchState, keysForHistory, getClaimTabs, setClaimTabs,
+  getSettings, getData, saveData, locked, updateData, stateFor, patchState, keysForHistory, getClaimTabs, updateClaimTabs,
 } from './src/store.js';
 import { formatDate, formatDuration, formatPrice } from './src/util.js';
 
@@ -90,11 +90,7 @@ function settingsRefresh(force = []) {
 }
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
-  const tabs = await getClaimTabs();
-  if (tabs[tabId]) {
-    delete tabs[tabId];
-    await setClaimTabs(tabs);
-  }
+  if ((await getClaimTabs())[tabId]) await updateClaimTabs((tabs) => { delete tabs[tabId]; });
 });
 
 async function scheduleAlarm() {
@@ -212,10 +208,26 @@ async function doRefresh(reason, { force = [] } = {}) {
     return out;
   }).sort((a, b) => b.score - a.score);
 
-  await syncSteamOwned(games, data.states, settings, data.steamLib);
-  syncGogOwned(games, data.states, owned);
+  const sessionIds = await steamSessionIds(games, data.states, settings);
 
-  // ---- 6. Notifications (pas pendant le tutoriel) ----
+  // ---- 6. Enregistrement ----
+  // Les téléchargements prennent plusieurs secondes : on relit ce que l'utilisateur a pu changer entre-temps
+  // (récupéré, masqué), puis on enregistre d'un bloc, sans autre écriture au milieu.
+  await locked(async () => {
+    const current = await getData();
+    data.states = current.states;
+    data.dealStates = current.dealStates;
+    markSteamOwned(games, data.states, data.steamLib, sessionIds);
+    syncGogOwned(games, data.states, owned);
+    await finishRefresh({ data, games, deals, settings, now, reason, errors, dealErrors, sources: { ...sourceStatus, ...dealStatus } });
+  });
+  await updateBadge();
+  return { ok: true, errors, dealErrors };
+}
+
+// Notifications + enregistrement (appelé sous verrou).
+async function finishRefresh({ data, games, deals, settings, now, reason, errors, dealErrors, sources }) {
+  // Pas de notification pendant le tutoriel
   const visibleGames = games.filter((g) => !g.hiddenBy);
   const visibleDeals = deals.filter((d) => !d.hiddenBy);
   if (settings.onboarded) {
@@ -232,15 +244,13 @@ async function doRefresh(reason, { force = [] } = {}) {
 
   data.meta = {
     ...data.meta, lastRefresh: now, lastReason: reason, errors, dealErrors, initialized: true, dealsInitialized: true,
-    sources: { ...sourceStatus, ...dealStatus },
+    sources,
   };
   await saveData({
     games, states: data.states, meta: data.meta, cache: data.cache, seen: data.seen,
     deals, dealCache: data.dealCache, dealHistory: data.dealHistory, dealStates: data.dealStates, seenDeals: data.seenDeals,
     steamLib: data.steamLib, gogLib: data.gogLib, appInfo: data.appInfo,
   });
-  await updateBadge();
-  return { ok: true, errors, dealErrors };
 }
 
 // Bibliothèque GOG via la session gog.com du navigateur (aucun identifiant stocké).
@@ -307,20 +317,23 @@ async function syncSteamLibrary(settings, data, now, force) {
   return before !== `${data.steamLib.count}|${data.steamLib.wishlist.length}`;
 }
 
-// Jeux gratuits Steam déjà possédés : via la bibliothèque publique et/ou la session Steam du navigateur.
-async function syncSteamOwned(games, states, settings, lib) {
-  const candidates = games.filter((g) => g.store === 'steam' && !stateFor(states, g).claimed);
-  if (!candidates.length) return;
-  const libIds = new Set((lib?.appids || []).map(String));
-  let sessionIds = new Set();
-  if (settings.steamOwnedSync && candidates.some((g) => g.appid || stateFor(states, g).appid)) {
-    try {
-      sessionIds = new Set((await fetchSteamSession()).appids);
-    } catch (e) {
-      console.warn('[FreeKeep] lecture des jeux Steam possédés impossible :', e);
-    }
+const steamCandidates = (games, states) => games.filter((g) => g.store === 'steam' && !stateFor(states, g).claimed);
+
+// Jeux possédés d'après la session Steam du navigateur (seulement s'il y a un jeu gratuit Steam à vérifier).
+async function steamSessionIds(games, states, settings) {
+  if (!settings.steamOwnedSync || !steamCandidates(games, states).some((g) => g.appid || stateFor(states, g).appid)) return new Set();
+  try {
+    return new Set((await fetchSteamSession()).appids);
+  } catch (e) {
+    console.warn('[FreeKeep] lecture des jeux Steam possédés impossible :', e);
+    return new Set();
   }
-  for (const g of candidates) {
+}
+
+// Jeux gratuits Steam déjà possédés : via la bibliothèque et/ou la session Steam du navigateur.
+function markSteamOwned(games, states, lib, sessionIds) {
+  const libIds = new Set((lib?.appids || []).map(String));
+  for (const g of steamCandidates(games, states)) {
     const appid = String(g.appid || stateFor(states, g).appid || '');
     const byLib = (appid && libIds.has(appid)) || (!appid && (lib?.names || []).some((n) => sameGameStrict(n, g.title)));
     const bySession = appid && sessionIds.has(appid);
@@ -531,16 +544,17 @@ function historyGame(states, key) {
 }
 
 async function setFlag(key, flag, value) {
-  const { games, states } = await getData();
-  const g = findGame(games, key) || historyGame(states, key);
-  if (!g) return;
   const patch = { [flag]: value };
   if (flag === 'claimed') {
     patch.claimedAt = value ? Date.now() : null;
     patch.claimedVia = value ? 'manual' : null;
   }
-  patchState(states, g, patch);
-  await saveData({ states });
+  await updateData(({ games, states }) => {
+    const g = findGame(games, key) || historyGame(states, key);
+    if (!g) return null;
+    patchState(states, g, patch);
+    return { states };
+  });
   await updateBadge();
 }
 
@@ -550,9 +564,7 @@ async function openClaim(key, { active = true } = {}) {
   if (!g) return;
   const url = stateFor(states, g).resolvedUrl || g.url;
   const tab = await chrome.tabs.create({ url, active });
-  const tabs = await getClaimTabs();
-  tabs[tab.id] = g.key;
-  await setClaimTabs(tabs);
+  await updateClaimTabs((tabs) => { tabs[tab.id] = g.key; });
 }
 
 async function openAll() {
@@ -610,8 +622,10 @@ async function claimHello(msg, sender) {
     const patch = { resolvedUrl: msg.url.split('#')[0] };
     const appid = /store\.steampowered\.com\/app\/(\d+)/.exec(msg.url)?.[1];
     if (appid) patch.appid = appid;
-    patchState(data.states, game, patch);
-    await saveData({ states: data.states });
+    await updateData(({ states }) => {
+      patchState(states, game, patch);
+      return { states };
+    });
   }
 
   return {
@@ -623,14 +637,15 @@ async function claimHello(msg, sender) {
 }
 
 async function claimOwned(msg, sender) {
-  const data = await getData();
-  const g = findGame(data.games, msg.key);
+  let g = null;
+  await updateData(({ games, states }) => {
+    g = findGame(games, msg.key);
+    if (!g || stateFor(states, g).claimed) return null;
+    patchState(states, g, { claimed: true, claimedAt: Date.now(), claimedVia: 'page' });
+    return { states };
+  });
   if (!g) return { ok: false };
-  if (!stateFor(data.states, g).claimed) {
-    patchState(data.states, g, { claimed: true, claimedAt: Date.now(), claimedVia: 'page' });
-    await saveData({ states: data.states });
-    await updateBadge();
-  }
+  await updateBadge();
   // Si la confirmation vient d'une iframe (checkout Epic), on prévient la page principale.
   if (sender.tab?.id != null && sender.frameId) {
     chrome.tabs.sendMessage(sender.tab.id, { type: 'freekeep:owned', title: g.title }, { frameId: 0 }).catch(() => {});
@@ -700,13 +715,13 @@ async function handleMessage(msg, sender) {
       return { ok: true };
     case 'openAll':
       return { ok: true, opened: await openAll() };
-    case 'setDealHidden': {
-      const { dealStates } = await getData();
-      if (msg.hidden) dealStates[msg.id] = { hidden: true, at: Date.now() };
-      else delete dealStates[msg.id];
-      await saveData({ dealStates });
+    case 'setDealHidden':
+      await updateData(({ dealStates }) => {
+        if (msg.hidden) dealStates[msg.id] = { hidden: true, at: Date.now() };
+        else delete dealStates[msg.id];
+        return { dealStates };
+      });
       return publicState();
-    }
     case 'testNotification': {
       const { games } = await getData();
       const sample = games.find((g) => g.status === 'active');
@@ -726,7 +741,9 @@ async function handleMessage(msg, sender) {
         return { ok: false, error: gogError(e) };
       }
     case 'resetData':
-      await chrome.storage.local.clear();
+      // Une vérification en cours réenregistrerait les anciennes données : on la laisse finir d'abord.
+      if (running) await running.catch(() => {});
+      await locked(() => chrome.storage.local.clear());
       await refresh('reset');
       return publicState();
     case 'claim:hello':

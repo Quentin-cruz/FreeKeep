@@ -141,13 +141,14 @@ extension/
 ├── popup/  options/  icons/
 tests/
 ├── fixtures.js                # données calquées sur le format réel des API
-└── unit.test.js               # 40 tests
+├── unit.test.js               # 40 tests
+└── background.test.js         # 8 tests : clics pendant une vérification
 ```
 
 ## Tests
 
 ```bash
-node --test tests/unit.test.js
+node --test
 ```
 
 Une partie des tests reprend des réponses relevées sur les vrais sites en novembre 2026.

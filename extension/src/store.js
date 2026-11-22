@@ -43,6 +43,23 @@ export async function saveData(partial) {
   await chrome.storage.local.set(partial);
 }
 
+// Une seule écriture à la fois : sans ça, deux actions qui lisent puis enregistrent en même temps s'écrasent.
+// Ne pas appeler `locked` depuis un travail déjà verrouillé (il s'attendrait lui-même).
+let queue = Promise.resolve();
+export function locked(job) {
+  const run = queue.then(job);
+  queue = run.catch(() => {}); // une erreur ne bloque pas les suivants
+  return run;
+}
+
+// Lit les données à jour, laisse `change` les modifier, puis enregistre ce qu'il renvoie (rien si vide).
+export function updateData(change) {
+  return locked(async () => {
+    const partial = await change(await getData());
+    if (partial) await saveData(partial);
+  });
+}
+
 // État fusionné d'un jeu (un jeu peut avoir plusieurs clés selon les sources).
 export function stateFor(states, game) {
   const out = {};
@@ -91,6 +108,10 @@ export async function getClaimTabs() {
   return claimTabs || {};
 }
 
-export async function setClaimTabs(claimTabs) {
-  await chrome.storage.session.set({ claimTabs });
+export function updateClaimTabs(change) {
+  return locked(async () => {
+    const claimTabs = await getClaimTabs();
+    change(claimTabs);
+    await chrome.storage.session.set({ claimTabs });
+  });
 }
