@@ -1,5 +1,5 @@
 // FreeKeep — réglages (onglets, enregistrement automatique)
-import { LEVELS, ALARM_NAME, INTERVALS } from '../src/config.js';
+import { LEVELS, ALARM_NAME, INTERVALS, DEAL_SOURCES } from '../src/config.js';
 import { getSettings, saveSettings } from '../src/store.js';
 import { wants } from '../src/prefs.js';
 import { formatAgo } from '../src/util.js';
@@ -114,7 +114,7 @@ const PANELS = {
     h('p', { class: 'lead' }, 'Ce que tu ne veux jamais voir, ni dans les jeux gratuits, ni dans les promos.'),
     box('Genres masqués', 'Clique pour masquer / réafficher. Détection via Steam et l’eShop Nintendo ; pour les autres jeux, via le titre.',
       genreChips(settings.excludedGenres, set('excludedGenres'))),
-    box('Licences et mots-clés bannis', 'Tout titre contenant un de ces mots est masqué. Ex. « LEGO » masque tous les jeux LEGO.',
+    box('Licences et mots-clés bannis', 'Tout titre contenant un de ces noms est masqué, même écrit un peu autrement : « Hogwart’s Legacy », « NBA 2K26 » ou « EA FC 27 » pour « EA Sports FC ». « LEGO » masque tous les jeux LEGO.',
       tagInput(settings.bannedKeywords, set('bannedKeywords'))),
     h('p', { class: 'note' }, 'Les jeux de ta liste de souhaits Steam ignorent le filtre de genres (mais pas les mots-clés bannis).'),
   ],
@@ -175,7 +175,7 @@ const PANELS = {
       btn.disabled = true;
       btn.textContent = 'Vérification…';
       try {
-        await chrome.runtime.sendMessage({ type: 'refresh', force: ['cheapshark', 'eshop', 'dealabs', 'ggdeals', 'steamlib'] });
+        await chrome.runtime.sendMessage({ type: 'refresh', force: ['dealabs', 'steamlib', 'wishlist', ...DEAL_SOURCES] });
       } finally {
         btn.disabled = false;
         btn.textContent = 'Vérifier maintenant';
@@ -218,7 +218,8 @@ const PANELS = {
         h('div', { class: 'row' }, h('span', { class: 'row-text' }, h('strong', {}, 'Tout réinitialiser'), h('small', {}, 'Efface l’historique des jeux récupérés, les éléments masqués et le cache. Les réglages sont conservés.')), reset))),
       h('p', { class: 'credits' }, 'Sources : Epic Games Store, Steam, ',
         h('a', { href: 'https://www.gamerpower.com', target: '_blank' }, 'GamerPower'), ', ',
-        h('a', { href: 'https://www.cheapshark.com', target: '_blank' }, 'CheapShark'), ' (prix en $ US), eShop Nintendo, ',
+        h('a', { href: 'https://www.cheapshark.com', target: '_blank' }, 'CheapShark'), ' (prix convertis au taux de la Banque centrale européenne), GOG, EA, eShop Nintendo, Eneba, Kinguin, Instant Gaming, Fanatical, Humble Bundle, ',
+        h('a', { href: 'https://barter.vg', target: '_blank' }, 'Barter.vg'), ', ',
         h('a', { href: 'https://www.dealabs.com', target: '_blank' }, 'Dealabs'), ', ',
         h('a', { href: 'https://gg.deals', target: '_blank' }, 'GG.deals'), ', SteamSpy. FreeKeep<3 n’est affilié à aucun de ces services.'),
     ];
@@ -283,6 +284,11 @@ const SOURCE_INFO = {
   steamlib: ['Bibliothèque Steam', 'Tes jeux et ta liste de souhaits (session Steam du navigateur)'],
   goglib: ['Bibliothèque GOG', 'Tes jeux (session gog.com du navigateur)'],
   cheapshark: ['CheapShark', 'Promos PC sur 30+ stores officiels'],
+  gog: ['GOG', 'Promos du catalogue GOG, en euros'],
+  ea: ['EA', 'Offres du site EA, en euros'],
+  bundles: ['Bundles', 'Humble Bundle, Fanatical, Green Man Gaming, IndieGala (via Barter.vg)'],
+  switchkeys: ['Clés Switch', 'Eneba, Kinguin, Instant Gaming, comparés à l’eShop'],
+  dealabsPages: ['Dealabs (pages)', 'Température, prix de référence, offres des 30 derniers jours'],
   eshop: ['eShop Nintendo', 'Promos Switch, prix et dates de fin'],
   dealabs: ['Dealabs', 'Boîtes, clés, erreurs de prix + jeux offerts (Prime, MS Store, Battle.net)'],
   ggdeals: ['GG.deals', 'Prix des sites de clés (clé API)'],

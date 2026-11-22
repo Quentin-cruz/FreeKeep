@@ -107,7 +107,7 @@ export function genreChips(excluded, onChange) {
   );
 }
 
-export const KEYWORD_SUGGESTIONS = ['EA Sports FC', 'Call of Duty', 'LEGO', 'Mortal Kombat', "Assassin's Creed", 'Battlefield', 'Les Sims', 'Farming Simulator', 'NBA 2K', 'Football Manager'];
+export const KEYWORD_SUGGESTIONS = ['EA Sports FC', 'Call of Duty', 'LEGO', 'Mortal Kombat', 'Hogwarts Legacy', "Assassin's Creed", 'Battlefield', 'Les Sims', 'Farming Simulator', 'NBA 2K', 'Football Manager'];
 
 // Saisie de mots-clés (licences à bannir)
 export function tagInput(values, onChange, suggestions = KEYWORD_SUGGESTIONS) {

@@ -1,5 +1,5 @@
 // FreeKeep — tutoriel de premier lancement (relançable depuis les réglages)
-import { STORES, STORE_ORDER, PC_STORE_ORDER, PRIME_STORES, LEVELS, INTERVALS } from '../src/config.js';
+import { STORES, STORE_ORDER, PC_STORE_ORDER, PRIME_STORES, LEVELS, INTERVALS, DEAL_SOURCES } from '../src/config.js';
 import { GENRE_BY_ID } from '../src/genres.js';
 import { getSettings, saveSettings } from '../src/store.js';
 import { h, toggleCard, switchRow, storeGrid, primeBox, genreChips, tagInput, levelCards, steamProfileField, steamSessionField, gogSessionField } from '../ui/components.js';
@@ -254,7 +254,7 @@ async function finish() {
   finished = true;
   draft.onboarded = true;
   await saveSettings(draft);
-  chrome.runtime.sendMessage({ type: 'refresh', force: ['steamlib', 'cheapshark', 'eshop', 'ggdeals'] }).catch(() => {});
+  chrome.runtime.sendMessage({ type: 'refresh', force: ['steamlib', 'wishlist', ...DEAL_SOURCES] }).catch(() => {});
   try {
     await chrome.action.openPopup();
   } catch { /* le navigateur refuse : le message à l'écran guide l'utilisateur */ }

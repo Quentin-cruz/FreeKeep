@@ -766,7 +766,7 @@ test('CheapShark : une offre par launcher choisi', async () => {
     const { calls } = await withFetch([['/deals', []], ['/games', {}]], () => fetchCheapShark({ ...S, stores }));
     return calls.map((c) => new URL(c.url).searchParams.get('storeID')).filter(Boolean).sort();
   };
-  assert.deepEqual(await asked({ steam: true, gog: true, epic: true }), ['25', '7']);
+  assert.deepEqual([...new Set(await asked({ steam: true, gog: true, epic: true }))], ['25'], 'GOG a sa propre source');
   assert.deepEqual(await asked({ steam: true }), []);
 });
 
@@ -815,8 +815,8 @@ test('Annonces Dealabs : jeu possédé reconnu par son nom sur Steam', async () 
 test('Licences à bannir : LEGO masque tous les jeux LEGO, suggestions à jour', () => {
   for (const t of ['LEGO® City Undercover', 'LEGO® Star Wars™ : La Saga Skywalker', 'The LEGO Games Bundle', 'La Grande Aventure LEGO 2 : Le Jeu Vidéo']) assert.equal(bannedKeyword(t, ['LEGO']), 'LEGO', t);
   assert.equal(bannedKeyword('Legolas Adventure', ['LEGO']), null);
-  assert.ok(KEYWORD_SUGGESTIONS.includes('LEGO') && KEYWORD_SUGGESTIONS.includes('Mortal Kombat'));
-  assert.ok(!KEYWORD_SUGGESTIONS.some((k) => /fifa|hogwarts|five nights/i.test(k)));
+  assert.ok(['LEGO', 'Mortal Kombat', 'Hogwarts Legacy'].every((k) => KEYWORD_SUGGESTIONS.includes(k)));
+  assert.ok(!KEYWORD_SUGGESTIONS.some((k) => /fifa|five nights/i.test(k)));
 });
 
 test('Fréquences : dès 5 minutes', () => {
@@ -914,4 +914,209 @@ test('Dealabs : faux jeux PC gratuits écartés (titres réels), vrais jeux gard
   assert.equal(deal('Forza Horizon 6 sur PC + poster offert (Dématérialisé - Steam)', 'Steam', '52,49€').price, 52.49);
   assert.equal(dealabsFreebie(item('Forza Horizon 6 sur PC + poster offert (Dématérialisé - Steam)', 'Steam', '52,49€'), { stores, prime: true }, now), null);
   assert.equal(deal('Hollow Knight sur Nintendo Switch (livraison gratuite)', 'Amazon', '24,99€').channel, 'physical');
+});
+
+// ===========================================================================
+// v1.2 : euros, nouvelles sources, licences, souhaits
+// ===========================================================================
+import { parseEcbRate, toEur, worthInEur } from '../extension/src/sources/rates.js';
+import { parseSteamItems, wishlistDeals } from '../extension/src/sources/steamstore.js';
+import { parseGog } from '../extension/src/sources/gog.js';
+import { parseEa } from '../extension/src/sources/ea.js';
+import { parseBarter, fanaticalTiers, humbleTiers, buildBundles } from '../extension/src/sources/bundles.js';
+import { parseKeyName, parseEneba, parseKinguin, parseInstantGaming, buildKeyDeals } from '../extension/src/sources/switchkeys.js';
+import { parseDealabsPage } from '../extension/src/sources/dealabspages.js';
+import { applyEuros, mergeLaunchers } from '../extension/src/deals.js';
+import { steamOnly } from '../extension/src/prefs.js';
+
+test('Licences bannies : orthographes proches et variantes réelles', () => {
+  const hit = [
+    ['EA SPORTS FC™ 27', 'EA Sports FC'], ['Jeu EA FC 27 sur Nintendo Switch 2 (+ 10€ fidélité pour les adhérents)', 'EA Sports FC'],
+    ['FC 27 sur Nintendo switch', 'EA Sports FC'], ['FC26 sur Nintendo Switch 2 (via de 12,5€ de fidélité)', 'ea sports fc'], ['FIFA 23 Legacy Edition', 'EA Sports FC'],
+    ['NBA 2K26 sur Nintendo Switch 2', 'NBA 2K'], ['NBA 2K27 sur Nintendo Switch', 'nba 2k'], ['NBA2K26', 'NBA 2K'], ['NBA 2K 24 Kobe Bryant Edition', 'NBA2K'],
+    ['Hogwarts Legacy', "Hogwart's Legacy"], ["Hogwart's Legacy", 'Hogwarts Legacy'], ['Hogwart Legacy', 'Hogwarts Legacy'], ['Hogwarts Legcay', 'Hogwarts Legacy'],
+    ['Hogwarts Legacy : L’Héritage de Poudlard', 'Hogwarts Legacy'], ['L’Héritage de Poudlard', 'hogwarts legacy'],
+    ['Assassins Creed Odyssey', "Assassin's Creed"], ['Assassin’s Creed: The Ezio Collection', 'Assassins Creed'],
+    ['Call of Duty®: Modern Warfare', 'call of duty'], ['The Sims 4', 'Les Sims'], ['LEGO® City Undercover', 'lego'], ['Mortal Kombat 1', 'Mortal Kombat'], ['Mortal Combat 11', 'Mortal Kombat'],
+    ['Battlefield 2042', 'Battlefeild'], ['Farming Simulator 26', 'Farming Simulator'],
+  ];
+  for (const [t, k] of hit) assert.equal(bannedKeyword(t, [k]), k, `${t} / ${k}`);
+  const miss = [
+    ['Legolas Adventure', 'LEGO'], ['Lego', 'Les Sims'], ['Batman: Arkham Knight', 'Battlefield'], ['Fortnite', 'FIFA'], ['NBA Jam', 'NBA 2K'], ['WWE 2K25', 'NBA 2K'],
+    ['Hades II', 'Hogwarts Legacy'], ['Legacy of Kain', 'Hogwarts Legacy'], ['Combat Mission', 'Mortal Kombat'], ['Call of Juarez', 'Call of Duty'], ['Resident Evil 4', 'Battlefield'], ['Simulacra', 'Les Sims'],
+    ['Farming Life', 'Farming Simulator'], ['Creed: Rise to Glory', "Assassin's Creed"], ['Half-Life 2', 'EA Sports FC'],
+  ];
+  for (const [t, k] of miss) assert.equal(bannedKeyword(t, [k]), null, `${t} / ${k}`);
+});
+
+test('Prix en euros : taux BCE, prix Steam exacts, conversion signalée', () => {
+  assert.ok(Math.abs(parseEcbRate("<Cube currency='USD' rate='1.10'/>") - 1 / 1.1) < 1e-9);
+  assert.throws(() => parseEcbRate('<html>'), /illisible/);
+  assert.equal(toEur(10, 0.9), 9);
+  assert.match(worthInEur('$19.99', 0.9), /^≈ 17,99\s€$/);
+  assert.equal(worthInEur('19,50 €', 0.9), '19,50 €');
+
+  const steam = parseSteamItems({ response: { store_items: [
+    { appid: 10, success: 1, type: 0, name: 'Jeu A', reviews: { summary_filtered: { percent_positive: 92, review_count: 5000 } }, best_purchase_option: { final_price_in_cents: '299', original_price_in_cents: '5999', discount_pct: 95, active_discounts: [{ discount_end_date: 1796320800 }] } },
+    { appid: 11, success: 1, type: 4, name: 'DLC' }, { appid: 12, success: 8 },
+  ] } });
+  assert.deepEqual(Object.keys(steam), ['10', '11']);
+  assert.equal(steam[10].price, 2.99);
+  assert.equal(steam[10].end, 1796320800000);
+
+  const offer = (price, normalPrice, merchant) => ({ price, normalPrice, discount: 90, merchant, url: 'x', currency: 'USD' });
+  const item = (offers) => ({ steamAppID: '10', section: 'pc', platform: 'steam', title: 'Jeu A', price: 1, currency: 'USD', flags: {}, offers });
+  // Steam moins cher que le revendeur : prix officiel, sans « ≈ »
+  const [a] = applyEuros([item({ steam: offer(4, 59.99, 'GameBillet'), epic: offer(6, 59.99, 'Epic Games Store') })], steam, 0.9);
+  assert.equal(a.price, 2.99);
+  assert.equal(a.merchant, 'Steam');
+  assert.equal(a.approx, false);
+  assert.equal(a.offers.epic.price, 5.4);
+  assert.equal(a.offers.epic.approx, true);
+  // Revendeur moins cher : prix converti, remise calculée sur le vrai prix Steam
+  const [b] = applyEuros([item({ steam: offer(2, 59.99, 'GameBillet') })], steam, 0.9);
+  assert.equal(b.price, 1.8);
+  assert.equal(b.approx, true);
+  assert.equal(b.normalPrice, 59.99);
+  assert.equal(b.discount, 97);
+  for (const d of [a, b]) for (const o of Object.values(d.offers)) assert.equal(o.currency, 'EUR');
+  // Passer du dollar à l'euro n'est pas une « chute soudaine »
+  const hist = { 'cs:1': { price: 10, currency: 'USD', at: now - 3600e3 } };
+  const [deal] = buildDeals({ cheapshark: [{ id: 'cs:1', section: 'pc', channel: 'official', title: 'Z', price: 6, currency: 'EUR', flags: {} }] }, hist, {}, now);
+  assert.ok(!deal.flags.drop);
+});
+
+test('GOG et EA : promos officielles en euros', () => {
+  const p = (id, title, final, base, rating, count, currency = 'EUR') => ({ id, title, slug: 's', storeLink: `https://www.gog.com/fr/game/${id}`, coverHorizontal: 'https://img', price: { finalMoney: { amount: String(final), currency }, baseMoney: { amount: String(base) } }, reviewsRating: rating, reviewsCount: count, genres: [{ slug: 'strategy' }] });
+  const gog = parseGog([p(1, 'Sleeping Dogs', 2.99, 19.99, 46, 2000), p(2, 'Mal noté', 1, 19.99, 30, 900), p(3, 'Trop petit', 0.49, 4.99, 48, 900), p(4, 'Peu remisé', 15, 19.99, 48, 900), p(5, 'En dollars', 2, 19.99, 48, 900, 'USD')], { ...DEFAULT_SETTINGS });
+  assert.deepEqual(gog.map((d) => d.title), ['Sleeping Dogs']);
+  assert.equal(gog[0].currency, 'EUR');
+  assert.equal(gog[0].platform, 'gog');
+  assert.ok(genresOf(gog[0]).has('strategy'));
+
+  const game = (slug, title, total, sale) => ({ slug, title, isFreeToPlay: false, packArt: { ar16X9: 'https://img' }, price: { displayTotal: total, displayTotalWithDiscount: sale, discountPercentage: 50, currency: 'EUR' }, genres: [{ slug: 'sports' }] });
+  const html = `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify({ props: { deals: [game('bf', 'Battlefield\n 1', '39,99 €', '1,99 €'), game('x', 'Peu remisé', '39,99 €', '34,99 €'), game('bf', 'Battlefield 1', '39,99 €', '1,99 €')] } })}</script>`;
+  const ea = parseEa(html, { ...DEFAULT_SETTINGS });
+  assert.equal(ea.length, 1);
+  assert.equal(ea[0].title, 'Battlefield 1');
+  assert.equal(ea[0].price, 1.99);
+  assert.equal(ea[0].platform, 'ea');
+  assert.throws(() => parseEa('<html>', DEFAULT_SETTINGS), /inattendue/);
+});
+
+test('Launchers : une carte par jeu, un prix par launcher', () => {
+  const base = { section: 'pc', channel: 'official', currency: 'EUR', flags: {} };
+  const cs = { ...base, id: 'cs:1', title: 'Metro Exodus', steamAppID: '412020', platform: 'steam', price: 3, offers: { steam: { price: 3, merchant: 'Steam' } } };
+  const gog = { ...base, id: 'gog:1', title: 'Metro Exodus', platform: 'gog', price: 2.5, merchant: 'GOG', url: 'g' };
+  const other = { ...base, id: 'gog:2', title: 'Sleeping Dogs', platform: 'gog', price: 3, merchant: 'GOG', url: 'g' };
+  const out = mergeLaunchers([cs], [gog, other]);
+  assert.equal(out.length, 2);
+  assert.equal(out[0].platform, 'gog', 'le moins cher en premier');
+  assert.equal(out[0].offers.steam.price, 3);
+  assert.deepEqual(Object.keys(out[1].offers), ['gog']);
+});
+
+test('Souhait Steam : proposé sur Steam seulement', () => {
+  const offers = { steam: { price: 5, merchant: 'Steam' }, gog: { price: 3, merchant: 'GOG' } };
+  const both = steamOnly({ section: 'pc', channel: 'official', platform: 'gog', price: 3, offers });
+  assert.equal(both.platform, 'steam');
+  assert.equal(both.price, 5);
+  assert.deepEqual(Object.keys(both.offers), ['steam']);
+  assert.equal(steamOnly({ section: 'pc', channel: 'official', platform: 'gog', price: 3, offers: { gog: offers.gog } }).hiddenBy, 'wishlist');
+  assert.equal(steamOnly({ section: 'pc', channel: 'official', platform: 'ea', price: 3 }).hiddenBy, 'wishlist');
+  assert.equal(steamOnly({ section: 'pc', channel: 'keyshop', platform: 'steam', price: 3 }).hiddenBy, undefined);
+  const w = wishlistDeals(['10', '20'], { 10: { name: 'A', price: 5, normal: 20, discount: 75, end: 1 }, 20: { name: 'B', price: 18, normal: 20, discount: 10 } });
+  assert.deepEqual(w.map((d) => [d.title, d.platform, d.currency]), [['A', 'steam', 'EUR']]);
+});
+
+test('Bundles : magasins connus, jeux bien notés, prix', () => {
+  const soon = Math.round(now / 1000) + 86400;
+  const meta = (storename, title, url = 'https://www.humblebundle.com/games/x') => ({ storename, title, url, start: 1, end: soon });
+  const games = { 1: { type: 1, id: 10 }, 2: { type: 2, id: 99, included: { 1: 11, 2: 12 } }, 3: { type: 1, id: 13 } };
+  const list = parseBarter({ bundles: {
+    1: { meta: meta('Humble Bundle', 'Resident Evil'), games },
+    2: { meta: meta('DailyIndieGame', 'DIG Bundle'), games },
+    3: { meta: meta('Indiegala', 'Lusty Lab Bundle'), games },
+    4: { meta: { ...meta('Humble Bundle', 'Fini'), end: 5 }, games },
+    5: { meta: meta('Fanatical', 'Build Your Own Capcom Collection', 'https://www.fanatical.com/en/pick-and-mix/capcom-collection?v=1'), games },
+  } }, now);
+  assert.deepEqual(list.map((b) => b.id), ['1', '5']);
+  assert.deepEqual(list[0].appids, ['10', '11', '12', '13']);
+
+  const it = (name, rating = 90, reviews = 5000) => ({ name, game: true, normal: 20, rating, reviews });
+  const items = { 10: it('RE2'), 11: it('RE3'), 12: it('RE4'), 13: it('Obscur', 60, 50) };
+  const fan = fanaticalTiers({ pickandmix: [{ type: 'bundle', slug: 'capcom-collection', tiers: [{ quantity: 3, price: { EUR: 1899 } }, { quantity: 2, price: { EUR: 1299 } }] }, { type: 'book-bundle', slug: 'livres', tiers: [{ quantity: 1, price: { EUR: 160 } }] }] });
+  assert.deepEqual(fan, { 'capcom-collection': [{ n: 2, price: 12.99 }, { n: 3, price: 18.99 }] });
+  assert.deepEqual(humbleTiers('aria-label="9 items for €35.80" … "3 items for €8.95" … "9 items for €35.80"'), [{ n: 3, price: 8.95 }, { n: 9, price: 35.8 }]);
+
+  const out = buildBundles(list, items, { 1: [{ n: 3, price: 8.95 }, { n: 9, price: 35.8 }], 5: fan['capcom-collection'] }, { ...DEFAULT_SETTINGS });
+  const humble = out.find((d) => d.id === 'bd:1');
+  assert.equal(humble.price, 35.8);
+  assert.equal(humble.normalPrice, 80);
+  assert.equal(humble.bundle.good, 3);
+  assert.deepEqual(humble.bundle.highlights, ['RE2', 'RE3', 'RE4']);
+  assert.match(humble.priceNote, /dès 8,95/);
+  const pick = out.find((d) => d.id === 'bd:5');
+  assert.equal(pick.price, 12.99);
+  assert.equal(pick.priceNote, '2 jeux au choix');
+  assert.equal(pick.discount, null, 'pas de fausse remise sur un bundle à composer');
+  assert.equal(buildBundles(list, items, {}, { ...DEFAULT_SETTINGS, level: 'strict' }).length, 0);
+});
+
+test('Clés Switch : noms réels, régions, comparaison à l’eShop', () => {
+  assert.deepEqual(parseKeyName('Persona 5 Royal (Nintendo Switch) Nintendo eShop Key EUROPE'), { name: 'Persona 5 Royal', platform: 'switch1' });
+  assert.deepEqual(parseKeyName('Mario Kart World (Nintendo Switch 2) Clé eShop EUROPE'), { name: 'Mario Kart World', platform: 'switch2' });
+  assert.deepEqual(parseKeyName('Borderlands 3 Ultimate Edition EU Nintendo Switch CD Key'), { name: 'Borderlands 3 Ultimate Edition', platform: 'switch1' });
+  assert.deepEqual(parseKeyName('Just Dance: Decades of Hits - Switch 2'), { name: 'Just Dance: Decades of Hits', platform: 'switch2' });
+  for (const bad of ['Mario Kart 8 Deluxe Nintendo Switch Access', 'Nintendo eShop Prepaid Card €100 EU Key', 'Nintendo Switch Online - 12 Months (365 Days) Individual Membership EU', 'Animal Crossing: New Horizons - Happy Home Paradise DLC EU Nintendo Switch CD Key', 'Wo Long EU Nintendo Switch 2 Gift Card', 'Fortnite - Wildcat Bundle + 2000 V-Bucks (Nintendo Switch) eShop Key EUROPE', 'Hades (Nintendo Switch) eShop Key UNITED STATES', 'Légendes Pokémon : Z-A – Méga Dimension - Switch']) assert.equal(parseKeyName(bad), null, bad);
+
+  const apollo = { a: { __typename: 'Product', name: 'Persona 5 Royal (Nintendo Switch) eShop Key EUROPE', slug: 'p5r', type: { value: 'GAME' }, 'cheapestAuction': { __ref: 'b' } }, b: { __typename: 'Auction', isInStock: true, 'price({"currency":"EUR"})': { amount: 1069 }, 'msrp({"currency":"EUR"})': { amount: 5999 } } };
+  const [en] = parseEneba(`<script id="__APOLLO_STATE__" type="application/json">${JSON.stringify(apollo)}</script>`);
+  assert.equal(en.price, 10.69);
+  assert.equal(en.msrp, 59.99);
+  const kg = parseKinguin({ _embedded: { products: [{ name: 'NieR: Automata The End of YoRHa Edition EU Nintendo Switch CD Key', price: { lowestOffer: 1360 }, externalId: '1', attributes: { urlKey: 'nier' } }, { name: 'Rupture EU Nintendo Switch CD Key', price: { lowestOffer: 1000000 } }] } });
+  assert.equal(kg.length, 1);
+  assert.equal(kg[0].price, 13.6);
+  const [ig] = parseInstantGaming('{"item_name":"X","item_id":23715,"price":"22.99","price_eur":"22.99"} <a class="c" href="https://www.instant-gaming.com/fr/23715-acheter-just-dance/" title="acheter Just Dance: Decades of Hits - Switch 2">');
+  assert.equal(ig.price, 22.99);
+  assert.equal(ig.platform, 'switch2');
+
+  const st = { ...DEFAULT_SETTINGS, switch: true, switch2: true, switchMinDiscount: 40 };
+  const ref = (regular, nowPrice = regular, nintendo = false) => ({ at: now, ref: { regular, now: nowPrice, nintendo } });
+  const deals = buildKeyDeals([...[en], ...kg, ig, { ...en, merchant: 'Kinguin', price: 9.5, ref: 'k' }], { 'switch1:persona 5 royal': ref(59.99), 'switch1:nier automata the end of yorha edition': ref(39.99, 13.99), 'switch2:just dance decades of hits': ref(49.99) }, st);
+  const p5 = deals.filter((d) => d.title === 'Persona 5 Royal');
+  assert.equal(p5.length, 1, 'la moins chère seulement');
+  assert.equal(p5[0].merchant, 'Kinguin');
+  assert.equal(p5[0].channel, 'keyshop');
+  assert.ok(!deals.some((d) => /NieR/.test(d.title)), 'eShop en promo au même prix : pas une affaire');
+  assert.ok(deals.some((d) => d.platform === 'switch2'));
+  assert.ok(!buildKeyDeals([ig], { 'switch2:just dance decades of hits': ref(49.99) }, { ...st, switch2: false }).length);
+});
+
+test('Pages Dealabs : température, prix de référence, expirées, locales', () => {
+  const thread = (o) => ({ type: 'Deal', threadId: '3438844', titleSlug: 'bravely-default', title: 'Bravely Default Flying Fairy HD Remaster sur Nintendo Switch 2', temperature: 486.2, price: 14.99, nextBestPrice: 29.99, publishedAt: Math.round(now / 1000) - 20 * 86400, merchant: { merchantName: 'Amazon' }, mainGroup: { threadGroupName: 'Consoles & Jeux vidéo' }, mainImage: { path: 'threads/raw/SQ6M7', name: '3438844_1' }, isLocal: false, selectedLocations: { isNational: false }, endDate: null, isExpired: false, ...o });
+  const page = (...threads) => threads.map((t) => `<div data-vue3='${JSON.stringify({ name: 'ThreadMainListItemNormalizer', props: { thread: t } }).replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll("'", '&#039;')}'></div>`).join('');
+  const st = { ...DEFAULT_SETTINGS, switch: true, switch2: true, departments: '80' };
+  const read = (o) => classifyDealabs(mergeDealabsItems(parseDealabsPage(page(thread(o)), 'switch'))[0], st, now);
+  const d = read({});
+  assert.equal(d.price, 14.99);
+  assert.equal(d.normalPrice, 29.99);
+  assert.equal(d.discount, 50);
+  assert.equal(d.temperature, 486);
+  assert.equal(d.merchant, 'Amazon');
+  assert.equal(d.platform, 'switch2');
+  assert.ok(d.flags.hot && isExceptional(d));
+  assert.match(d.images[0], /3438844_1\/re\/300x300/);
+  assert.equal(read({ isExpired: true }), null);
+  assert.equal(read({ temperature: -35 }), null);
+  assert.equal(read({ endDate: { timestamp: 5 } }), null);
+  assert.equal(read({ title: '[MegaThread] Récap des meilleures offres Nintendo Switch' }), null);
+  assert.equal(read({ isLocal: true }), null, 'locale sans département');
+  assert.ok(read({ isLocal: true, selectedLocations: { isNational: true } }), 'magasins de toute la France');
+  assert.ok(read({ isLocal: true, title: 'Bravely Default sur Nintendo Switch 2 - Amiens (80)' }));
+  // RSS + page : une seule annonce, avec les infos de la page
+  const rssItem = { guid: 'https://www.dealabs.com/bons-plans/autre-slug-3438844', link: 'https://www.dealabs.com/bons-plans/autre-slug-3438844', title: 'Bravely Default', feed: 'switch', pubDate: now, category: 'Consoles & Jeux vidéo' };
+  const merged = mergeDealabsItems([rssItem, ...parseDealabsPage(page(thread({ isExpired: true })), 'switch')]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].expired, true);
 });

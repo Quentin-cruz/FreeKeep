@@ -128,8 +128,8 @@ function render() {
 
   const sources = {
     free: ['Epic, Steam, ', h('a', { href: 'https://www.gamerpower.com', target: '_blank' }, 'GamerPower'), S.settings.dealabs ? ', Dealabs' : ''],
-    pc: ['Prix : ', h('a', { href: 'https://www.cheapshark.com', target: '_blank' }, 'CheapShark'), ', Dealabs', S.settings.ggdealsKey ? [', ', h('a', { href: 'https://gg.deals', target: '_blank' }, 'GG.deals')] : ''],
-    switch: ['Prix : eShop Nintendo, ', h('a', { href: 'https://www.dealabs.com', target: '_blank' }, 'Dealabs')],
+    pc: ['Prix : ', h('a', { href: 'https://www.cheapshark.com', target: '_blank' }, 'CheapShark'), ', GOG, EA, Barter.vg, Dealabs', S.settings.ggdealsKey ? [', ', h('a', { href: 'https://gg.deals', target: '_blank' }, 'GG.deals')] : ''],
+    switch: ['Prix : eShop, Eneba, Kinguin, Instant Gaming, ', h('a', { href: 'https://www.dealabs.com', target: '_blank' }, 'Dealabs')],
   }[ui.section];
   $('.sources').replaceChildren('Données : ', ...sources.flat());
 
@@ -142,12 +142,12 @@ function renderBanner() {
   box.replaceChildren();
   const names = {
     epic: 'Epic Games', steam: 'Steam', gamerpower: 'GamerPower', cheapshark: 'CheapShark', eshop: 'eShop Nintendo',
-    dealabs: 'Dealabs', ggdeals: 'GG.deals', watchlist: 'CheapShark', bons_plans: 'bons plans',
+    dealabs: 'Dealabs', ggdeals: 'GG.deals', gog: 'GOG', ea: 'EA', bundles: 'bundles', switchkeys: 'clés Switch', watchlist: 'CheapShark', bons_plans: 'bons plans',
   };
   const relevant = {
     free: ['epic', 'steam', 'gamerpower'],
-    pc: ['cheapshark', 'dealabs', 'ggdeals', 'watchlist', 'bons_plans'],
-    switch: ['eshop', 'dealabs', 'bons_plans'],
+    pc: ['cheapshark', 'gog', 'bundles', 'dealabs', 'ggdeals', 'watchlist', 'bons_plans'],
+    switch: ['eshop', 'switchkeys', 'dealabs', 'bons_plans'],
   }[ui.section];
   const all = { ...(S.meta.errors || {}), ...(S.meta.dealErrors || {}) };
   const errors = Object.entries(all).filter(([k]) => relevant.includes(k));
@@ -244,7 +244,7 @@ function kindFilters(section) {
     top,
     { id: 'wishlist', label: '❤️ Souhaits', test: (d) => !!d.flags?.wishlist },
     { id: 'keyshop', label: '🔑 Clés', color: CHANNELS.keyshop.color, test: (d) => d.channel === 'keyshop' || !!d.keyshop },
-    { id: 'bundle', label: 'Bundles', color: CHANNELS.bundle.color, test: (d) => d.channel === 'bundle' },
+    { id: 'bundle', label: '📚 Bundles', color: CHANNELS.bundle.color, always: s.bundles !== false, test: (d) => d.channel === 'bundle' },
   ];
 }
 
@@ -304,7 +304,7 @@ function renderDeals(list, { visible, hidden, filtered }, section) {
 function priceBlock(d) {
   if (d.price == null) return null;
   return h('div', { class: 'price-row' },
-    h('strong', { class: `price${d.price === 0 ? ' free' : ''}` }, formatPrice(d.price, d.currency)),
+    h('strong', { class: `price${d.price === 0 ? ' free' : ''}`, title: d.approx ? 'Prix converti du dollar au taux de la Banque centrale européenne' : null }, `${d.approx ? '≈ ' : ''}${formatPrice(d.price, d.currency)}`),
     d.normalPrice && d.normalPrice > d.price ? h('s', {}, formatPrice(d.normalPrice, d.currency)) : null,
     d.prevPrice && !d.normalPrice ? h('s', { title: 'Prix à la vérification précédente' }, formatPrice(d.prevPrice, d.currency)) : null,
     h('span', { class: 'merchant' }, d.merchant),
@@ -323,9 +323,13 @@ function dealPills(d) {
   if (f.priceError) out.push(pill('⚠️ Erreur de prix ?', 'danger', 'Signalé comme erreur de prix sur Dealabs : peut être annulé par le vendeur'));
   if (f.drop) out.push(pill('📉 Chute soudaine', 'warn', d.prevPrice ? `Avant : ${formatPrice(d.prevPrice, d.currency)}` : ''));
   if (f.historicLow) out.push(pill('🏆 Plus bas historique', 'gold'));
-  if (f.hot) out.push(pill('🔥 Hot Dealabs', 'hot', 'Deal validé par la communauté Dealabs'));
+  if (f.hot) out.push(pill(d.temperature ? `🔥 ${d.temperature}°` : '🔥 Hot Dealabs', 'hot', 'Deal validé par la communauté Dealabs'));
   if (f.nintendo) out.push(pill('Nintendo', 'nintendo'));
   if (f.gem) out.push(pill('💎 Pépite', 'gem', 'Très bien noté par les joueurs'));
+  if (d.priceNote) out.push(pill(`💶 ${d.priceNote}`, 'muted'));
+  if (d.bundle) out.push(pill(`👍 ${d.bundle.good} jeux bien notés sur ${d.bundle.games}`, 'gem', 'Au moins 80 % d’avis positifs et 1 000 avis Steam'));
+  if (d.bundle?.owned) out.push(pill(`🎮 tu en as déjà ${d.bundle.owned}`, 'muted'));
+  if (d.rating?.gog) out.push(pill(`GOG ${String(d.rating.gog.toFixed(1)).replace('.', ',')}/5`, 'score', 'Note des joueurs GOG'));
   if (d.rating?.metacritic) out.push(pill(`MC ${d.rating.metacritic}`, 'score', 'Note Metacritic'));
   if (d.rating?.steam) out.push(pill(`Steam ${d.rating.steam} %`, 'score', d.rating.steamText || 'Avis Steam'));
   if (d.keyshop && d.channel !== 'keyshop') out.push(pill(`🔑 Clé ${formatPrice(d.keyshop.price, d.keyshop.currency)}`, 'key', 'Meilleur prix sur les sites de clés (GG.deals)'));
@@ -365,6 +369,7 @@ function dealCard(d, isHidden) {
     h('div', { class: 'body' },
       h('h3', { class: 'title', title: d.title }, d.title),
       priceBlock(d),
+      d.bundle ? h('p', { class: 'highlights' }, d.bundle.highlights.join(' · ')) : null,
       h('div', { class: 'pills' }, ...dealPills(d)),
       h('div', { class: 'actions' }, ...actions),
     ),
@@ -392,6 +397,7 @@ function renderChips(rows, defs, match, show) {
 
 function hiddenLabel(reason) {
   if (reason === 'owned') return '🎮 Déjà dans ta bibliothèque';
+  if (reason === 'wishlist') return '❤️ Souhait Steam : proposé sur Steam seulement';
   if (reason?.startsWith('genre:')) {
     const g = GENRE_BY_ID[reason.slice(6)];
     return `🚫 ${g ? `${g.emoji} ${g.label}` : 'Genre masqué'}`;

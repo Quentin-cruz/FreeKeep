@@ -1,6 +1,7 @@
 // Personnalisation : ce que l'utilisateur veut voir, et ce qu'il ne veut pas voir.
 import { LEVELS, STORE_ORDER, PRIME_STORES } from './config.js';
 import { genresOf } from './genres.js';
+import { bannedKeyword } from './keywords.js';
 import { normTitle } from './util.js';
 
 // Seuils effectifs selon le niveau d'exigence choisi.
@@ -39,16 +40,7 @@ export function wants(settings) {
   };
 }
 
-// ---------- Mots-clés bannis ----------
-
-export function bannedKeyword(title, keywords = []) {
-  const t = ` ${normTitle(title)} `;
-  for (const kw of keywords) {
-    const k = normTitle(kw);
-    if (k && t.includes(` ${k} `)) return kw;
-  }
-  return null;
-}
+export { bannedKeyword };
 
 // ---------- Jeux possédés ----------
 
@@ -124,4 +116,18 @@ export function hiddenReason(item, settings, { appInfo = {}, owned = null, isGam
     if (owned.hasApp(item.steamAppID) || (!item.steamAppID && owned.hasName(item.title)) || owned.hasGogName?.(item.title)) return 'owned';
   }
   return null;
+}
+
+// ---------- Liste de souhaits Steam ----------
+
+/**
+ * Jeu de la liste de souhaits Steam : seule l'offre à activer sur Steam est gardée.
+ * Sans offre Steam, le bon plan est masqué (hiddenBy = 'wishlist').
+ */
+export function steamOnly(d) {
+  if (d.section !== 'pc' || d.channel === 'bundle') return d;
+  const steam = d.offers?.steam;
+  if (d.platform === 'steam' || !d.platform) return d.offers ? { ...d, offers: steam ? { steam } : {} } : d;
+  if (!steam) return { ...d, offers: {}, hiddenBy: 'wishlist' };
+  return { ...d, ...steam, platform: 'steam', offers: { steam } };
 }

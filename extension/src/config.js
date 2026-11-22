@@ -107,6 +107,16 @@ export const ENDPOINTS = {
   eshopSearch: 'https://searching.nintendo-europe.com/fr/select',
   eshopPrice: 'https://api.ec.nintendo.com/v1/price',
   dealabs: 'https://www.dealabs.com/rss',
+  dealabsGroup: 'https://www.dealabs.com/groupe',
+  ecb: 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml',
+  steamItems: 'https://api.steampowered.com/IStoreBrowseService/GetItems/v1/',
+  gogCatalog: 'https://catalog.gog.com/v1/catalog',
+  eaDeals: 'https://www.ea.com/fr-fr/sales/deals',
+  barter: 'https://barter.vg/bundles/json/',
+  fanatical: 'https://www.fanatical.com/api/all/fr',
+  enebaSwitch: 'https://www.eneba.com/fr/store/nintendo-games',
+  kinguin: 'https://www.kinguin.net/services/library/api/v1/products/search',
+  igSwitch: 'https://www.instant-gaming.com/fr/nintendo/',
   ggdeals: 'https://api.gg.deals/v1/prices/by-steam-app-id/',
   steamCommunity: 'https://steamcommunity.com',
   steamWishlist: 'https://api.steampowered.com/IWishlistService/GetWishlist/v1/',
@@ -172,6 +182,9 @@ export const DEFAULT_SETTINGS = {
   // Récupération
   autoClick: true,
 };
+
+// Sources à relire quand un réglage de bons plans change.
+export const DEAL_SOURCES = ['cheapshark', 'eshop', 'ggdeals', 'gog', 'ea', 'bundles', 'switchkeys', 'dealabsPages'];
 
 // Fréquence des vérifications, en heures.
 export const INTERVALS = [

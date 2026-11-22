@@ -1,6 +1,8 @@
 // Assemble les bons plans (PC + Switch) : dédoublonnage, chutes de prix, score, affaires exceptionnelles.
 import { titlesMatch, titleContains } from './util.js';
 import { eshopRankBonus } from './sources/eshop.js';
+import { toEur } from './sources/rates.js';
+import { sameGameStrict } from './prefs.js';
 
 const DAY = 24 * 3600 * 1000;
 const sameGame = (a, b) => titlesMatch(a.title, b.title) || titleContains(a.title, b.title) || titleContains(b.title, a.title);
@@ -14,6 +16,8 @@ export function isExceptional(d) {
     (f.wishlist && disc >= 50) ||
     (f.historicLow && disc >= 75) ||
     (f.hot && (f.free || disc >= 60)) ||
+    (f.hot && d.channel === 'physical' && disc >= 40) ||
+    (d.channel === 'bundle' && f.wishlist) ||
     (d.section === 'switch' && f.nintendo && disc >= 40) ||
     (d.section === 'switch' && d.channel === 'eshop' && f.popular && disc >= 60 && (d.normalPrice ?? 0) >= 39.99)
   );
@@ -22,7 +26,9 @@ export function isExceptional(d) {
 export function scoreDeal(d) {
   const f = d.flags || {};
   // Un jeu en boîte n'a presque jamais de remise affichée : sans ça, il finirait toujours en bas de liste.
-  let s = d.discount ?? (d.channel === 'physical' ? 80 : 50);
+  // Avec la température (pages Dealabs), elle fait le tri : une vraie remise connue passe devant.
+  const physical = d.channel === 'physical';
+  let s = d.discount != null ? d.discount + (physical ? 15 : 0) : physical ? (d.temperature ? 60 : 80) : 50;
   if (f.priceError) s += 80;
   if (f.drop) s += 35;
   if (f.historicLow) s += 15;
@@ -31,9 +37,60 @@ export function scoreDeal(d) {
   if (f.aaa) s += 10;
   if (f.nintendo) s += 25;
   if (d.source === 'eshop') s += eshopRankBonus(d.rank);
+  if (d.temperature) s += Math.min(30, d.temperature / 25);
+  if (d.bundle) s += 10 + 3 * d.bundle.good;
+  if ((d.rating?.gog ?? 0) >= 4.6) s += 8;
   if ((d.rating?.metacritic ?? 0) >= 85) s += 10;
   if ((d.rating?.steam ?? 0) >= 95) s += 8;
   return s;
+}
+
+const asOffer = (d) => ({ price: d.price, normalPrice: d.normalPrice, discount: d.discount, merchant: d.merchant, url: d.url, currency: d.currency, approx: !!d.approx, end: d.end ?? null });
+
+// L'offre la moins chère devient l'offre principale.
+function pickBest(d) {
+  const best = Object.entries(d.offers || {}).sort(([, a], [, b]) => a.price - b.price)[0];
+  return best ? Object.assign(d, best[1], { platform: best[0] }) : d;
+}
+
+/** Prix en euros : exacts pour Steam (fiches officielles), convertis au taux BCE pour les autres (« ≈ »). */
+export function applyEuros(items, steam, rate) {
+  for (const d of items) {
+    const st = steam[d.steamAppID];
+    const known = st?.game && st.normal > 0 ? st : null;
+    for (const [platform, o] of Object.entries(d.offers || {})) {
+      if (o.currency !== 'USD') continue;
+      o.price = toEur(o.price, rate);
+      o.normalPrice = platform === 'steam' && known ? known.normal : toEur(o.normalPrice, rate);
+      o.discount = o.normalPrice > o.price ? Math.round((1 - o.price / o.normalPrice) * 100) : o.discount;
+      o.currency = 'EUR';
+      o.approx = true;
+    }
+    if (d.offers?.steam && known && known.price != null && known.discount >= 20 && known.price <= d.offers.steam.price) {
+      d.offers.steam = { price: known.price, normalPrice: known.normal, discount: known.discount, merchant: 'Steam', url: `https://store.steampowered.com/app/${d.steamAppID}/`, currency: 'EUR', approx: false, end: known.end };
+    }
+    if (d.offers && Object.keys(d.offers).length) pickBest(d);
+    else if (d.currency === 'USD') Object.assign(d, { price: toEur(d.price, rate), normalPrice: toEur(d.normalPrice, rate), currency: 'EUR', approx: true });
+  }
+  return items;
+}
+
+// Réunit les offres d'un même jeu PC : une carte, un prix par launcher.
+export function mergeLaunchers(main, extras) {
+  const out = [...main];
+  for (const d of extras) {
+    const twin = out.find((o) => o.section === 'pc' && ((d.steamAppID && o.steamAppID && String(o.steamAppID) === String(d.steamAppID)) || sameGameStrict(o.title, d.title)));
+    if (!twin) {
+      out.push({ ...d, offers: { [d.platform]: asOffer(d) } });
+      continue;
+    }
+    twin.offers ||= { [twin.platform]: asOffer(twin) };
+    const prev = twin.offers[d.platform];
+    if (!prev || d.price <= prev.price) twin.offers[d.platform] = asOffer(d);
+    if (d.flags?.wishlist) twin.flags.wishlist = true;
+    pickBest(twin);
+  }
+  return out;
 }
 
 /**
@@ -42,7 +99,10 @@ export function scoreDeal(d) {
  * @param gg      { [appid]: prix GG.deals } — pour afficher le prix « clé » à côté d'une promo officielle
  */
 export function buildDeals(lists, history = {}, gg = {}, now = Date.now()) {
-  const official = [...(lists.cheapshark || []), ...(lists.eshop || [])];
+  const official = [
+    ...mergeLaunchers(lists.cheapshark || [], [...(lists.wishlist || []), ...(lists.gog || []), ...(lists.ea || [])]),
+    ...(lists.eshop || []),
+  ];
   const extra = [];
 
   // Dealabs : si le deal existe déjà via une source officielle, on fusionne (badge « hot » / erreur de prix).
@@ -68,12 +128,13 @@ export function buildDeals(lists, history = {}, gg = {}, now = Date.now()) {
     keyDeals.push(k);
   }
 
-  const all = [...official, ...keyDeals, ...extra];
+  const all = [...official, ...keyDeals, ...(lists.bundles || []), ...(lists.switchkeys || []), ...extra];
 
   // Chute soudaine : prix au moins 30 % plus bas qu'à la vérification précédente (moins de 10 jours).
   for (const d of all) {
     if (d.price == null) continue;
-    const prev = history[d.id];
+    // Un prix passé du dollar à l'euro n'est pas une chute de prix.
+    const prev = history[d.id]?.currency === d.currency || !history[d.id]?.currency ? history[d.id] : null;
     if (prev && prev.price > 0 && d.price <= prev.price * 0.7 && now - prev.at < 10 * DAY) {
       d.flags.drop = true;
       d.prevPrice = prev.price;
@@ -82,7 +143,7 @@ export function buildDeals(lists, history = {}, gg = {}, now = Date.now()) {
       d.prevPrice = prev.prevPrice;
     }
     const keepDrop = d.flags.drop ? { dropUntil: prev?.dropUntil && prev.dropUntil > now ? prev.dropUntil : now + DAY, prevPrice: d.prevPrice } : {};
-    history[d.id] = { price: d.price, at: now, ...keepDrop };
+    history[d.id] = { price: d.price, currency: d.currency, at: now, ...keepDrop };
   }
   for (const [id, h] of Object.entries(history)) if (now - h.at > 30 * DAY) delete history[id];
 

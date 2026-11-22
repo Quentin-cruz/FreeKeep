@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { epicFixture } from './fixtures.js';
-import { DEFAULT_SETTINGS } from '../extension/src/config.js';
+import { DEFAULT_SETTINGS, DEAL_SOURCES } from '../extension/src/config.js';
 
 const tick = () => new Promise((r) => setImmediate(r));
 
@@ -224,7 +224,7 @@ test('Fin du tutoriel : la vérification déjà lancée avec ces réglages n’e
   epicCalls = 0;
   await changeSettings({ level: 'wide' });
   closeGate();
-  send({ type: 'refresh', force: ['steamlib', 'cheapshark', 'eshop', 'ggdeals'] });
+  send({ type: 'refresh', force: ['steamlib', 'wishlist', ...DEAL_SOURCES] });
   await sleep(DEBOUNCE);
   gate.open();
   await idle();

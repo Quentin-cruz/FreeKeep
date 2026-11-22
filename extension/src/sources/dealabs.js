@@ -194,7 +194,7 @@ export function freebieName(title) {
  */
 export function dealabsFreebie(it, { stores = [], prime = false, maxAgeDays = 7 } = {}, now = Date.now()) {
   const title = it.title || '';
-  if (!title || (it.pubDate && now - it.pubDate > maxAgeDays * DAY)) return null;
+  if (!title || it.expired || (it.end && it.end < now) || (it.pubDate && now - it.pubDate > maxAgeDays * DAY)) return null;
   const price = parsePrice(it.priceText);
   if (price > 0) return null; // « … + poster offert à 19,99 € » est une promo
   if (!(isFreebieTitle(title, it.merchant) || (price === 0 && !notKeepable(title, it.merchant)))) return null;
@@ -229,6 +229,7 @@ export function dealabsFreebie(it, { stores = [], prime = false, maxAgeDays = 7 
 
 export function classifyDealabs(it, settings, now = Date.now()) {
   const title = it.title || '';
+  if (it.expired || (it.end && it.end < now) || (it.temperature ?? 0) < 0 || /m[ée]ga ?thread|rejoint le catalogue/i.test(title)) return null;
   // Offert mais pas à garder (week-end gratuit, mobile, bonus de stream…) : ce n'est pas une promo non plus.
   const unpaid = !parsePrice(it.priceText);
   if (unpaid && FREE_WORDS.test(title) && notKeepable(title, it.merchant)) return null;
@@ -236,13 +237,15 @@ export function classifyDealabs(it, settings, now = Date.now()) {
   if (unpaid && isFreebieTitle(title, it.merchant) && !consoleOnly(title) && !mentionsSwitch1(title) && !mentionsSwitch2(title)) return null;
   if (MIXED_FEEDS.includes(it.feed) && !/consoles|jeux vid/i.test(it.category)) return null;
   if (!title || NOT_A_GAME.test(title)) return null;
-  if (it.pubDate && now - it.pubDate > (settings.dealMaxAgeDays || 7) * DAY) return null;
+  // Offre vue sur une page Dealabs : toujours active, même postée il y a deux semaines.
+  if (it.pubDate && now - it.pubDate > (it.verified ? 30 : settings.dealMaxAgeDays || 7) * DAY) return null;
   if (/frontalier/i.test(title)) return null;
 
   // Deals en magasin : seulement dans tes départements.
   const local = localDepartments(title);
   const depts = parseDepartments(settings.departments);
   if (local.length && !local.some((d) => depts.includes(d))) return null;
+  if (it.local && !local.length) return null; // locale, sans département connu
 
   const switch1 = mentionsSwitch1(title);
   const switch2Only = !switch1 && mentionsSwitch2(title);
@@ -256,7 +259,7 @@ export function classifyDealabs(it, settings, now = Date.now()) {
 
   const text = `${title} ${stripHtml(it.description).slice(0, 800)}`;
   const priceError = !!it.priceError || PRICE_ERROR.test(text);
-  const hot = !!it.hot;
+  const hot = !!it.hot || (it.temperature ?? 0) >= 100;
   const section = isSwitch ? 'switch' : 'pc';
   const bundle = /\bbundle\b|pack de \d+ jeux|lot de \d+ jeux/i.test(title);
   let channel;
@@ -271,7 +274,8 @@ export function classifyDealabs(it, settings, now = Date.now()) {
   if ((channel === 'keyshop' && settings.keyshops === false) || (channel === 'physical' && settings.physical === false) || (channel === 'bundle' && settings.bundles === false)) return null;
 
   const price = parsePrice(it.priceText);
-  const discount = Number(/-\s?(\d{1,2})\s?%/.exec(title)?.[1]) || null;
+  const normalPrice = price != null && it.refPrice > price ? it.refPrice : null;
+  const discount = Number(/-\s?(\d{1,2})\s?%/.exec(title)?.[1]) || (normalPrice ? Math.round((1 - price / normalPrice) * 100) : null);
   const id = /-(\d{5,})(?:[/?#]|$)/.exec(it.link)?.[1] || normText(it.guid).slice(-40);
 
   return {
@@ -284,13 +288,14 @@ export function classifyDealabs(it, settings, now = Date.now()) {
     images: [biggerImage(it.image)].filter(Boolean),
     square: true,
     price,
-    normalPrice: null,
+    normalPrice,
     currency: 'EUR',
     discount,
+    temperature: it.temperature ?? null,
     merchant: it.merchant || merchantInTitle(title) || 'Dealabs',
     platform: section === 'switch' ? (switch2Only ? 'switch2' : 'switch1') : pcPlatform,
     posted: it.pubDate,
-    end: null,
+    end: it.end || null,
     flags: { hot, priceError, free: price === 0, local: local.length > 0, bundle },
   };
 }
@@ -306,13 +311,16 @@ function merchantInTitle(title) {
 export function mergeDealabsItems(items) {
   const byGuid = new Map();
   for (const it of items) {
-    const prev = byGuid.get(it.guid);
+    const key = /-(\d{5,})(?:[/?#]|$)/.exec(it.link || it.guid || '')?.[1] || it.guid;
+    const prev = byGuid.get(key);
+    const live = it.verified ? it : prev?.verified ? prev : null; // page Dealabs : informations plus complètes
     const hot = it.feed === 'hot' || !!it.hot || !!prev?.hot;
     const priceError = it.feed === 'erreur' || !!it.priceError || !!prev?.priceError;
     // On garde la version « groupe » (catégorie fiable) quand elle existe.
     const base = prev && !MIXED_FEEDS.includes(prev.feed) ? prev : it;
     // Titre nettoyé ici aussi : le cache peut contenir des annonces lues par une ancienne version.
-    byGuid.set(it.guid, { ...base, title: stripTemperature(base.title), feed: base.feed, hot, priceError });
+    const extra = live ? { temperature: live.temperature, refPrice: live.refPrice, end: live.end, expired: live.expired, local: live.local, verified: true } : {};
+    byGuid.set(key, { ...base, ...extra, title: stripTemperature(base.title), feed: base.feed, hot, priceError });
   }
   return [...byGuid.values()];
 }

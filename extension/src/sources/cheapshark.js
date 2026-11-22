@@ -15,7 +15,9 @@ const STORE_PLATFORM = { 7: 'gog', 25: 'epic', 13: 'ubisoft', 8: 'ea', 31: 'batt
 export const platformOf = (d) => STORE_PLATFORM[d.storeID] || (d.steamAppID ? 'steam' : d.storeID === '30' || d.storeID === 30 ? 'indiegala' : 'other');
 
 // Stores à interroger un par un : le classement général est presque entièrement composé de clés Steam.
-const LAUNCHER_STORES = { gog: 7, epic: 25, ubisoft: 13 };
+// (GOG et EA ont leur propre source, en euros.)
+const LAUNCHER_STORES = { epic: 25, ubisoft: 13 };
+const LAUNCHER_PAGES = 2;
 const pause = () => new Promise((r) => setTimeout(r, 250)); // ménage l'API
 
 const dealLink = (dealID) =>
@@ -38,9 +40,11 @@ export async function fetchCheapShark(settings, wishlist = []) {
   for (const [platform, storeID] of Object.entries(LAUNCHER_STORES)) {
     if (!settings.stores?.[platform]) continue;
     try {
-      await pause();
-      const res = await fetchJson(`${ENDPOINTS.cheapsharkDeals}?${new URLSearchParams({ ...base, storeID: String(storeID) })}`);
-      if (Array.isArray(res)) perStore.push(...res);
+      for (let pageNumber = 0; pageNumber < LAUNCHER_PAGES; pageNumber++) {
+        await pause();
+        const res = await fetchJson(`${ENDPOINTS.cheapsharkDeals}?${new URLSearchParams({ ...base, storeID: String(storeID), pageNumber: String(pageNumber) })}`);
+        if (Array.isArray(res)) perStore.push(...res);
+      }
     } catch (e) {
       console.warn(`[FreeKeep] CheapShark ${platform} :`, e);
     }
@@ -90,6 +94,7 @@ export function parseCheapShark(raw, settings, { wished = [], wishlist = [] } = 
     if (!d?.dealID || !d.title || !allowed(d)) continue;
     const price = Number(d.salePrice);
     const normal = Number(d.normalPrice);
+    if (!(price > 0)) continue; // jeu offert : il est dans « Gratuits »
     const discount = Math.round(Number(d.savings) || 0);
     const meta = Number(d.metacriticScore) || 0;
     const steam = Number(d.steamRatingPercent) || 0;
@@ -101,7 +106,10 @@ export function parseCheapShark(raw, settings, { wished = [], wishlist = [] } = 
     const gem = !aaa && normal >= 9.99 && steam >= settings.gemMinRating && count >= 3000 && discount >= settings.gemMinDiscount;
     // Liste de souhaits : toute vraie promo (-20 % et plus)
     const wish = !!d.steamAppID && wishSet.has(String(d.steamAppID)) && discount >= 20;
-    if (!aaa && !gem && !wish) continue;
+    // Launchers moins fournis que Steam : critères un peu plus souples, toujours sur de bons jeux.
+    const launcher = !aaa && !gem && ['epic', 'ubisoft'].includes(platformOf(d)) && normal >= 14.99
+      && discount >= Math.max(40, settings.pcMinDiscount - 10) && (meta >= 72 || (steam >= 75 && count >= 500));
+    if (!aaa && !gem && !wish && !launcher) continue;
 
     const item = {
       id: `cs:${d.gameID}`,
@@ -128,7 +136,7 @@ export function parseCheapShark(raw, settings, { wished = [], wishlist = [] } = 
     const prev = byGame.get(d.gameID);
     const offers = prev?.offers || {};
     if (!offers[item.platform] || item.price < offers[item.platform].price) {
-      offers[item.platform] = { price: item.price, normalPrice: item.normalPrice, discount: item.discount, merchant: item.merchant, url: item.url };
+      offers[item.platform] = { price: item.price, normalPrice: item.normalPrice, discount: item.discount, merchant: item.merchant, url: item.url, currency: 'USD' };
     }
     byGame.set(d.gameID, { ...(!prev || item.price < prev.price ? item : prev), offers });
   }

@@ -3,7 +3,14 @@ import { fetchCheapShark, fetchPopularAppIds } from './sources/cheapshark.js';
 import { fetchEshop } from './sources/eshop.js';
 import { fetchDealabs, mergeDealabsItems, classifyDealabs, dealabsFreebie } from './sources/dealabs.js';
 import { fetchGgDeals, ggKeyshopDeals } from './sources/ggdeals.js';
-import { buildDeals } from './deals.js';
+import { fetchDealabsPages } from './sources/dealabspages.js';
+import { fetchGog } from './sources/gog.js';
+import { fetchEa } from './sources/ea.js';
+import { fetchBundles } from './sources/bundles.js';
+import { fetchSwitchKeys } from './sources/switchkeys.js';
+import { fetchSteamItems, wishlistDeals } from './sources/steamstore.js';
+import { fetchUsdToEur, DEFAULT_USD_EUR } from './sources/rates.js';
+import { buildDeals, applyEuros } from './deals.js';
 import { wants } from './prefs.js';
 
 const MIN = 60 * 1000;
@@ -12,6 +19,13 @@ const GAPS = {
   cheapshark: 14 * MIN, // CheapShark bannit temporairement les clients trop pressés
   eshop: 14 * MIN,
   dealabs: 4 * MIN,     // les erreurs de prix partent en quelques minutes
+  dealabsPages: 25 * MIN,
+  gog: 28 * MIN,
+  ea: 3 * 60 * MIN,
+  bundles: 2 * 60 * MIN,
+  switchkeys: 2 * 60 * MIN,
+  wishlist: 28 * MIN,
+  rate: 12 * 60 * MIN,
   watchlist: 7 * DAY,   // liste des gros jeux surveillés sur les sites de clés
   ggdeals: 50 * MIN,    // GG.deals : 1 000 prix/heure max
 };
@@ -39,8 +53,36 @@ export async function refreshDeals(rawSettings, cache, history, now = Date.now()
     }
   };
 
+  const st = settings.stores || {};
   await Promise.all([
-    run('cheapshark', settings.pcDeals, async () => ({ items: await fetchCheapShark(settings, settings.useWishlist ? wishlist : []) })),
+    run('rate', true, async () => ({ usdEur: await fetchUsdToEur() })),
+    run('cheapshark', settings.pcDeals, async () => {
+      const items = await fetchCheapShark(settings, settings.useWishlist ? wishlist : []);
+      let steam = {};
+      try {
+        steam = await fetchSteamItems(items.map((d) => d.steamAppID), { reviews: false });
+      } catch (e) {
+        console.warn('[FreeKeep] prix Steam :', e); // les prix convertis suffisent
+      }
+      return { items, steam };
+    }),
+    run('gog', settings.pcDeals && !!st.gog, async () => ({ items: await fetchGog(settings) })),
+    run('ea', settings.pcDeals && !!st.ea, async () => ({ items: await fetchEa(settings) })),
+    run('bundles', settings.pcDeals && settings.bundles !== false && !!st.steam, async (prev) => {
+      const humble = { ...(prev?.humble || {}) };
+      return { items: await fetchBundles(settings, humble, now), humble };
+    }),
+    run('switchkeys', settings.switchDeals && settings.keyshops !== false, async (prev) => {
+      const refs = { ...(prev?.refs || {}) };
+      return { items: await fetchSwitchKeys(settings, refs, now), refs };
+    }),
+    run('wishlist', settings.pcDeals && !!st.steam && settings.useWishlist && wishlist.length > 0, async () => {
+      const items = await fetchSteamItems(wishlist.slice(0, 500));
+      return { items: wishlistDeals(wishlist, items), names: Object.values(items).map((i) => i.name) };
+    }),
+    run('dealabsPages', settings.dealabs && (settings.pcDeals || settings.switchDeals), async () => ({
+      raw: await fetchDealabsPages([settings.switchDeals ? 'switch' : null, settings.pcDeals ? 'pc' : null].filter(Boolean)),
+    })),
     run('eshop', settings.switchDeals, async () => ({ items: await fetchEshop(settings) })),
     // Dealabs sert aussi aux jeux offerts sans API (Prime, Microsoft Store, Battle.net).
     run('dealabs', settings.dealabs && (settings.pcDeals || settings.switchDeals || w.free), async (prev) => {
@@ -59,18 +101,25 @@ export async function refreshDeals(rawSettings, cache, history, now = Date.now()
     return { prices: await fetchGgDeals(ids, settings.ggdealsKey) };
   });
 
-  const dealabs = (cache.dealabs?.raw || [])
+  const rate = cache.rate?.usdEur || DEFAULT_USD_EUR;
+  const dealabsRaw = mergeDealabsItems([...(cache.dealabs?.raw || []), ...(settings.dealabs ? cache.dealabsPages?.raw || [] : [])]);
+  const dealabs = dealabsRaw
     .map((it) => classifyDealabs(it, settings, now))
     .filter((d) => d && (d.section === 'pc' ? settings.pcDeals : settings.switchDeals));
   const gg = cache.ggdeals?.prices || {};
   const freebies = w.free
-    ? (cache.dealabs?.raw || []).map((it) => dealabsFreebie(it, { stores: w.stores, prime: w.prime, maxAgeDays: settings.dealMaxAgeDays || 7 }, now)).filter(Boolean)
+    ? dealabsRaw.map((it) => dealabsFreebie(it, { stores: w.stores, prime: w.prime, maxAgeDays: settings.dealMaxAgeDays || 7 }, now)).filter(Boolean)
     : [];
 
   const deals = buildDeals(
     {
       // copies : buildDeals ajoute des badges, le cache doit rester brut
-      cheapshark: settings.pcDeals ? structuredClone(cache.cheapshark?.items || []) : [],
+      cheapshark: settings.pcDeals ? applyEuros(structuredClone(cache.cheapshark?.items || []), cache.cheapshark?.steam || {}, rate) : [],
+      wishlist: structuredClone(cache.wishlist?.items || []),
+      gog: structuredClone(cache.gog?.items || []),
+      ea: structuredClone(cache.ea?.items || []),
+      bundles: structuredClone(cache.bundles?.items || []),
+      switchkeys: structuredClone(cache.switchkeys?.items || []),
       eshop: settings.switchDeals ? structuredClone(cache.eshop?.items || []) : [],
       dealabs,
       ggdeals: settings.pcDeals ? ggKeyshopDeals(gg) : [],
@@ -84,12 +133,22 @@ export async function refreshDeals(rawSettings, cache, history, now = Date.now()
   const counts = {
     cheapshark: cache.cheapshark?.items?.length,
     eshop: cache.eshop?.items?.length,
+    gog: cache.gog?.items?.length,
+    ea: cache.ea?.items?.length,
+    bundles: cache.bundles?.items?.length,
+    switchkeys: cache.switchkeys?.items?.length,
+    dealabsPages: cache.dealabsPages?.raw?.length,
     dealabs: dealabs.length + freebies.length,
     ggdeals: cache.ggdeals ? Object.keys(cache.ggdeals.prices || {}).length : undefined,
   };
   const enabled = {
     cheapshark: settings.pcDeals,
     eshop: settings.switchDeals,
+    gog: settings.pcDeals && !!st.gog,
+    ea: settings.pcDeals && !!st.ea,
+    bundles: settings.pcDeals && settings.bundles !== false && !!st.steam,
+    switchkeys: settings.switchDeals && settings.keyshops !== false,
+    dealabsPages: settings.dealabs && (settings.pcDeals || settings.switchDeals),
     dealabs: settings.dealabs && (settings.pcDeals || settings.switchDeals || w.free),
     ggdeals: withKey,
   };
@@ -101,5 +160,5 @@ export async function refreshDeals(rawSettings, cache, history, now = Date.now()
       : { ok: true, count: counts[name] ?? 0, at: cache[name]?.at || null };
   }
 
-  return { deals: deals.filter((d) => !d.end || d.end > now), freebies, errors, status };
+  return { deals: deals.filter((d) => !d.end || d.end > now), freebies, errors, status, rate, wishNames: cache.wishlist?.names || [] };
 }

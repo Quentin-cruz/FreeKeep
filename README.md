@@ -29,7 +29,7 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en trois sec
 3. **Ce que tu veux voir** : jeux gratuits, promos PC, promos Switch, jeux en boîte (+ ton département), sites de clés, bundles.
 4. **Niveau d'exigence** : 🔥 que les affaires de fou, ⚖️ équilibré ou 🌊 large.
 5. **Tes bibliothèques** : lecture de tes jeux Steam et GOG via les sessions déjà ouvertes dans ton navigateur (lien de profil Steam facultatif). Les promos sur tes jeux sont masquées et ta liste de souhaits Steam est mise en avant.
-6. **Ce que tu ne veux pas voir** : 16 genres à masquer (horreur, sport, hentai…) et des licences à bannir par mot-clé (LEGO, Mortal Kombat, Call of Duty…).
+6. **Ce que tu ne veux pas voir** : 16 genres à masquer (horreur, sport, hentai…) et des licences à bannir (LEGO, Mortal Kombat, Hogwarts Legacy…). Les orthographes proches et les variantes (« Hogwart's Legacy », « NBA 2K26 », « EA FC 27 ») sont reconnues.
 7. **Alertes** : notifications, fréquence, clic automatique.
 8. **Récapitulatif**.
 
@@ -45,7 +45,8 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en trois sec
 - **Lien de profil (facultatif)** : sans session ouverte, il permet de lire ta liste de souhaits si elle est publique. Avec une session, « Vérifier » affiche le nombre de jeux possédés reconnus.
 - **Annonces Dealabs** : elles n'ont pas d'identifiant Steam. FreeKeep<3 le retrouve par le nom du jeu (10 recherches par vérification), pour masquer aussi ceux que tu possèdes.
 - Ce que ça change :
-  - les promos sur les jeux que tu possèdes sont masquées ;
+  - les promos sur les jeux que tu possèdes sont masquées, sur Steam comme sur les autres launchers ;
+  - un jeu de ta liste de souhaits Steam n'est proposé que sur Steam ;
   - les jeux gratuits Steam que tu as déjà sont cochés « récupérés » ;
   - les jeux de ta liste de souhaits remontent en tête dès -20 %, et une alerte part dès -50 %.
 - La bibliothèque se resynchronise toutes les 12 h (toutes les heures si tu n'étais pas connecté), ou avec le bouton « Synchroniser ».
@@ -97,6 +98,10 @@ Chaque bon plan Switch est classé **Switch** (jouable sur Switch 1, et donc aus
 
 | Source | Ce qu'elle apporte |
 |---|---|
+| [GOG](https://www.gog.com) | Catalogue officiel, en euros, jeux notés 4/5 et plus |
+| EA | Offres du site EA, en euros |
+| Bundles | Humble Bundle, Fanatical, Green Man Gaming, IndieGala : contenu via [Barter.vg](https://barter.vg), gardés s'ils ont au moins 3 jeux bien notés sur Steam (2 à 6 selon le niveau) |
+| Steam | Prix officiels en euros, et promos de ta liste de souhaits |
 | [CheapShark](https://www.cheapshark.com) | Promos sur 30+ stores officiels (Steam, GOG, Humble, Fanatical, GMG, Gamesplanet, Battle.net…), avec la note Metacritic et les avis Steam |
 | [Dealabs](https://www.dealabs.com) | Deals **hot** validés par la communauté, y compris sur les sites de clés (Eneba, Instant Gaming, G2A…), et **erreurs de prix** (avec le groupe « erreur de prix ») |
 | [GG.deals](https://gg.deals) *(facultatif)* | Prix des **sites de clés** en euros, plus bas historiques, surveillance des gros jeux |
@@ -112,8 +117,8 @@ Badges : ⚠️ erreur de prix · 📉 chute soudaine (-30 % depuis la vérif pr
 ## 🎮 Switch
 
 - **eShop** : moteur de recherche officiel de Nintendo Europe, plus l'API de prix Nintendo pour le prix exact en € et la date de fin. Ne sont gardés que les jeux bien classés dans les téléchargements Nintendo : top 500, ou top 1 500 s'ils sont vendus 20 € et plus. Les jeux Nintendo sont gardés dès -20 %. Les jeux inconnus bradés à -90 % sont écartés, et les jeux réservés à la Switch 2 aussi, sauf si tu les as demandés. Si seul le pack ou l'édition Deluxe est en promo, c'est son prix qui s'affiche, avec la mention « pack ou Deluxe ».
-- **Physique** : jeux en boîte postés sur Dealabs (Amazon, Fnac, Leclerc, Micromania…), nationaux et locaux à égalité. Pas besoin d'être « hot », sauf au niveau « Que les affaires de fou ».
-- **Clés** : deals hot Dealabs (Eneba, Driffle…).
+- **Physique** : jeux en boîte postés sur Dealabs (Amazon, Fnac, Leclerc, Micromania…), nationaux et locaux à égalité. Les pages Dealabs donnent la température, le prix de référence et les offres encore valables des 30 derniers jours ; le RSS ajoute les toutes dernières.
+- **Clés** : Eneba, Kinguin et Instant Gaming (Europe), comparés au prix de l'eShop, plus les deals Dealabs. Les comptes partagés, cartes prépayées et DLC sont écartés.
 - **Tri** : Les accessoires et consoles sont écartés, et les jeux uniquement Switch 2 aussi, sauf si tu les as demandés. Les promos valables dans un seul magasin ne sont gardées que pour les départements que tu indiques (aucun par défaut ; numéros ou code postal).
 
 ## Notifications
@@ -137,6 +142,10 @@ extension/
 │       ├── cheapshark.js, ggdeals.js             # promos PC
 │       ├── eshop.js                              # promos Switch
 │       ├── dealabs.js                            # boîtes, clés, erreurs de prix, jeux offerts (RSS)
+│       ├── dealabspages.js                       # température, prix de référence, offres récentes
+│       ├── gog.js, ea.js, bundles.js             # promos officielles en euros, bundles
+│       ├── switchkeys.js                         # clés Switch (Eneba, Kinguin, Instant Gaming)
+│       ├── steamstore.js, rates.js               # prix Steam en euros, taux BCE
 │       └── goglibrary.js                         # jeux GOG via la session gog.com
 ├── src/prefs.js, src/genres.js            # personnalisation : sections, exclusions, jeux possédés
 ├── src/sources/steamlibrary.js, steamapps.js, steamsearch.js  # bibliothèque/souhaits, genres, recherche par nom
@@ -146,7 +155,7 @@ extension/
 ├── popup/  options/  icons/
 tests/
 ├── fixtures.js                # données calquées sur le format réel des API
-├── unit.test.js               # 51 tests
+├── unit.test.js               # 59 tests
 └── background.test.js         # 17 tests : service worker dans un navigateur simulé
 ```
 
@@ -172,14 +181,16 @@ Une version précédente (0.3) a aussi été testée de bout en bout dans Chrome
 
 ## Limites connues
 
-- **CheapShark donne les prix en $ US.** La remise en % est fiable, mais le prix exact en € peut différer un peu. Avec une clé GG.deals, le prix « clé » est affiché en €.
+- **Prix en euros** : exacts pour Steam, GOG, EA, l'eShop, les clés Switch, les bundles et Dealabs. CheapShark (Epic, Ubisoft, revendeurs) et GamerPower ne donnent que des dollars : le prix est converti au taux de la Banque centrale européenne et précédé de « ≈ ».
+- **G2A** bloque les lectures automatiques : ses offres n'apparaissent que si elles sont postées sur Dealabs.
+- **Clés PC** : sans clé API GG.deals, seules celles postées sur Dealabs sont vues.
 - **Dealabs** : les flux par groupe ne donnent pas la température (le flux « Hot » la met en tête du titre, FreeKeep<3 la retire). FreeKeep s'appuie donc sur le flux « Hot » officiel et garde un historique de 14 jours. Un deal peut avoir expiré même s'il est encore listé.
 - Dealabs, CheapShark, Nintendo et GG.deals peuvent changer leurs API. Si une source tombe, un bandeau le signale, l'État des sources passe en ✘ et les dernières données connues restent affichées.
 - Navigateur fermé = pas de vérification : la suivante se fait au redémarrage.
 - Les sites de clés sont du marché gris : prix plus bas, mais pas de garantie éditeur.
 - **Amazon Prime n'a pas d'API publique** (la page des jeux Luna est générée en JavaScript). Les jeux Prime sont repérés via GamerPower et Dealabs : il peut en manquer, surtout les jeux Luna en cloud.
 - **Steam** : une annonce Dealabs au titre ambigu (édition inconnue, lot de jeux) n'est pas reconnue, donc pas masquée si tu possèdes le jeu.
-- **Launchers** : CheapShark ne couvre plus EA, Battle.net ni le Microsoft Store. Pour eux, seules les annonces Dealabs comptent, donc souvent 0 promo.
+- **Launchers** : Battle.net et le Microsoft Store n'ont pas de source publique. Pour eux, seules les annonces Dealabs comptent, donc souvent peu de promos.
 - **GOG** : `getFilteredProducts` n'est pas une API documentée ; GOG peut la changer. En cas d'échec, la carte GOG passe en ⚠️ et le reste fonctionne.
 
 ---

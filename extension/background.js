@@ -1,7 +1,7 @@
 // FreeKeep — service worker (Manifest V3)
 // Vérifie périodiquement les jeux gratuits et les bons plans, applique la personnalisation,
 // gère notifications, badge et réclamation assistée.
-import { STORES, ALARM_NAME } from './src/config.js';
+import { STORES, ALARM_NAME, DEAL_SOURCES } from './src/config.js';
 import { fetchEpic } from './src/sources/epic.js';
 import { fetchSteam } from './src/sources/steam.js';
 import { fetchGamerPower } from './src/sources/gamerpower.js';
@@ -9,11 +9,13 @@ import { fetchSteamLibrary, fetchSteamProfile, fetchSteamSession } from './src/s
 import { fetchGogLibrary } from './src/sources/goglibrary.js';
 import { enrichAppInfo } from './src/sources/steamapps.js';
 import { resolveSteamIds } from './src/sources/steamsearch.js';
+import { fetchSteamItems } from './src/sources/steamstore.js';
+import { worthInEur, DEFAULT_USD_EUR } from './src/sources/rates.js';
 import { needsTags } from './src/genres.js';
 import { mergeGames } from './src/merge.js';
 import { refreshDeals } from './src/refresh-deals.js';
 import { isExceptional, scoreDeal } from './src/deals.js';
-import { effective, wants, hiddenReason, makeOwnedIndex, sameGameStrict, showsGame } from './src/prefs.js';
+import { effective, wants, hiddenReason, makeOwnedIndex, sameGameStrict, extractGameName, steamOnly, showsGame } from './src/prefs.js';
 import {
   getSettings, getData, saveData, locked, updateData, stateFor, patchState, keysForHistory, getClaimTabs, updateClaimTabs,
 } from './src/store.js';
@@ -57,7 +59,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // Réglages qui ne demandent qu'un nouveau tri (pas de nouveau téléchargement)
 const CHEAP_SETTINGS = ['notifyNew', 'notifyLastDay', 'notifyDeals', 'notifyWishlist', 'autoClick', 'intervalHours', 'onboarded'];
 // Réglages qui changent ce qu'on demande aux API
-const REFETCH_SETTINGS = ['pc', 'switch', 'switch2', 'stores', 'level', 'pcMinDiscount', 'gemMinDiscount', 'gemMinRating', 'switchMinDiscount', 'ggdealsKey', 'keyshops', 'pcDeals', 'switchDeals'];
+const REFETCH_SETTINGS = ['pc', 'switch', 'switch2', 'stores', 'level', 'pcMinDiscount', 'gemMinDiscount', 'gemMinRating', 'switchMinDiscount', 'ggdealsKey', 'keyshops', 'bundles', 'pcDeals', 'switchDeals'];
 const LIBRARY_SETTINGS = ['steamProfile', 'steamOwnedSync', 'useWishlist'];
 const GOG_SETTINGS = ['gogSessionSync'];
 const NOTIFY_SETTINGS = ['notifyNew', 'notifyLastDay', 'notifyDeals', 'notifyWishlist'];
@@ -76,8 +78,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
     return;
   }
   const force = new Set();
-  if (changed.some((k) => REFETCH_SETTINGS.includes(k))) ['cheapshark', 'eshop', 'ggdeals'].forEach((f) => force.add(f));
-  if (changed.some((k) => LIBRARY_SETTINGS.includes(k))) ['steamlib', 'cheapshark'].forEach((f) => force.add(f));
+  if (changed.some((k) => REFETCH_SETTINGS.includes(k))) DEAL_SOURCES.forEach((f) => force.add(f));
+  if (changed.some((k) => LIBRARY_SETTINGS.includes(k))) ['steamlib', 'cheapshark', 'wishlist'].forEach((f) => force.add(f));
   if (changed.some((k) => GOG_SETTINGS.includes(k))) force.add('goglib');
   settingsRefresh([...force]);
 });
@@ -183,7 +185,8 @@ async function doRefresh(reason, force) {
 
   // ---- 2. Bibliothèque + liste de souhaits Steam ----
   const libChanged = await syncSteamLibrary(settings, data, now, force.includes('steamlib'));
-  if (libChanged && !force.includes('cheapshark')) force = [...force, 'cheapshark'];
+  if (libChanged) force = [...new Set([...force, 'cheapshark', 'wishlist'])];
+  await nameOwnedGames(data);
   if (data.steamLib?.at) {
     sourceStatus.steamlib = data.steamLib.error
       ? { ok: false, error: data.steamLib.error, at: data.steamLib.at }
@@ -204,8 +207,10 @@ async function doRefresh(reason, force) {
   let freebies = [];
   let dealErrors = {};
   let dealStatus = {};
+  let rate = DEFAULT_USD_EUR;
+  let wishNames = [];
   try {
-    ({ deals, freebies, errors: dealErrors, status: dealStatus } = await refreshDeals(settings, data.dealCache, data.dealHistory, now, force, { wishlist }));
+    ({ deals, freebies, errors: dealErrors, status: dealStatus, rate, wishNames } = await refreshDeals(settings, data.dealCache, data.dealHistory, now, force, { wishlist }));
   } catch (e) {
     dealErrors = { bons_plans: String(e?.message || e) };
     console.warn('[FreeKeep] bons plans :', e);
@@ -219,6 +224,7 @@ async function doRefresh(reason, force) {
     .map((n) => data.cache[n].items.filter(keep));
   lists.push((freebies || []).filter(keep));
   const games = mergeGames(lists, now);
+  for (const g of games) if (g.worth) g.worth = worthInEur(g.worth, rate);
 
   // Annonces Dealabs sans identifiant Steam : on le retrouve par le nom (jeux possédés, souhaits, genres).
   if (settings.stores?.steam) await resolveSteamIds(deals, data.nameIds, now);
@@ -237,10 +243,18 @@ async function doRefresh(reason, force) {
   for (const g of games) {
     g.hiddenBy = hiddenReason({ title: g.title, steamAppID: g.appid }, settings, { appInfo: data.appInfo, isGame: true });
   }
+  const isWished = (d) => d.section === 'pc' && d.channel !== 'bundle'
+    && (d.steamAppID ? wishSet.has(String(d.steamAppID)) : wishNames.some((n) => sameGameStrict(n, extractGameName(d.title))));
   deals = deals.map((d) => {
-    const flags = { ...d.flags, wishlist: d.flags?.wishlist || (!!d.steamAppID && wishSet.has(String(d.steamAppID))) };
-    const out = { ...d, flags };
-    out.hiddenBy = hiddenReason(out, settings, { appInfo: data.appInfo, owned });
+    const wished = isWished(d);
+    const out = { ...(wished ? steamOnly(d) : d) };
+    out.flags = { ...d.flags, wishlist: !!(d.flags?.wishlist || wished) && out.hiddenBy !== 'wishlist' };
+    if (d.bundle) {
+      const has = d.bundle.appids.filter((id) => owned.hasApp(id)).length;
+      out.bundle = { ...d.bundle, owned: has };
+      out.flags.wishlist = d.bundle.appids.some((id) => wishSet.has(id) && !owned.hasApp(id));
+    }
+    out.hiddenBy = hiddenReason(out, settings, { appInfo: data.appInfo, owned }) || (out.hiddenBy === 'wishlist' ? 'wishlist' : null);
     out.exceptional = isExceptional(out);
     out.score = scoreDeal(out);
     return out;
@@ -298,7 +312,7 @@ async function finishRefresh({ data, games, deals, settings, now, reason, errors
   await saveData({
     games, states: data.states, meta: data.meta, cache: data.cache, seen: data.seen,
     deals, dealCache: data.dealCache, dealHistory: data.dealHistory, dealStates: data.dealStates, seenDeals: data.seenDeals,
-    steamLib: data.steamLib, gogLib: data.gogLib, appInfo: data.appInfo, nameIds: data.nameIds,
+    steamLib: data.steamLib, gogLib: data.gogLib, appInfo: data.appInfo, nameIds: data.nameIds, steamNames: data.steamNames,
   });
 }
 
@@ -324,6 +338,25 @@ async function syncGogLibrary(settings, data, now, force) {
     data.gogLib = { ...lib, error: gogError(e), at: now };
   }
   return (data.gogLib.count || 0) !== before;
+}
+
+// Noms des jeux Steam possédés (la session ne donne que leurs numéros) : pour les reconnaître sur GOG, EA, Dealabs…
+const NAMES_PER_RUN = 500;
+async function nameOwnedGames(data) {
+  const ids = data.steamLib?.appids || [];
+  const missing = ids.filter((id) => data.steamNames[id] === undefined).slice(0, NAMES_PER_RUN);
+  if (missing.length) {
+    try {
+      const items = await fetchSteamItems(missing, { reviews: false });
+      for (const id of missing) data.steamNames[id] = items[id]?.game ? items[id].name : '';
+    } catch (e) {
+      console.warn('[FreeKeep] noms des jeux Steam :', e);
+    }
+  }
+  if (!ids.length) return;
+  const owned = new Set(ids.map(String));
+  for (const id of Object.keys(data.steamNames)) if (!owned.has(id)) delete data.steamNames[id];
+  data.steamLib.names = [...new Set([...(data.steamLib.names || []), ...Object.values(data.steamNames).filter(Boolean)])];
 }
 
 // Jeux GOG gratuits déjà dans la bibliothèque GOG → cochés « récupérés ».
