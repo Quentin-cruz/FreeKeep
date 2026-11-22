@@ -2,7 +2,7 @@
 import { LEVELS, STORE_ORDER, PRIME_STORES } from './config.js';
 import { genresOf } from './genres.js';
 import { bannedKeyword } from './keywords.js';
-import { normTitle } from './util.js';
+import { extractGameName, gameKey } from './titles.js';
 
 // Seuils effectifs selon le niveau d'exigence choisi.
 export function effective(settings) {
@@ -24,6 +24,7 @@ export function wants(settings) {
   const sections = [];
   if (free) sections.push('free');
   if (pc && settings.pcDeals) sections.push('pc');
+  if (pc && settings.bundles !== false) sections.push('bundle');
   if (settings.switch && settings.switchDeals) sections.push('switch');
   return {
     stores,
@@ -35,7 +36,7 @@ export function wants(settings) {
     upcoming: free && !!settings.stores?.epic && settings.showUpcoming !== false,
     keyshops: settings.keyshops !== false,
     physical: settings.physical !== false,
-    bundles: settings.bundles !== false,
+    bundles: pc && settings.bundles !== false,
     sections,
   };
 }
@@ -44,45 +45,14 @@ export { bannedKeyword };
 
 // ---------- Jeux possédés ----------
 
-// « DOOM Eternal sur PC (Dématérialisé - Steam) » -> « DOOM Eternal »
-export function extractGameName(title) {
-  return String(title || '')
-    .split(/\s+(?:sur|pour|on)\s+(?:pc|steam|nintendo|switch|ps\d|xbox)\b/i)[0]
-    .replace(/\s*[([].*$/, '')
-    .replace(/\s+-\s+.*$/, '')
-    .trim();
-}
-
-const EDITION_WORDS = new Set(['definitive', 'edition', 'goty', 'game', 'of', 'the', 'year', 'complete', 'deluxe', 'ultimate', 'gold', 'standard', 'enhanced', 'directors', 'director', 's', 'cut', 'collection']);
-
-// Même jeu au sens strict : titres identiques, ou ne différant que par des mots d'édition.
-// (« Hollow Knight » ≠ « Hollow Knight Silksong », « DOOM » ≠ « DOOM Eternal »)
-export function sameGameStrict(a, b) {
-  const na = normTitle(a);
-  const nb = normTitle(b);
-  if (!na || !nb) return false;
-  if (na === nb) return true;
-  const [short, long] = na.length <= nb.length ? [na, nb] : [nb, na];
-  if (!long.startsWith(`${short} `)) return false;
-  return long.slice(short.length + 1).split(' ').every((w) => EDITION_WORDS.has(w));
-}
+export { extractGameName, sameGameStrict } from './titles.js';
 
 // Index des jeux possédés : Steam (appids + noms) et, en option, GOG (noms).
 export function makeOwnedIndex(lib, gog = null) {
   const appids = new Set((lib?.appids || []).map(String));
   const index = (names) => {
-    const byFirst = new Map();
-    for (const name of names || []) {
-      const first = normTitle(name).split(' ')[0];
-      if (!first) continue;
-      if (!byFirst.has(first)) byFirst.set(first, []);
-      byFirst.get(first).push(name);
-    }
-    return (title) => {
-      const name = extractGameName(title);
-      const first = normTitle(name).split(' ')[0];
-      return (byFirst.get(first) || []).some((n) => sameGameStrict(n, name));
-    };
+    const keys = new Set((names || []).map(gameKey).filter(Boolean));
+    return (title) => keys.has(gameKey(title)) || keys.has(gameKey(extractGameName(title)));
   };
   const steamName = index(lib?.names);
   const gogName = index(gog?.names);

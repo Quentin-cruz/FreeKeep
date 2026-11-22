@@ -1,18 +1,23 @@
 // Bundles de jeux Steam (Humble Bundle, Fanatical, Green Man Gaming, IndieGala…).
 // Contenu : Barter.vg. Qualité : avis Steam. Prix : API Fanatical et pages Humble Bundle.
-import { ENDPOINTS } from '../config.js';
+import { ENDPOINTS, bundleStoreOf } from '../config.js';
+import { MIN_GOOD } from '../levels.js';
+import { toEur, DEFAULT_USD_EUR } from './rates.js';
 import { fetchJson, fetchText } from '../util.js';
 import { fetchSteamItems } from './steamstore.js';
 import { steamHeaderImages } from './cheapshark.js';
 
-const STORES = { 'humble bundle': 'Humble Bundle', fanatical: 'Fanatical', 'green man gaming': 'Green Man Gaming', gamesplanet: 'Gamesplanet', indiegala: 'IndieGala', steam: 'Steam' };
+const STORES = {
+  'humble bundle': 'Humble Bundle', fanatical: 'Fanatical', 'green man gaming': 'Green Man Gaming', gamesplanet: 'Gamesplanet', indiegala: 'IndieGala', steam: 'Steam',
+  digiphile: 'Digiphile', planetplay: 'Planetplay', xsolla: 'Xsolla', tiltify: 'Tiltify', 'into games': 'Into Games', gamebillet: 'GameBillet', 'itch.io': 'itch.io', '2game': '2Game',
+};
+// Sites dont la page donne le prix
+const PRICED = { 'Humble Bundle': humbleTiers, 'Green Man Gaming': gmgTiers, IndieGala: indieGalaTiers };
 const ADULT = /\b(adult|sexy|lusty|hentai|nsfw)\b/i;
-const MAX_HUMBLE_PAGES = 8;
-const MAX_ITEMS = 30;
+const MAX_PAGES = 12;
+const MAX_ITEMS = 60;
 const pause = () => new Promise((r) => setTimeout(r, 300));
 
-// Nombre de jeux vraiment appréciés (80 % d'avis positifs, 1 000 avis) pour qu'un bundle vaille le coup.
-const MIN_GOOD = { strict: 6, balanced: 3, wide: 2, custom: 3 };
 
 export function parseBarter(data, now = Date.now()) {
   if (!data?.bundles || typeof data.bundles !== 'object') throw new Error('réponse Barter.vg inattendue');
@@ -54,16 +59,29 @@ export function humbleTiers(html) {
   return [...new Map(tiers.map((t) => [t.n, t])).values()].sort((a, b) => a.n - b.n);
 }
 
+// Green Man Gaming : <span class="price">€5.00</span> par palier
+export function gmgTiers(html) {
+  return [...new Set([...String(html || '').matchAll(/class="price">\s*€\s?(\d+(?:[.,]\d{2})?)/g)].map((m) => Number(m[1].replace(',', '.'))))]
+    .sort((a, b) => a - b).map((price, i) => ({ n: i + 1, price }));
+}
+
+// IndieGala : « Pay $3.99 or more to get this bundle » (dollars)
+export function indieGalaTiers(html) {
+  const usd = [...String(html || '').matchAll(/Pay\s*<strong[^>]*>\s*\$\s?(\d+(?:\.\d{2})?)/g)].map((m) => Number(m[1]));
+  return [...new Set(usd)].sort((a, b) => a - b).map((price, i) => ({ n: i + 1, price, usd: true }));
+}
+
 const slugOf = (url) => String(url).split(/[?#]/)[0].replace(/\/$/, '').split('/').pop();
 
-export function buildBundles(bundles, items, prices, settings) {
+export function buildBundles(bundles, items, prices, settings, rate = DEFAULT_USD_EUR) {
   const minGood = MIN_GOOD[settings.level] ?? 3;
   const out = [];
   for (const b of bundles) {
     const games = b.appids.map((id) => ({ id, ...items[id] })).filter((g) => g.name && g.game);
     const good = games.filter((g) => (g.rating ?? 0) >= 80 && g.reviews >= 1000).sort((x, y) => y.reviews - x.reviews);
     if (good.length < minGood) continue;
-    const tiers = prices[b.id] || [];
+    const tiers = (prices[b.id] || []).map((t) => (t.usd ? { ...t, price: toEur(t.price, rate) } : t));
+    const approx = tiers.some((t) => t.usd);
     const pick = /pick-and-mix|build your own/i.test(`${b.url} ${b.title}`);
     const top = tiers[tiers.length - 1];
     const value = Math.round(games.reduce((s, g) => s + (g.normal || 0), 0) * 100) / 100;
@@ -72,13 +90,15 @@ export function buildBundles(bundles, items, prices, settings) {
     out.push({
       id: `bd:${b.id}`,
       source: 'bundle',
-      section: 'pc',
+      section: 'bundle',
       channel: 'bundle',
+      store: bundleStoreOf(b.merchant),
       title: b.title,
       url: b.url,
       images: steamHeaderImages(good[0].id),
       price,
       priceNote: pick && tiers[0] ? `${tiers[0].n} jeu${tiers[0].n > 1 ? 'x' : ''} au choix` : tiers.length > 1 ? `dès ${tiers[0].price.toFixed(2).replace('.', ',')} €` : null,
+      approx,
       normalPrice: !pick && price ? value : null,
       currency: 'EUR',
       discount: !pick && price && value > price ? Math.round((1 - price / value) * 100) : null,
@@ -94,7 +114,7 @@ export function buildBundles(bundles, items, prices, settings) {
 }
 
 /** @param known prix Humble déjà lus : { [id du bundle]: paliers } (modifié en place) */
-export async function fetchBundles(settings, known = {}, now = Date.now()) {
+export async function fetchBundles(settings, known = {}, now = Date.now(), rate = DEFAULT_USD_EUR) {
   const bundles = parseBarter(await fetchJson(ENDPOINTS.barter, { timeout: 25000 }), now);
   const items = await fetchSteamItems(bundles.flatMap((b) => b.appids));
   const prices = {};
@@ -104,21 +124,23 @@ export async function fetchBundles(settings, known = {}, now = Date.now()) {
   } catch (e) {
     console.warn('[FreeKeep] prix Fanatical :', e);
   }
-  const kept = new Set(buildBundles(bundles, items, {}, settings).map((d) => d.id.slice(3)));
-  let left = MAX_HUMBLE_PAGES;
-  for (const b of bundles) {
-    if (b.merchant !== 'Humble Bundle' || !kept.has(b.id) || !/\/games\//.test(b.url)) continue;
+  const order = buildBundles(bundles, items, {}, settings, rate).map((d) => d.id.slice(3)); // les meilleurs d'abord
+  let left = MAX_PAGES;
+  for (const id of order) {
+    const b = bundles.find((x) => x.id === id);
+    const read = PRICED[b.merchant];
+    if (!read || (b.merchant === 'Humble Bundle' && !/\/games\//.test(b.url))) continue;
     if (!known[b.id] && left > 0) {
       left -= 1;
       try {
-        known[b.id] = humbleTiers(await fetchText(b.url, { timeout: 20000 }));
+        known[b.id] = read(await fetchText(b.url, { timeout: 20000 }));
       } catch (e) {
-        console.warn('[FreeKeep] prix Humble :', e);
+        console.warn(`[FreeKeep] prix ${b.merchant} :`, e);
       }
       await pause();
     }
     if (known[b.id]?.length) prices[b.id] = known[b.id];
   }
   for (const id of Object.keys(known)) if (!bundles.some((b) => b.id === id)) delete known[id];
-  return buildBundles(bundles, items, prices, settings);
+  return buildBundles(bundles, items, prices, settings, rate);
 }

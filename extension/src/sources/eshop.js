@@ -12,7 +12,7 @@ const FIELDS = [
 // (ou sans rang), alors que trier par remise ne remonterait qu'eux : il y a plus de 2 000 promos en permanence.
 const POPULAR_RANK = 500;
 const KNOWN_RANK = 1500;
-const MAX_ITEMS = 100;
+const MAX_ITEMS = 220;
 const PRICE_BATCH = 50; // l'API de prix accepte 50 jeux par requête
 
 async function search(fq, rows) {

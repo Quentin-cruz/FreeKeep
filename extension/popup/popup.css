@@ -78,8 +78,8 @@ a { color: inherit; }
   background: transparent;
   color: var(--muted);
   font-weight: 650;
-  font-size: 12.5px;
-  padding: 7px 4px;
+  font-size: 12px;
+  padding: 7px 2px;
   border-radius: 7px;
   display: flex;
   align-items: center;
@@ -134,6 +134,8 @@ a { color: inherit; }
 .filter-row { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
 .filter-row + .filter-row { padding-top: 6px; border-top: 1px solid var(--border); }
 .chip.zero:not(.active) { opacity: .45; }
+.others { margin: 2px 0 4px; font-size: 12px; color: var(--muted); }
+.others button { background: none; border: 0; padding: 0; color: var(--text); text-decoration: underline; cursor: pointer; font-size: 12px; }
 .highlights { margin: 2px 0 4px; font-size: 12px; color: var(--muted); }
 .chip {
   border: 1px solid var(--border);

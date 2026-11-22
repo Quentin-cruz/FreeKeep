@@ -2,15 +2,25 @@
 import { STORES, STORE_ORDER, PC_STORE_ORDER, PRIME_STORES, LEVELS, INTERVALS, DEAL_SOURCES } from '../src/config.js';
 import { GENRE_BY_ID } from '../src/genres.js';
 import { getSettings, saveSettings } from '../src/store.js';
-import { h, toggleCard, switchRow, storeGrid, primeBox, genreChips, tagInput, levelCards, steamProfileField, steamSessionField, gogSessionField } from '../ui/components.js';
+import { h, toggleCard, switchRow, storeGrid, primeBox, genreChips, tagInput, levelCards, bundleBox, steamProfileField, steamSessionField, gogSessionField } from '../ui/components.js';
 
 const $ = (s) => document.querySelector(s);
 let draft = null;
 let index = 0;
 let finished = false;
 
-const anyDeals = (d) => (d.pc && d.pcDeals) || (d.switch && d.switchDeals);
+// Estimation du nombre d'annonces avec les réglages en cours (rien n'est enregistré).
+let estimateSeq = 0;
+async function estimate(d, fetchMissing = false) {
+  const seq = ++estimateSeq;
+  const res = await chrome.runtime.sendMessage({ type: 'estimate', settings: d, fetch: fetchMissing }).catch(() => null);
+  return seq === estimateSeq && !res?.error ? res : null; // une estimation plus récente est partie
+}
+
+const anyDeals = (d) => (d.pc && (d.pcDeals || d.bundles)) || (d.switch && d.switchDeals);
 const anyStore = (d) => PC_STORE_ORDER.some((s) => d.stores[s]) || (d.prime && PRIME_STORES.some((s) => d.stores[s]));
+
+const LAST_STORES = ['itch', 'indiegala', 'other'];
 
 // ---------------------------------------------------------------------------
 // Étapes (certaines n'apparaissent que selon les choix précédents)
@@ -57,7 +67,9 @@ const STEPS = [
     valid: anyStore,
     invalidMsg: 'Choisis au moins une plateforme.',
     render: (d) => [
-      storeGrid(d.stores, (id, on) => { d.stores[id] = on; }),
+      storeGrid(d.stores, (id, on) => { d.stores[id] = on; }, PC_STORE_ORDER.filter((id) => !LAST_STORES.includes(id))),
+      bundleBox(d, (key, a, b) => { if (key === 'bundles') d.bundles = a; else d.bundleStores = { ...d.bundleStores, [a]: b }; }),
+      storeGrid(d.stores, (id, on) => { d.stores[id] = on; }, LAST_STORES),
       h('p', { class: 'note' }, 'Les clés vendues par Humble, Fanatical ou Green Man Gaming s’activent presque toujours sur Steam.'),
       primeBox(d, (key, a, b) => { if (key === 'prime') d.prime = a; else d.stores[a] = b; }),
     ],
@@ -81,10 +93,9 @@ const STEPS = [
         cards.push(toggleCard({ icon: '📦', title: 'Jeux en boîte (magasins)', desc: 'Amazon, Fnac, Leclerc, Micromania… repérés par Dealabs.', checked: d.physical, onChange: (v) => { d.physical = v; dept.hidden = !(d.switch && v); } }));
       }
       cards.push(toggleCard({ icon: '🔑', title: 'Sites de clés', desc: 'Eneba, Instant Gaming, G2A… Moins cher, mais pas des boutiques officielles.', checked: d.keyshops, onChange: (v) => { d.keyshops = v; } }));
-      cards.push(toggleCard({ icon: '📚', title: 'Bundles', desc: 'Packs de plusieurs jeux à petit prix (Humble, Fanatical…).', checked: d.bundles, onChange: (v) => { d.bundles = v; } }));
       return [h('div', { class: 'tgrid' }, cards), dept];
     },
-    valid: (d) => (d.pc && (d.freeGames || d.pcDeals)) || (d.switch && d.switchDeals),
+    valid: (d) => (d.pc && (d.freeGames || d.pcDeals || d.bundles)) || (d.switch && d.switchDeals),
     invalidMsg: 'Active au moins une catégorie.',
   },
   {
@@ -92,10 +103,31 @@ const STEPS = [
     show: anyDeals,
     title: 'Quel niveau d’exigence pour les promos ?',
     lead: 'FreeKeep<3 écarte déjà les jeux mal notés et les petits jeux bradés. Choisis à quel point il doit être sélectif.',
-    render: (d) => [
-      levelCards(LEVELS[d.level] ? d.level : 'balanced', (v) => { d.level = v; }),
-      h('p', { class: 'note' }, 'Les erreurs de prix et les jeux de ta liste de souhaits sont toujours signalés, quel que soit le niveau.'),
-    ],
+    render: (d) => {
+      const warn = h('div', { class: 'callout', hidden: true });
+      let est = null;
+      const refreshWarn = () => {
+        const level = LEVELS[d.level] ? d.level : 'balanced';
+        const n = est?.counts?.[level];
+        warn.hidden = level === 'strict';
+        warn.replaceChildren('⚠️ ', h('strong', {}, n ? `Environ ${n} annonces avec ce niveau. ` : level === 'wide' ? 'Ce niveau affiche énormément d’annonces. ' : 'Ce niveau affiche beaucoup d’annonces. '),
+          'Les filtres comptent vraiment : à l’étape « Ce que tu ne veux pas voir », masque les genres et les licences qui ne t’intéressent pas.');
+      };
+      const cards = levelCards(LEVELS[d.level] ? d.level : 'balanced', (v) => { d.level = v; refreshWarn(); });
+      refreshWarn();
+      const wait = h('p', { class: 'note' }, '⏳ Estimation du nombre d’annonces avec tes choix…');
+      estimate(d, true).then((res) => {
+        wait.hidden = true;
+        if (!res) return;
+        est = res;
+        cards.setCounts(res.counts, res.recommended);
+        refreshWarn();
+      });
+      return [
+        cards, wait, warn,
+        h('p', { class: 'note' }, 'Les erreurs de prix et les jeux de ta liste de souhaits sont toujours signalés, quel que soit le niveau.'),
+      ];
+    },
   },
   {
     id: 'steam',
@@ -124,13 +156,52 @@ const STEPS = [
     id: 'exclude',
     title: 'Ce que tu ne veux pas voir',
     lead: 'Clique sur les genres à masquer, et ajoute des licences que tu veux bannir.',
-    render: (d) => [
-      h('h2', {}, 'Genres à masquer'),
-      genreChips(d.excludedGenres, (v) => { d.excludedGenres = v; }),
-      h('p', { class: 'note' }, 'Les genres sont détectés via Steam et l’eShop Nintendo. Pour les autres jeux, FreeKeep<3 se base sur le titre.'),
-      h('h2', {}, 'Licences / mots-clés bannis'),
-      tagInput(d.bannedKeywords, (v) => { d.bannedKeywords = v; }),
-    ],
+    render: (d) => {
+      const total = h('div', { class: 'callout' }, '⏳ Calcul du nombre d’annonces…');
+      const tips = h('div', { hidden: true });
+      let timer = null;
+      const recount = () => {
+        clearTimeout(timer);
+        timer = setTimeout(async () => {
+          const res = await estimate(d);
+          if (res) showTotal(res);
+        }, 350);
+      };
+      const showTotal = (res) => {
+        const many = res.many;
+        total.className = many ? 'callout' : 'callout tip';
+        total.replaceChildren(many ? '⚠️ ' : '✅ ', h('strong', {}, `Environ ${res.current} annonces avec tes filtres. `),
+          many ? 'C’est beaucoup : masque ce qui ne t’intéresse pas, les nombres indiquent combien d’annonces chaque filtre retirerait.' : 'Une liste facile à parcourir.');
+      };
+      const genres = genreChips(d.excludedGenres, (v) => { d.excludedGenres = v; recount(); });
+      const tagsBox = tagInput(d.bannedKeywords, (v) => { d.bannedKeywords = v; recount(); });
+      (async () => {
+        const res = await estimate(d, true);
+        if (res) {
+          showTotal(res);
+          genres.setHits(res.hits.genres);
+        } else total.hidden = true;
+        const rec = await chrome.runtime.sendMessage({ type: 'recommend', settings: d, hits: res?.hits }).catch(() => null);
+        if (!rec?.franchises) return;
+        tagsBox.setSuggestions(rec.franchises);
+        if (!rec.genres?.length) return;
+        const names = rec.genres.map((id) => `${GENRE_BY_ID[id].emoji} ${GENRE_BY_ID[id].label}`).join(', ');
+        const btn = h('button', { type: 'button', class: 'btn' }, 'Masquer ces genres');
+        btn.addEventListener('click', () => { genres.exclude(rec.genres); tips.hidden = true; });
+        tips.className = 'callout tip';
+        tips.replaceChildren('💡 ', h('strong', {}, `D’après tes ${rec.total} jeux Steam, `), `tu n’en as presque aucun dans : ${names}.`, h('br'), btn);
+        tips.hidden = false;
+      })();
+      return [
+        total, tips,
+        h('h2', {}, 'Genres à masquer'),
+        genres,
+        h('p', { class: 'note' }, 'Les genres sont détectés via Steam et l’eShop Nintendo. Pour les autres jeux, FreeKeep<3 se base sur le titre.'),
+        h('h2', {}, 'Licences / mots-clés bannis'),
+        tagsBox,
+        h('p', { class: 'note' }, '⭐ conseillé : tu n’as aucun jeu de cette licence sur Steam, et elle masquerait des annonces du moment.'),
+      ];
+    },
     skippable: true,
   },
   {
@@ -151,7 +222,7 @@ const STEPS = [
       freq.addEventListener('change', () => { d.intervalHours = Number(freq.value); });
       const extra = [];
       if (d.pc && d.freeGames) {
-        extra.push(switchRow({ title: '🖱️ Clic automatique sur « Obtenir »', desc: 'Quand tu cliques « Récupérer », FreeKeep<3 ouvre la page et clique pour toi (jamais d’achat payant).', checked: d.autoClick, onChange: (v) => { d.autoClick = v; } }));
+        extra.push(switchRow({ title: '🖱️ Clic automatique sur « Obtenir » (expérimental)', desc: 'Quand tu cliques « Récupérer », FreeKeep<3 ouvre la page et clique pour toi (jamais d’achat payant).', checked: d.autoClick, onChange: (v) => { d.autoClick = v; } }));
       }
       return [
         h('div', { class: 'panel-lite' }, wants),
@@ -171,9 +242,10 @@ const STEPS = [
       const sections = [
         d.pc && d.freeGames ? 'Jeux gratuits' : null,
         d.pc && d.pcDeals ? 'Promos PC' : null,
+        d.pc && d.bundles ? 'Bundles' : null,
         d.switch && d.switchDeals ? `Promos ${d.switch2 ? 'Switch + Switch 2' : 'Switch'}` : null,
       ].filter(Boolean);
-      const extras = [d.physical && d.switch ? 'boîtes' : null, d.keyshops ? 'sites de clés' : null, d.bundles ? 'bundles' : null].filter(Boolean);
+      const extras = [d.physical && d.switch ? 'boîtes' : null, d.keyshops ? 'sites de clés' : null].filter(Boolean);
       const recap = h('dl', { class: 'recap' },
         dt('Plateformes'), dd([d.pc ? 'PC' : null, d.switch ? (d.switch2 ? 'Switch + Switch 2' : 'Switch') : null].filter(Boolean).join(' · ')),
         d.pc ? [dt('Stores PC'), dd(stores.join(', ') || '—')] : null,

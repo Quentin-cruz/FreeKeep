@@ -3,7 +3,7 @@ import { LEVELS, ALARM_NAME, INTERVALS, DEAL_SOURCES } from '../src/config.js';
 import { getSettings, saveSettings } from '../src/store.js';
 import { wants } from '../src/prefs.js';
 import { formatAgo } from '../src/util.js';
-import { h, toggleCard, switchRow, selectRow, storeGrid, primeBox, genreChips, tagInput, levelCards, steamProfileField, steamSessionField, gogSessionField } from '../ui/components.js';
+import { h, toggleCard, switchRow, selectRow, storeGrid, primeBox, genreChips, tagInput, levelCards, bundleBox, steamProfileField, steamSessionField, gogSessionField } from '../ui/components.js';
 
 const $ = (s) => document.querySelector(s);
 let settings = null;
@@ -64,6 +64,8 @@ const PANELS = {
     ),
     settings.pc ? box('Où tu actives tes jeux PC', 'Les jeux gratuits et les promos des plateformes non cochées sont masqués.',
       storeGrid(settings.stores, (id, on) => { settings.stores[id] = on; save({ rerender: id === 'steam' || id === 'gog' }); })) : null,
+    settings.pc ? box('Bundles', null,
+      bundleBox(settings, (key, a, b) => { if (key === 'bundles') settings.bundles = a; else settings.bundleStores = { ...settings.bundleStores, [a]: b }; save(); })) : null,
     settings.pc ? box('Amazon Prime', null,
       primeBox(settings, (key, a, b) => { if (key === 'prime') settings.prime = a; else settings.stores[a] = b; save(); })) : null,
   ],
@@ -81,7 +83,6 @@ const PANELS = {
       sections.push(switchRow({ title: '📦 Jeux en boîte (magasins)', desc: 'Amazon, Fnac, Leclerc… via Dealabs', checked: settings.physical, onChange: set('physical') }));
     }
     sections.push(switchRow({ title: '🔑 Sites de clés', desc: 'Eneba, Instant Gaming, G2A… (marché gris : moins cher, sans garantie éditeur)', checked: settings.keyshops, onChange: set('keyshops', true) }));
-    sections.push(switchRow({ title: '📚 Bundles', checked: settings.bundles, onChange: set('bundles') }));
 
     const custom = settings.level === 'custom';
     const adv = h('details', { class: 'adv', open: custom || null },
@@ -163,7 +164,7 @@ const PANELS = {
       box('Fréquence', null, h('div', { class: 'rows' },
         selectRow({ title: 'Vérifier', desc: 'Erreurs de prix : 5 à 15 min conseillé. Les autres sources sont relues au plus toutes les 15 min', value: settings.intervalHours, options: INTERVALS, onChange: (v) => set('intervalHours')(Number(v)) }))),
       w.free ? box('Récupération', null, h('div', { class: 'rows' },
-        switchRow({ title: '🖱️ Clic automatique sur « Obtenir »', desc: 'Quand tu cliques « Récupérer ». Captchas et confirmations restent manuels ; sur Epic, la commande n’est validée que si le total est à 0.', checked: settings.autoClick, onChange: set('autoClick') }))) : null,
+        switchRow({ title: '🖱️ Clic automatique sur « Obtenir » (expérimental)', desc: 'Quand tu cliques « Récupérer ». Captchas et confirmations restent manuels ; sur Epic, la commande n’est validée que si le total est à 0.', checked: settings.autoClick, onChange: set('autoClick') }))) : null,
     ];
   },
 
@@ -281,12 +282,13 @@ const SOURCE_INFO = {
   epic: ['Epic Games Store', 'Jeux offerts de la semaine'],
   steam: ['Steam', 'Jeux à -100 %'],
   gamerpower: ['GamerPower', 'Giveaways : GOG, Ubisoft, Prime, Alienware, Fanatical, Humble…'],
+  lootscraper: ['LootScraper', 'Jeux offerts : Amazon Prime, GOG, Ubisoft, Humble, itch.io'],
   steamlib: ['Bibliothèque Steam', 'Tes jeux et ta liste de souhaits (session Steam du navigateur)'],
   goglib: ['Bibliothèque GOG', 'Tes jeux (session gog.com du navigateur)'],
   cheapshark: ['CheapShark', 'Promos PC sur 30+ stores officiels'],
   gog: ['GOG', 'Promos du catalogue GOG, en euros'],
   ea: ['EA', 'Offres du site EA, en euros'],
-  bundles: ['Bundles', 'Humble Bundle, Fanatical, Green Man Gaming, IndieGala (via Barter.vg)'],
+  bundles: ['Bundles', 'Humble Bundle, Fanatical, Green Man Gaming, IndieGala, Digiphile… (via Barter.vg)'],
   switchkeys: ['Clés Switch', 'Eneba, Kinguin, Instant Gaming, comparés à l’eShop'],
   dealabsPages: ['Dealabs (pages)', 'Température, prix de référence, offres des 30 derniers jours'],
   eshop: ['eShop Nintendo', 'Promos Switch, prix et dates de fin'],

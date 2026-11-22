@@ -1,7 +1,7 @@
 // FreeKeep — service worker (Manifest V3)
 // Vérifie périodiquement les jeux gratuits et les bons plans, applique la personnalisation,
 // gère notifications, badge et réclamation assistée.
-import { STORES, ALARM_NAME, DEAL_SOURCES } from './src/config.js';
+import { STORES, ALARM_NAME, DEAL_SOURCES, LEVELS } from './src/config.js';
 import { fetchEpic } from './src/sources/epic.js';
 import { fetchSteam } from './src/sources/steam.js';
 import { fetchGamerPower } from './src/sources/gamerpower.js';
@@ -13,7 +13,9 @@ import { fetchSteamItems } from './src/sources/steamstore.js';
 import { worthInEur, DEFAULT_USD_EUR } from './src/sources/rates.js';
 import { needsTags } from './src/genres.js';
 import { mergeGames } from './src/merge.js';
-import { refreshDeals } from './src/refresh-deals.js';
+import { refreshDeals, fetchDealSources, assembleDeals } from './src/refresh-deals.js';
+import { fetchLootScraper } from './src/sources/lootscraper.js';
+import { tasteFrom, genresToHide, rankFranchises, filterHits, recommendedLevel, COMFORT } from './src/recommend.js';
 import { isExceptional, scoreDeal } from './src/deals.js';
 import { effective, wants, hiddenReason, makeOwnedIndex, sameGameStrict, extractGameName, steamOnly, showsGame } from './src/prefs.js';
 import {
@@ -21,7 +23,7 @@ import {
 } from './src/store.js';
 import { formatDate, formatDuration, formatPrice } from './src/util.js';
 
-const SOURCES = ['epic', 'steam', 'gamerpower']; // ordre de priorité pour la fusion
+const SOURCES = ['epic', 'steam', 'lootscraper', 'gamerpower']; // ordre de priorité pour la fusion
 const CACHE_MAX_AGE = 3 * 24 * 3600 * 1000;
 const DAY = 24 * 3600 * 1000;
 const ICON = 'icons/icon128.png';
@@ -59,7 +61,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // Réglages qui ne demandent qu'un nouveau tri (pas de nouveau téléchargement)
 const CHEAP_SETTINGS = ['notifyNew', 'notifyLastDay', 'notifyDeals', 'notifyWishlist', 'autoClick', 'intervalHours', 'onboarded'];
 // Réglages qui changent ce qu'on demande aux API
-const REFETCH_SETTINGS = ['pc', 'switch', 'switch2', 'stores', 'level', 'pcMinDiscount', 'gemMinDiscount', 'gemMinRating', 'switchMinDiscount', 'ggdealsKey', 'keyshops', 'bundles', 'pcDeals', 'switchDeals'];
+const REFETCH_SETTINGS = ['pc', 'switch', 'stores', 'ggdealsKey', 'keyshops', 'bundles', 'pcDeals', 'switchDeals'];
 const LIBRARY_SETTINGS = ['steamProfile', 'steamOwnedSync', 'useWishlist'];
 const GOG_SETTINGS = ['gogSessionSync'];
 const NOTIFY_SETTINGS = ['notifyNew', 'notifyLastDay', 'notifyDeals', 'notifyWishlist'];
@@ -160,6 +162,7 @@ async function doRefresh(reason, force) {
   const jobs = {
     epic: enabled.includes('epic') ? () => fetchEpic(now) : null,
     steam: enabled.includes('steam') ? () => fetchSteam() : null,
+    lootscraper: enabled.length ? () => fetchLootScraper(now) : null,
     gamerpower: enabled.length ? () => fetchGamerPower(enabled, now, { prime: w.prime }) : null,
   };
   const errors = {};
@@ -222,12 +225,18 @@ async function doRefresh(reason, force) {
   const lists = SOURCES
     .filter((n) => jobs[n] && data.cache[n] && now - data.cache[n].at < CACHE_MAX_AGE)
     .map((n) => data.cache[n].items.filter(keep));
-  lists.push((freebies || []).filter(keep));
+  const primeKnown = (data.cache.lootscraper?.items || []).some((i) => i.prime);
+  // « 7 jeux offerts avec Prime » : chaque jeu est déjà listé séparément
+  lists.push((freebies || []).filter((i) => keep(i) && !(i.prime && i.multi && primeKnown)));
+  const primeHidden = w.free && !w.prime ? new Set((data.cache.lootscraper?.items || []).filter((i) => i.prime).map((i) => i.title)).size : 0;
   const games = mergeGames(lists, now);
   for (const g of games) if (g.worth) g.worth = worthInEur(g.worth, rate);
 
   // Annonces Dealabs sans identifiant Steam : on le retrouve par le nom (jeux possédés, souhaits, genres).
   if (settings.stores?.steam) await resolveSteamIds(deals, data.nameIds, now);
+
+  // Plus de « non précisé » : trouvé sur Steam → Steam, sinon « Autres » (masqué si cette plateforme n'est pas cochée).
+  for (const d of deals) if (d.section === 'pc' && !d.platform) d.platform = d.steamAppID ? 'steam' : 'other';
 
   // ---- 4. Genres (seulement si l'utilisateur en exclut) ----
   if ((settings.excludedGenres || []).length) {
@@ -254,7 +263,9 @@ async function doRefresh(reason, force) {
       out.bundle = { ...d.bundle, owned: has };
       out.flags.wishlist = d.bundle.appids.some((id) => wishSet.has(id) && !owned.hasApp(id));
     }
-    out.hiddenBy = hiddenReason(out, settings, { appInfo: data.appInfo, owned }) || (out.hiddenBy === 'wishlist' ? 'wishlist' : null);
+    out.hiddenBy = hiddenReason(out, settings, { appInfo: data.appInfo, owned })
+      || (out.hiddenBy === 'wishlist' ? 'wishlist' : null)
+      || (d.section === 'pc' && d.platform === 'other' && !settings.stores?.other && d.channel !== 'keyshop' ? 'platform' : null);
     out.exceptional = isExceptional(out);
     out.score = scoreDeal(out);
     return out;
@@ -274,7 +285,7 @@ async function doRefresh(reason, force) {
     const latest = await getSettings();
     await finishRefresh({
       data, games, deals, now, reason, errors, dealErrors,
-      sources: { ...sourceStatus, ...dealStatus },
+      sources: { ...sourceStatus, ...dealStatus }, primeHidden,
       // Réglages de notification du moment, même coupés en cours de route
       settings: { ...settings, ...Object.fromEntries(NOTIFY_SETTINGS.map((k) => [k, latest[k]])) },
       // Réglages changés : ces résultats sont dépassés, la prochaine vérification notifiera les bons.
@@ -286,7 +297,7 @@ async function doRefresh(reason, force) {
 }
 
 // Notifications + enregistrement (appelé sous verrou).
-async function finishRefresh({ data, games, deals, settings, now, reason, errors, dealErrors, sources, outdated }) {
+async function finishRefresh({ data, games, deals, settings, now, reason, errors, dealErrors, sources, outdated, primeHidden }) {
   // Pas de notification pendant le tutoriel
   const visibleGames = games.filter((g) => !g.hiddenBy);
   const visibleDeals = deals.filter((d) => !d.hiddenBy);
@@ -307,7 +318,7 @@ async function finishRefresh({ data, games, deals, settings, now, reason, errors
   data.meta = {
     ...data.meta, lastRefresh: now, lastReason: reason, errors, dealErrors,
     initialized: data.meta.initialized || !outdated, dealsInitialized: data.meta.dealsInitialized || !outdated,
-    sources,
+    sources, primeHidden,
   };
   await saveData({
     games, states: data.states, meta: data.meta, cache: data.cache, seen: data.seen,
@@ -502,7 +513,7 @@ function notifySummary(list, firstRun) {
 
 // ---------- Bons plans ----------
 
-const SECTION_LABEL = { pc: 'PC', switch: 'Switch' };
+const SECTION_LABEL = { pc: 'PC', switch: 'Switch', bundle: 'Bundle' };
 
 function dealHeadline(d) {
   if (d.flags.priceError) return '⚠️ Erreur de prix ?';
@@ -525,8 +536,9 @@ function notifyDeals(deals, data, settings) {
   const first = !data.meta.dealsInitialized;
   const top = deals.filter((d) => d.exceptional && !data.dealStates[d.id]?.hidden)
     .filter((d) => settings.notifyDeals || (settings.notifyWishlist && d.flags.wishlist));
-  const fresh = top.filter((d) => !seen.has(d.id));
-  top.forEach((d) => seen.add(d.id));
+  const idsOf = (d) => d.ids || [d.id];
+  const fresh = top.filter((d) => !idsOf(d).some((id) => seen.has(id)));
+  top.forEach((d) => idsOf(d).forEach((id) => seen.add(id)));
   data.seenDeals = [...seen].slice(-1500);
   if (!fresh.length) return;
 
@@ -776,6 +788,67 @@ async function testSteamSession() {
   }
 }
 
+// ---------- Tutoriel : estimation et recommandations ----------
+
+// Lit les sources qui manquent pour ces réglages (sans les enregistrer), une seule lecture à la fois.
+async function prefetch(draft) {
+  while (running || next) await (next?.promise || running).catch(() => {});
+  current = { settings: null, force: [] };
+  running = (async () => {
+    const data = await getData();
+    await fetchDealSources(draft, data.dealCache, Date.now(), [], { wishlist: data.steamLib?.wishlist || [] });
+    await locked(() => saveData({ dealCache: data.dealCache }));
+  })().finally(() => { running = null; });
+  await running;
+}
+
+async function estimate(rawDraft, fetchMissing) {
+  const draft = { ...rawDraft };
+  if (fetchMissing) await prefetch(effective(draft)).catch((e) => console.warn('[FreeKeep] estimation :', e));
+  const data = await getData();
+  const owned = makeOwnedIndex(data.steamLib, data.gogLib);
+  const now = Date.now();
+  const listFor = (level, filtered = true) => {
+    const s = effective({ ...draft, level });
+    return assembleDeals(s, data.dealCache, structuredClone(data.dealHistory), now).deals
+      .filter((d) => !filtered || !hiddenReason(d, s, { appInfo: data.appInfo, owned }));
+  };
+  const counts = Object.fromEntries(Object.keys(LEVELS).map((l) => [l, listFor(l).length]));
+  const level = LEVELS[draft.level] ? draft.level : 'balanced';
+  const hits = filterHits(listFor(level, false), data.games, data.appInfo);
+  return { counts, level, current: counts[level], recommended: recommendedLevel(counts), many: counts[level] > COMFORT, hits };
+}
+
+let tasteCache = null;
+async function steamTaste() {
+  if (tasteCache) return tasteCache;
+  const data = await getData();
+  let ids = data.steamLib?.appids || [];
+  if (!ids.length) {
+    try {
+      ids = (await fetchSteamSession()).appids;
+    } catch {
+      return null;
+    }
+  }
+  if (!ids.length) return null;
+  // 400 fiches suffisent pour connaître les goûts (réparties sur toute la bibliothèque)
+  const step = Math.max(1, Math.floor(ids.length / 400));
+  const sample = ids.filter((_, i) => i % step === 0).slice(0, 400);
+  const items = Object.values(await fetchSteamItems(sample, { reviews: false, tags: 8 })).filter((i) => i.game);
+  tasteCache = tasteFrom(items);
+  return tasteCache;
+}
+
+async function recommend(draft, hits) {
+  const taste = draft.pc && draft.stores?.steam && draft.steamOwnedSync ? await steamTaste().catch(() => null) : null;
+  return {
+    total: taste?.total || 0,
+    genres: genresToHide(taste, hits?.genres, draft.excludedGenres || []),
+    franchises: rankFranchises(taste, hits?.keywords),
+  };
+}
+
 async function handleMessage(msg, sender) {
   switch (msg?.type) {
     case 'getState':
@@ -808,6 +881,10 @@ async function handleMessage(msg, sender) {
       else chrome.notifications.create(`test|${Date.now()}`, { type: 'basic', iconUrl: ICON, title: 'FreeKeep<3', message: 'Les notifications fonctionnent.' });
       return { ok: true };
     }
+    case 'estimate':
+      return estimate(msg.settings, !!msg.fetch);
+    case 'recommend':
+      return recommend(msg.settings, msg.hits);
     case 'testSteamProfile':
       return testSteamProfile(msg.input, msg.useSession !== false);
     case 'testSteamSession':

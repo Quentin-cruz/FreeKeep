@@ -24,13 +24,14 @@ export function parseSteamItems(data) {
       end: Number(p?.active_discounts?.[0]?.discount_end_date) * 1000 || null,
       rating: it.reviews?.summary_filtered?.percent_positive ?? null,
       reviews: it.reviews?.summary_filtered?.review_count ?? 0,
+      ...(it.tags ? { tags: it.tags.map((t) => t.tagid) } : {}),
     };
   }
   return out;
 }
 
 /** { [appid]: fiche } — les appid introuvables sont simplement absents. */
-export async function fetchSteamItems(appids, { reviews = true } = {}) {
+export async function fetchSteamItems(appids, { reviews = true, tags = 0 } = {}) {
   const ids = [...new Set((appids || []).filter(Boolean).map(String))].filter((id) => /^\d+$/.test(id));
   const out = {};
   for (let i = 0; i < ids.length; i += BATCH) {
@@ -38,7 +39,7 @@ export async function fetchSteamItems(appids, { reviews = true } = {}) {
     const input = {
       ids: ids.slice(i, i + BATCH).map((id) => ({ appid: Number(id) })),
       context: { language: 'english', country_code: 'FR' },
-      data_request: { include_reviews: reviews },
+      data_request: { include_reviews: reviews, ...(tags ? { include_tag_count: tags } : {}) },
     };
     Object.assign(out, parseSteamItems(await fetchJson(`${ENDPOINTS.steamItems}?input_json=${encodeURIComponent(JSON.stringify(input))}`)));
   }

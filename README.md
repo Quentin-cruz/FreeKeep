@@ -2,12 +2,13 @@
 
 <img src="extension/icons/logo-512.png" width="96" alt="Logo FreeKeep<3">
 
-Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en trois sections.
+Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en quatre sections.
 
 | Section | Contenu |
 |---|---|
 | 🎁 **Gratuits** | Jeux PC offerts à garder à vie : Epic, Steam, GOG, Ubisoft, EA, Battle.net, Microsoft Store, **Amazon Prime** (Amazon Games, Legacy Games, Luna), **et les drops ponctuels** (Alienware Arena, Fanatical, Humble Bundle, IndieGala, itch.io…) |
 | 💻 **Promos PC** | Seulement les **gros jeux bien notés** et les **pépites** très appréciées à grosse remise, sur les stores officiels et les sites de clés |
+| 📚 **Bundles** | Les meilleurs packs de jeux Steam : Humble Bundle, Fanatical, Green Man Gaming, IndieGala, Digiphile… |
 | 🎮 **Switch** | Grosses promos **eShop** (jeux jouables sur Switch 1), **jeux en boîte** (Amazon, Fnac, Leclerc…) et **clés** |
 
 ## Installation
@@ -25,15 +26,17 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en trois sec
 **Tutoriel au premier lancement**, relançable depuis Réglages → « Relancer le tutoriel ». Il a 9 étapes avec l'accueil, certaines n'apparaissent que si elles te concernent :
 
 1. **Plateformes** : PC, Switch, et « je veux aussi les jeux Switch 2 ».
-2. **Stores PC** où tu actives tes jeux : Steam, Epic Games, Ubisoft Connect, GOG, EA app, Battle.net, Microsoft Store, itch.io, IndieGala, Autres. Puis **« J'ai Amazon Prime »** : Amazon Games, Legacy Games, Luna (cloud).
+2. **Stores PC** où tu actives tes jeux : Steam, Epic Games, GOG, EA app, Ubisoft Connect, Battle.net, Microsoft Store, **Bundles** (avec le choix des sites), itch.io, IndieGala, Autres. Puis **« J'ai Amazon Prime »** : Amazon Games, Legacy Games, Luna (cloud).
 3. **Ce que tu veux voir** : jeux gratuits, promos PC, promos Switch, jeux en boîte (+ ton département), sites de clés, bundles.
-4. **Niveau d'exigence** : 🔥 que les affaires de fou, ⚖️ équilibré ou 🌊 large.
+4. **Niveau d'exigence** : 🔥 que les affaires de fou, ⚖️ équilibré ou 🌊 large, avec le nombre d'annonces que chacun donnerait et celui qui te convient le mieux.
 5. **Tes bibliothèques** : lecture de tes jeux Steam et GOG via les sessions déjà ouvertes dans ton navigateur (lien de profil Steam facultatif). Les promos sur tes jeux sont masquées et ta liste de souhaits Steam est mise en avant.
-6. **Ce que tu ne veux pas voir** : 16 genres à masquer (horreur, sport, hentai…) et des licences à bannir (LEGO, Mortal Kombat, Hogwarts Legacy…). Les orthographes proches et les variantes (« Hogwart's Legacy », « NBA 2K26 », « EA FC 27 ») sont reconnues.
+6. **Ce que tu ne veux pas voir** (avec des conseils : nombre d'annonces que chaque filtre retirerait, genres et licences absents de ta bibliothèque Steam) : 16 genres à masquer (horreur, sport, hentai…) et des licences à bannir (LEGO, Mortal Kombat, Hogwarts Legacy…). Les orthographes proches et les variantes (« Hogwart's Legacy », « NBA 2K26 », « EA FC 27 ») sont reconnues.
 7. **Alertes** : notifications, fréquence, clic automatique.
 8. **Récapitulatif**.
 
-**Filtres du popup** : deux lignes qui se combinent. Promos PC : **tes launchers** (Steam, Epic, GOG, Ubisoft…), puis Top, Souhaits, Clés, Bundles. Switch : Switch / Switch 2, puis eShop, Physique, Clés. Un jeu vendu sur plusieurs launchers affiche le prix de celui que tu as choisi. Tes launchers restent affichés même à 0.
+**Filtres du popup** : deux lignes qui se combinent. Promos PC : **tes launchers** (Steam, Epic, GOG, Ubisoft…), puis Top, Souhaits, Clés. Bundles : par site, puis Les meilleurs, Moins de 10 €, Contient un souhait. Switch : Switch / Switch 2, puis eShop, Physique, Clés. Un jeu vendu sur plusieurs launchers affiche le prix de celui que tu as choisi. Tes launchers restent affichés même à 0.
+
+**Pas de doublons** : un jeu vu par plusieurs sources n'a qu'une carte (« Part 2 » = « Part II », éditions, ponctuation…). La carte montre l'offre la moins chère et « Aussi : » les autres.
 
 **Menus adaptatifs** : le popup n'affiche que tes sections. Il n'y a pas de barre de sections s'il n'y en a qu'une, pas de filtre Switch 2 si tu ne l'as pas choisi, et pas d'onglet « Bientôt » sans Epic. Les éléments masqués par tes filtres restent consultables (« 🚫 N masqués par tes filtres »), avec la raison du masquage.
 
@@ -63,6 +66,7 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en trois sec
 
 - Coche « J'ai Amazon Prime » pour voir les jeux offerts aux abonnés. Sans Prime, ils restent cachés : tu ne pourrais pas les récupérer.
 - Les jeux Prime à activer sur **Epic**, **GOG** ou le **Microsoft Store** suivent tes choix de stores. Les autres vont dans **Amazon Games** (l'application d'Amazon), **Legacy Games** (codes) ou **Luna** (jeux en cloud, à jouer en streaming : pas à garder, donc ni comptés dans le badge ni ouverts par « Tout récupérer »).
+- Sans Prime, le popup indique seulement combien de jeux tu manques.
 - Chaque jeu Prime porte le badge 👑 Prime. Sur Dealabs, il est reconnu par le titre, le magasin, le lien Amazon ou la description.
 
 ### Switch / Switch 2
@@ -80,7 +84,7 @@ Chaque bon plan Switch est classé **Switch** (jouable sur Switch 1, et donc aus
 ## Vérifications automatiques
 
 - Les vérifications interrogent les vrais sites. Elles tournent en arrière-plan, même popup fermé, tant que le navigateur est ouvert.
-- **Fréquence** : toutes les heures par défaut, réglable de 5 min à 24 h (5 à 15 min conseillé pour les erreurs de prix). Aucune notification n'est envoyée tant que le tutoriel n'est pas terminé. Une vérification se lance aussi :
+- **Fréquence** : toutes les 15 min par défaut, réglable de 5 min à 24 h (5 à 15 min conseillé pour les erreurs de prix). Aucune notification n'est envoyée tant que le tutoriel n'est pas terminé. Une vérification se lance aussi :
   - à l'installation ;
   - au démarrage du navigateur ;
   - à l'ouverture du popup si la dernière date de plus de 30 min.
@@ -89,9 +93,9 @@ Chaque bon plan Switch est classé **Switch** (jouable sur Switch 1, et donc aus
 
 ## 🎁 Gratuits
 
-- Sources : API officielle Epic, recherche Steam (-100 %), [GamerPower](https://www.gamerpower.com), qui recense les giveaways de jeux PC (dont Prime), et les jeux offerts postés sur [Dealabs](https://www.dealabs.com) (Prime, Microsoft Store, Battle.net…). Les week-ends gratuits, démos, free-to-play, DLC, jeux mobiles, bonus de stream (Twitch Drops…) et packs de contenu sont écartés.
+- Sources : API officielle Epic, recherche Steam (-100 %), catalogue GOG (jeux passés à 0 €), [LootScraper](https://feed.eikowagenknecht.com/lootscraper/) (Amazon Prime, GOG, Ubisoft, Humble, itch.io), [GamerPower](https://www.gamerpower.com), qui recense les giveaways de jeux PC (dont Prime), et les jeux offerts postés sur [Dealabs](https://www.dealabs.com) (Prime, Microsoft Store, Battle.net…). Les week-ends gratuits, démos, free-to-play, DLC, jeux mobiles, bonus de stream (Twitch Drops…) et packs de contenu sont écartés.
 - Le site qui organise le giveaway est affiché, par exemple « via Alienware Arena ». Ces sites demandent parfois un compte.
-- Le bouton **Récupérer** ouvre la page du store et clique sur « Obtenir » pour toi. Sur Epic, la commande n'est validée que si le total est à 0 €. Les captchas restent à faire toi-même.
+- Le bouton **Récupérer** ouvre la page du store et clique sur « Obtenir » pour toi (clic automatique *expérimental*, désactivable). Sur Epic, la commande n'est validée que si le total est à 0 €. Les captchas restent à faire toi-même.
 - Les jeux que tu possèdes déjà sont détectés : sur Steam et GOG via ta session, sur les stores quand la page affiche « Dans la bibliothèque ».
 
 ## 💻 Promos PC : que des pépites
@@ -136,6 +140,8 @@ extension/
 │   ├── merge.js               # fusion des jeux gratuits
 │   ├── deals.js               # fusion des bons plans, chutes de prix, score, « exceptionnel »
 │   ├── refresh-deals.js       # récupération des sources avec cache (ménage les API)
+│   ├── titles.js                  # comparaison des titres (doublons), la même partout
+│   ├── levels.js, keywords.js, recommend.js  # niveaux, licences bannies, conseils du tutoriel
 │   ├── store.js, util.js
 │   └── sources/
 │       ├── epic.js, steam.js, gamerpower.js      # gratuits
@@ -155,8 +161,8 @@ extension/
 ├── popup/  options/  icons/
 tests/
 ├── fixtures.js                # données calquées sur le format réel des API
-├── unit.test.js               # 59 tests
-└── background.test.js         # 17 tests : service worker dans un navigateur simulé
+├── unit.test.js               # 68 tests
+└── background.test.js         # 19 tests : service worker dans un navigateur simulé
 ```
 
 ## Tests
@@ -182,13 +188,14 @@ Une version précédente (0.3) a aussi été testée de bout en bout dans Chrome
 ## Limites connues
 
 - **Prix en euros** : exacts pour Steam, GOG, EA, l'eShop, les clés Switch, les bundles et Dealabs. CheapShark (Epic, Ubisoft, revendeurs) et GamerPower ne donnent que des dollars : le prix est converti au taux de la Banque centrale européenne et précédé de « ≈ ».
+- **Bundles** : le prix n'est pas connu pour Digiphile, certains Fanatical et les petits sites. Seul le contenu est comparé.
 - **G2A** bloque les lectures automatiques : ses offres n'apparaissent que si elles sont postées sur Dealabs.
 - **Clés PC** : sans clé API GG.deals, seules celles postées sur Dealabs sont vues.
 - **Dealabs** : les flux par groupe ne donnent pas la température (le flux « Hot » la met en tête du titre, FreeKeep<3 la retire). FreeKeep s'appuie donc sur le flux « Hot » officiel et garde un historique de 14 jours. Un deal peut avoir expiré même s'il est encore listé.
 - Dealabs, CheapShark, Nintendo et GG.deals peuvent changer leurs API. Si une source tombe, un bandeau le signale, l'État des sources passe en ✘ et les dernières données connues restent affichées.
 - Navigateur fermé = pas de vérification : la suivante se fait au redémarrage.
 - Les sites de clés sont du marché gris : prix plus bas, mais pas de garantie éditeur.
-- **Amazon Prime n'a pas d'API publique** (la page des jeux Luna est générée en JavaScript). Les jeux Prime sont repérés via GamerPower et Dealabs : il peut en manquer, surtout les jeux Luna en cloud.
+- **Amazon Prime n'a pas d'API publique** (la page des jeux Luna est générée en JavaScript). Les jeux Prime sont repérés via LootScraper, GamerPower et Dealabs : il peut en manquer, surtout les jeux Luna en cloud.
 - **Steam** : une annonce Dealabs au titre ambigu (édition inconnue, lot de jeux) n'est pas reconnue, donc pas masquée si tu possèdes le jeu.
 - **Launchers** : Battle.net et le Microsoft Store n'ont pas de source publique. Pour eux, seules les annonces Dealabs comptent, donc souvent peu de promos.
 - **GOG** : `getFilteredProducts` n'est pas une API documentée ; GOG peut la changer. En cas d'échec, la carte GOG passe en ⚠️ et le reste fonctionne.

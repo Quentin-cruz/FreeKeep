@@ -2,6 +2,7 @@
 // API gratuite, sans clé. Prix en dollars US (prix de référence). Les liens doivent passer par CheapShark.
 import { ENDPOINTS } from '../config.js';
 import { fetchJson } from '../util.js';
+import { cheapSharkTier } from '../levels.js';
 
 export const CHEAPSHARK_STORES = {
   1: 'Steam', 2: 'GamersGate', 3: 'GreenManGaming', 7: 'GOG', 8: 'EA', 11: 'Humble Store', 13: 'Ubisoft Store',
@@ -100,16 +101,13 @@ export function parseCheapShark(raw, settings, { wished = [], wishlist = [] } = 
     const steam = Number(d.steamRatingPercent) || 0;
     const count = Number(d.steamRatingCount) || 0;
 
-    // « Gros jeu » : vendu 29 $+ et bien noté.
-    const aaa = normal >= 29 && discount >= settings.pcMinDiscount && (meta >= 75 || (steam >= 80 && count >= 2000));
-    // « Pépite » : petit/moyen jeu adoré par les joueurs.
-    const gem = !aaa && normal >= 9.99 && steam >= settings.gemMinRating && count >= 3000 && discount >= settings.gemMinDiscount;
+    // « Gros jeu » vendu 29 $+ et bien noté, « pépite » adorée des joueurs, ou bon jeu d'un launcher moins fourni.
+    const crit = { normal, meta, steam, count };
+    const tier = cheapSharkTier(crit, discount, platformOf(d), settings);
     // Liste de souhaits : toute vraie promo (-20 % et plus)
     const wish = !!d.steamAppID && wishSet.has(String(d.steamAppID)) && discount >= 20;
-    // Launchers moins fournis que Steam : critères un peu plus souples, toujours sur de bons jeux.
-    const launcher = !aaa && !gem && ['epic', 'ubisoft'].includes(platformOf(d)) && normal >= 14.99
-      && discount >= Math.max(40, settings.pcMinDiscount - 10) && (meta >= 72 || (steam >= 75 && count >= 500));
-    if (!aaa && !gem && !wish && !launcher) continue;
+    if (!tier && !wish) continue;
+    const { aaa, gem } = tier || { aaa: false, gem: false };
 
     const item = {
       id: `cs:${d.gameID}`,
@@ -128,6 +126,7 @@ export function parseCheapShark(raw, settings, { wished = [], wishlist = [] } = 
       steamAppID: d.steamAppID || null,
       platform: platformOf(d),
       gameID: d.gameID,
+      crit,
       posted: d.lastChange ? Number(d.lastChange) * 1000 : null,
       end: null,
       flags: { aaa, gem, wishlist: wish, historicLow: false },

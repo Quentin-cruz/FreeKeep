@@ -1,7 +1,7 @@
 // Dealabs (dealabs.com) : bons plans postés et votés par la communauté française.
 // Sert pour les jeux en boîte (Amazon, Fnac, Leclerc…), les sites de clés (Eneba, Instant Gaming, G2A…)
 // et les erreurs de prix. Lu via les flux RSS publics.
-import { ENDPOINTS, KEYSHOPS, PHYSICAL_STORES, NOT_A_GAME } from '../config.js';
+import { ENDPOINTS, KEYSHOPS, PHYSICAL_STORES, NOT_A_GAME, bundleStoreOf } from '../config.js';
 import { fetchText, decodeEntities, normText, parsePrice, stripHtml } from '../util.js';
 
 export const FEEDS = {
@@ -127,6 +127,9 @@ export function pcPlatformOf(title, merchant = '') {
   return null; // inconnu : on ne filtre pas
 }
 
+// Revendeurs de clés Steam : sans autre précision, le jeu s'active sur Steam.
+const STEAM_SELLERS = /fanatical|humble|green ?man|\bgmg\b|gamesplanet|gamebillet|2game|voidu|wingamestore|dlgamer|gamersgate|indiegala|nuuvem|noctre|dreamgame|lenovo|planetplay|digiphile/i;
+
 const PC_WORDS = /\b(pc|steam|epic games|gog|ubisoft connect|uplay|ea app|battle\.?net|microsoft store|xbox app|windows|mac)\b/i;
 const OTHER_CONSOLES = /\b(ps[345]|playstation|xbox|switch)\b/i;
 const PRICE_ERROR = /erreur de prix|bug de prix|prix bugg?[ée]|price error|prix cass[ée] par erreur/i;
@@ -223,6 +226,7 @@ export function dealabsFreebie(it, { stores = [], prime = false, maxAgeDays = 7 
     worth: null,
     description: stripHtml(it.description).slice(0, 280),
     prime: isPrime,
+    multi: MULTI.test(title),
     cloud: store === 'luna',
   };
 }
@@ -254,28 +258,32 @@ export function classifyDealabs(it, settings, now = Date.now()) {
   const keyshop = isKeyshop(it.merchant);
   const isPC = !isSwitch && (PC_WORDS.test(title) || ((keyshop || /steam|gog|epic|fanatical|humble|gamesplanet|green ?man/i.test(it.merchant)) && !OTHER_CONSOLES.test(title)));
   if (!isSwitch && !isPC) return null;
-  const pcPlatform = isPC ? pcPlatformOf(title, it.merchant) : null;
+  const pcPlatform = isPC
+    ? pcPlatformOf(title, it.merchant) || pcPlatformOf(stripHtml(it.description).slice(0, 400)) || (keyshop || STEAM_SELLERS.test(it.merchant || '') ? 'steam' : null)
+    : null;
   if (pcPlatform && settings.stores && !settings.stores[pcPlatform]) return null;
 
   const text = `${title} ${stripHtml(it.description).slice(0, 800)}`;
   const priceError = !!it.priceError || PRICE_ERROR.test(text);
   const hot = !!it.hot || (it.temperature ?? 0) >= 100;
-  const section = isSwitch ? 'switch' : 'pc';
   const bundle = /\bbundle\b|pack de \d+ jeux|lot de \d+ jeux/i.test(title);
+  const section = isSwitch ? 'switch' : bundle ? 'bundle' : 'pc';
   let channel;
   if (keyshop) channel = 'keyshop';
   else if (bundle) channel = 'bundle';
   else if (section === 'switch') channel = /nintendo/i.test(it.merchant) || /d[ée]mat[ée]rialis[ée]/i.test(title) ? 'eshop' : 'physical';
   else channel = 'official';
-  // Le flux « hot » ne couvre que quelques heures : l'exiger ferait disparaître presque tous les jeux en boîte,
-  // locaux comme nationaux (Amazon, Fnac…). Ils passent donc sans, sauf au niveau « Que les affaires de fou ».
-  const needsHot = settings.dealabsOnlyHot && !(channel === 'physical' && settings.level !== 'strict');
-  if (needsHot && !hot && !priceError) return null;
-  if ((channel === 'keyshop' && settings.keyshops === false) || (channel === 'physical' && settings.physical === false) || (channel === 'bundle' && settings.bundles === false)) return null;
-
   const price = parsePrice(it.priceText);
   const normalPrice = price != null && it.refPrice > price ? it.refPrice : null;
   const discount = Number(/-\s?(\d{1,2})\s?%/.exec(title)?.[1]) || (normalPrice ? Math.round((1 - price / normalPrice) * 100) : null);
+  // Le flux « hot » ne couvre que quelques heures : l'exiger ferait disparaître presque tous les jeux en boîte,
+  // locaux comme nationaux (Amazon, Fnac…). Ils passent donc sans, sauf au niveau « Que les affaires de fou ».
+  const needsHot = settings.dealabsOnlyHot && settings.level !== 'wide' && !(channel === 'physical' && settings.level !== 'strict');
+  if (needsHot && !hot && !priceError) return null;
+  // Niveau « affaires de fou » : très chaud, ou au moins moitié prix
+  if (settings.level === 'strict' && !priceError && it.temperature != null && it.temperature < 300 && !(discount >= 50)) return null;
+  if ((channel === 'keyshop' && settings.keyshops === false) || (channel === 'physical' && settings.physical === false) || (channel === 'bundle' && settings.bundles === false)) return null;
+
   const id = /-(\d{5,})(?:[/?#]|$)/.exec(it.link)?.[1] || normText(it.guid).slice(-40);
 
   return {
@@ -283,6 +291,7 @@ export function classifyDealabs(it, settings, now = Date.now()) {
     source: 'dealabs',
     section,
     channel,
+    ...(section === 'bundle' ? { store: bundleStoreOf(it.merchant) } : {}),
     title,
     url: it.link,
     images: [biggerImage(it.image)].filter(Boolean),

@@ -4,7 +4,7 @@ import { ENDPOINTS } from '../config.js';
 import { fetchText, decodeEntities, stripHtml } from '../util.js';
 
 const pause = () => new Promise((r) => setTimeout(r, 800));
-const PAGES = { switch: ['jeux-nintendo-switch', 3], pc: ['jeux-pc', 2] };
+const PAGES = { switch: ['jeux-nintendo-switch', 3], pc: ['jeux-pc', 2], free: ['jeux-gratuits', 1] };
 
 export function parseDealabsPage(html, feed) {
   const out = [];

@@ -327,3 +327,38 @@ test('Tutoriel : le lien de profil annonce les jeux possédés', async () => {
     globalThis.fetch = real;
   }
 });
+
+test('Tutoriel : estimation sans rien enregistrer dans les réglages', async () => {
+  await setup();
+  const before = await chrome.storage.sync.get('settings');
+  const cs = (id, title, discount) => ({ id, source: 'cheapshark', section: 'pc', channel: 'official', platform: 'steam', title, price: 5, currency: 'EUR', discount, flags: {}, crit: { normal: 59.99, meta: 90, steam: 92, count: 9000 }, offers: { steam: { price: 5, normalPrice: 59.99, discount, currency: 'EUR' } } });
+  await chrome.storage.local.set({ dealCache: { cheapshark: { at: Date.now(), items: [cs('cs:1', 'LEGO City', 80), cs('cs:2', 'Hades II', 65), cs('cs:3', 'Control', 45)], steam: {} } } });
+  const draft = { ...DEFAULT_SETTINGS, pcDeals: true, bundles: false, dealabs: false, excludedGenres: [] };
+  const est = await send({ type: 'estimate', settings: draft });
+  assert.deepEqual(est.counts, { strict: 1, balanced: 2, wide: 3 });
+  assert.equal(est.hits.keywords.LEGO, 1);
+  const banned = await send({ type: 'estimate', settings: { ...draft, bannedKeywords: ['LEGO'] } });
+  assert.deepEqual(banned.counts, { strict: 0, balanced: 1, wide: 2 });
+  assert.deepEqual(await chrome.storage.sync.get('settings'), before);
+});
+
+test('Jeux Prime sans abonnement : comptés, pas affichés', async () => {
+  await setup();
+  const real = globalThis.fetch;
+  const entry = '<entry><title>Amazon Prime (Game, PC) - WarBreeds</title><link href="https://luna.amazon.com/claims/warbreeds-gog/dp/x"/><category term="source:AMAZON"/><category term="platform:PC"/><category term="type:GAME"/></entry>';
+  globalThis.fetch = async (url) => (String(url).includes('lootscraper_amazon') ? new Response(entry) : real(url));
+  try {
+    const off = await send({ type: 'refresh' });
+    assert.equal(off.meta.primeHidden, 1);
+    assert.ok(!off.games.some((g) => g.title === 'WarBreeds'));
+    const { settings } = await chrome.storage.sync.get('settings');
+    await chrome.storage.sync.set({ settings: { ...settings, prime: true } });
+    const on = await send({ type: 'refresh' });
+    const game = on.games.find((g) => g.title === 'WarBreeds');
+    assert.equal(game.store, 'gog');
+    assert.equal(game.prime, true);
+    assert.equal(on.meta.primeHidden, 0);
+  } finally {
+    globalThis.fetch = real;
+  }
+});

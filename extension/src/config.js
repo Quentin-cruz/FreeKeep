@@ -25,7 +25,24 @@ export const STORES = {
   luna:      { id: 'luna',      name: 'Luna (cloud)',     short: 'Luna',      color: '#b9a4ff', bg: '#24164a', prime: true },
 };
 
-export const PC_STORE_ORDER = ['steam', 'epic', 'ubisoft', 'gog', 'ea', 'battlenet', 'microsoft', 'itch', 'indiegala', 'other'];
+export const PC_STORE_ORDER = ['steam', 'epic', 'gog', 'ea', 'ubisoft', 'battlenet', 'microsoft', 'itch', 'indiegala', 'other'];
+
+// Sites de bundles
+export const BUNDLE_STORES = {
+  humble:    { id: 'humble',    name: 'Humble Bundle',     short: 'Humble',    color: '#ff8f8f', bg: '#4a1414', re: /humble/i },
+  fanatical: { id: 'fanatical', name: 'Fanatical',         short: 'Fanatical', color: '#ffc15c', bg: '#4a2f08', re: /fanatical/i },
+  gmg:       { id: 'gmg',       name: 'Green Man Gaming',  short: 'GMG',       color: '#8fe28f', bg: '#103a1c', re: /green ?man|\bgmg\b/i },
+  indiegala: { id: 'indiegala', name: 'IndieGala',         short: 'IndieGala', color: '#ffd27a', bg: '#3d2a0a', re: /indie ?gala/i },
+  digiphile: { id: 'digiphile', name: 'Digiphile',         short: 'Digiphile', color: '#7cc4ff', bg: '#0b2a4a', re: /digiphile/i },
+  other:     { id: 'other',     name: 'Autres (Steam, GOG, Planetplay, Xsolla…)', short: 'Autres', color: '#d0c2ff', bg: '#2a1f4a', re: /.*/ },
+};
+export const bundleStoreOf = (merchant) => Object.values(BUNDLE_STORES).find((b) => b.re.test(String(merchant || ''))).id;
+
+// Licences proposées à bannir
+export const KEYWORD_SUGGESTIONS = [
+  'EA Sports FC', 'Call of Duty', 'LEGO', 'Mortal Kombat', 'Hogwarts Legacy', "Assassin's Creed", 'Battlefield', 'BioShock', 'Borderlands', 'Dead Island', 'Killing Floor',
+  'Mass Effect', 'Zombie Army', 'Les Sims', 'Farming Simulator', 'NBA 2K', 'Football Manager',
+];
 export const PRIME_STORES = ['amazon', 'legacy', 'luna'];
 export const STORE_ORDER = [...PC_STORE_ORDER, ...PRIME_STORES];
 
@@ -113,6 +130,7 @@ export const ENDPOINTS = {
   gogCatalog: 'https://catalog.gog.com/v1/catalog',
   eaDeals: 'https://www.ea.com/fr-fr/sales/deals',
   barter: 'https://barter.vg/bundles/json/',
+  lootscraper: 'https://feed.eikowagenknecht.com',
   fanatical: 'https://www.fanatical.com/api/all/fr',
   enebaSwitch: 'https://www.eneba.com/fr/store/nintendo-games',
   kinguin: 'https://www.kinguin.net/services/library/api/v1/products/search',
@@ -148,6 +166,7 @@ export const DEFAULT_SETTINGS = {
   physical: true,         // jeux en boîte (magasins)
   keyshops: true,         // sites de clés (marché gris)
   bundles: true,
+  bundleStores: { humble: true, fanatical: true, gmg: true, indiegala: true, digiphile: true, other: true },
   level: 'balanced',      // strict | balanced | wide | custom
   pcMinDiscount: 60,      // seuils (utilisés quand level = custom)
   gemMinDiscount: 70,
@@ -173,7 +192,7 @@ export const DEFAULT_SETTINGS = {
   dealMaxAgeDays: 7,
 
   // Alertes
-  intervalHours: 1,
+  intervalHours: 0.25,
   notifyNew: true,
   notifyLastDay: true,
   notifyDeals: true,

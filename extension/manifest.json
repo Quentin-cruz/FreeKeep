@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "FreeKeep<3",
   "short_name": "FreeKeep<3",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Jeux PC offerts à garder (Epic, Steam, GOG, Prime…) + vraies grosses promos PC et Switch, à ta mesure.",
   "icons": {
     "16": "icons/icon16.png",
@@ -47,6 +47,9 @@
     "https://catalog.gog.com/*",
     "https://www.ea.com/*",
     "https://barter.vg/*",
+    "https://feed.eikowagenknecht.com/*",
+    "https://www.greenmangamingbundles.com/*",
+    "https://www.indiegala.com/*",
     "https://www.fanatical.com/*",
     "https://www.humblebundle.com/*",
     "https://www.eneba.com/*",

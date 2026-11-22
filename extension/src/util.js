@@ -25,25 +25,7 @@ export function cleanGamerPowerTitle(t) {
   return s.replace(/\s{2,}/g, ' ').trim();
 }
 
-// Deux titres désignent-ils le même jeu ?
-export function titlesMatch(a, b) {
-  const na = normTitle(a);
-  const nb = normTitle(b);
-  if (!na || !nb) return false;
-  if (na === nb) return true;
-  const [short, long] = na.length <= nb.length ? [na, nb] : [nb, na];
-  if (short.length >= 5 && long.startsWith(short + ' ')) {
-    // « X » vs « X Definitive Edition » = même jeu, mais « Hades » vs « Hades II » = suite
-    const next = long.slice(short.length + 1).split(' ')[0];
-    if (!/^(\d+|[ivx]{1,4})$/.test(next)) return true;
-  }
-  const wa = new Set(na.split(' '));
-  const wb = new Set(nb.split(' '));
-  if (wa.size < 2 || wb.size < 2) return false;
-  let inter = 0;
-  for (const w of wa) if (wb.has(w)) inter++;
-  return inter / (wa.size + wb.size - inter) >= 0.8;
-}
+export { titlesMatch, titleContains } from './titles.js';
 
 const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', trade: '™', reg: '®', copy: '©' };
 export function decodeEntities(s) {
@@ -98,18 +80,6 @@ export function parsePrice(text) {
 
 export function stripHtml(html) {
   return decodeEntities(String(html ?? '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
-}
-
-// Le titre long contient-il le titre court (mots entiers) ? Utile pour « Hades (Steam, dématérialisé) ».
-export function titleContains(long, short) {
-  const l = ` ${normTitle(long)} `;
-  const s = normTitle(short);
-  if (s.length < 5) return false;
-  const idx = l.indexOf(` ${s} `);
-  if (idx < 0) return false;
-  // « Hades » ne doit pas matcher « Hades II »
-  const next = l.slice(idx + s.length + 2).split(' ')[0];
-  return !/^(\d+|[ivx]{1,4})$/.test(next);
 }
 
 export function formatPrice(value, currency = 'EUR') {

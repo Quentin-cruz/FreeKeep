@@ -10,6 +10,7 @@ export async function getSettings() {
     ...DEFAULT_SETTINGS,
     ...(settings || {}),
     stores: { ...DEFAULT_SETTINGS.stores, ...(settings?.stores || {}) },
+    bundleStores: { ...DEFAULT_SETTINGS.bundleStores, ...(settings?.bundleStores || {}) },
   };
 }
 

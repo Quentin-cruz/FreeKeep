@@ -1,5 +1,5 @@
 // Composants d'interface partagés par le tutoriel et la page de réglages.
-import { STORES, PC_STORE_ORDER, LEVELS } from '../src/config.js';
+import { STORES, PC_STORE_ORDER, LEVELS, KEYWORD_SUGGESTIONS, BUNDLE_STORES } from '../src/config.js';
 import { GENRES } from '../src/genres.js';
 
 export function h(tag, attrs = {}, ...children) {
@@ -68,6 +68,25 @@ export function storeGrid(stores, onChange, ids = PC_STORE_ORDER) {
   );
 }
 
+// Bloc « Bundles » : oui / non, puis les sites
+export function bundleBox(d, onChange) {
+  const sub = h('div', { class: 'sub' },
+    h('p', { class: 'note' }, 'Packs de jeux Steam à petit prix. Seuls ceux qui contiennent plusieurs jeux bien notés sont montrés.'),
+    h('div', { class: 'tgrid' }, Object.values(BUNDLE_STORES).map((b) =>
+      toggleCard({
+        icon: h('span', { class: 'store-dot', style: `background:${b.bg};color:${b.color}` }, b.short.slice(0, 2)),
+        title: b.name,
+        checked: d.bundleStores?.[b.id] !== false,
+        accent: b.color,
+        onChange: (on) => onChange('store', b.id, on),
+      }))));
+  sub.hidden = !d.bundles;
+  return h('div', { class: 'prime-box' },
+    switchRow({ title: '📚 Bundles', desc: 'Humble Bundle, Fanatical, Green Man Gaming…', checked: d.bundles, onChange: (v) => { sub.hidden = !v; onChange('bundles', v); } }),
+    sub,
+  );
+}
+
 // Bloc « Amazon Prime » : abonnement + plateformes propres à Prime.
 // `d` = réglages en cours d'édition ; `onChange(key, value)` est appelé à chaque modification.
 export function primeBox(d, onChange) {
@@ -91,27 +110,36 @@ export function primeBox(d, onChange) {
 }
 
 // Puces de genres : une puce active = genre EXCLU
+// Renvoie un élément avec `setHits({ genre: n })` (annonces que chaque genre masquerait) et `exclude([genres])`.
 export function genreChips(excluded, onChange) {
   const set = new Set(excluded);
-  return h('div', { class: 'chips' },
-    GENRES.map((g) => {
-      const chip = h('button', { type: 'button', class: `chip${set.has(g.id) ? ' banned' : ''}` }, `${g.emoji} ${g.label}`);
-      chip.addEventListener('click', () => {
-        if (set.has(g.id)) set.delete(g.id);
-        else set.add(g.id);
-        chip.classList.toggle('banned', set.has(g.id));
-        onChange([...set]);
-      });
-      return chip;
-    }),
-  );
+  const chips = new Map(GENRES.map((g) => {
+    const n = h('span', { class: 'n' });
+    const chip = h('button', { type: 'button', class: `chip${set.has(g.id) ? ' banned' : ''}` }, `${g.emoji} ${g.label}`, n);
+    chip.addEventListener('click', () => {
+      if (set.has(g.id)) set.delete(g.id);
+      else set.add(g.id);
+      chip.classList.toggle('banned', set.has(g.id));
+      onChange([...set]);
+    });
+    return [g.id, { chip, n }];
+  }));
+  const box = h('div', { class: 'chips' }, [...chips.values()].map((c) => c.chip));
+  box.setHits = (hits) => { for (const [id, { n }] of chips) n.textContent = hits?.[id] ? ` ${hits[id]}` : ''; };
+  box.exclude = (ids) => {
+    ids.forEach((id) => { set.add(id); chips.get(id)?.chip.classList.add('banned'); });
+    onChange([...set]);
+  };
+  return box;
 }
 
-export const KEYWORD_SUGGESTIONS = ['EA Sports FC', 'Call of Duty', 'LEGO', 'Mortal Kombat', 'Hogwarts Legacy', "Assassin's Creed", 'Battlefield', 'Les Sims', 'Farming Simulator', 'NBA 2K', 'Football Manager'];
+export { KEYWORD_SUGGESTIONS };
 
 // Saisie de mots-clés (licences à bannir)
+// `setSuggestions([{ keyword, hits, owned, star }])` trie et annote les suggestions.
 export function tagInput(values, onChange, suggestions = KEYWORD_SUGGESTIONS) {
   let list = [...values];
+  let ranked = suggestions.map((keyword) => ({ keyword, hits: 0, owned: 0, star: false }));
   const tags = h('div', { class: 'tags' });
   const input = h('input', { type: 'text', placeholder: 'Tape un nom de licence puis Entrée (ex. Call of Duty)', class: 'tag-input', autocomplete: 'off' });
   const sugg = h('div', { class: 'sugg' });
@@ -131,8 +159,11 @@ export function tagInput(values, onChange, suggestions = KEYWORD_SUGGESTIONS) {
       ...list.map((v) => h('span', { class: 'tag' }, v, h('button', { type: 'button', title: `Retirer ${v}`, onclick: () => { list = list.filter((x) => x !== v); commit(); } }, '×'))),
       input,
     );
-    const left = suggestions.filter((s) => !list.some((x) => x.toLowerCase() === s.toLowerCase()));
-    sugg.replaceChildren(...(left.length ? [h('span', { class: 'sugg-label' }, 'Suggestions :'), ...left.map((s) => h('button', { type: 'button', class: 'chip small', onclick: () => add(s) }, `+ ${s}`))] : []));
+    const left = ranked.filter((s) => !list.some((x) => x.toLowerCase() === s.keyword.toLowerCase()));
+    sugg.replaceChildren(...(left.length ? [h('span', { class: 'sugg-label' }, 'Suggestions :'), ...left.map((s) => h('button', {
+      type: 'button', class: `chip small${s.owned ? ' owned' : ''}`, onclick: () => add(s.keyword),
+      title: s.owned ? `Tu possèdes ${s.owned} jeu${s.owned > 1 ? 'x' : ''} de cette licence` : s.hits ? `Masquerait ${s.hits} annonce${s.hits > 1 ? 's' : ''} du moment` : null,
+    }, `${s.star ? '⭐' : '+'} ${s.keyword}`, s.owned ? h('span', { class: 'n' }, ` tu en as ${s.owned}`) : s.hits ? h('span', { class: 'n' }, ` ${s.hits}`) : null))] : []));
   };
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ',') {
@@ -154,15 +185,20 @@ export function tagInput(values, onChange, suggestions = KEYWORD_SUGGESTIONS) {
   });
   tags.addEventListener('click', () => input.focus());
   render();
-  return h('div', { class: 'tagbox' }, tags, sugg);
+  const root = h('div', { class: 'tagbox' }, tags, sugg);
+  root.setSuggestions = (r) => { ranked = r; render(); };
+  return root;
 }
 
 export function levelCards(value, onChange) {
   const wrap = h('div', { class: 'tgrid three' });
+  const extras = {};
   const cards = Object.entries(LEVELS).map(([id, l]) => {
+    const extra = h('small', { class: 'level-extra' });
+    extras[id] = extra;
     const card = h('button', { type: 'button', class: `tcard radio${value === id ? ' on' : ''}` },
       h('span', { class: 'tcard-icon' }, l.emoji),
-      h('span', { class: 'tcard-text' }, h('strong', {}, l.label), h('small', {}, l.desc)),
+      h('span', { class: 'tcard-text' }, h('strong', {}, l.label), h('small', {}, l.desc), extra),
       h('span', { class: 'tcard-check' }, '✓'));
     card.addEventListener('click', () => {
       cards.forEach((c) => c.classList.remove('on'));
@@ -172,6 +208,9 @@ export function levelCards(value, onChange) {
     return card;
   });
   wrap.append(...cards);
+  wrap.setCounts = (counts, recommended) => {
+    for (const [id, el] of Object.entries(extras)) el.textContent = counts?.[id] != null ? `≈ ${counts[id]} annonces${id === recommended ? ' · ⭐ conseillé pour toi' : ''}` : '';
+  };
   return wrap;
 }
 

@@ -297,8 +297,8 @@ import { steamGamesXmlFixture } from './fixtures.js';
 test('Niveaux d’exigence et sections actives', () => {
   assert.equal(effective({ ...DEFAULT_SETTINGS, level: 'strict' }).pcMinDiscount, 75);
   assert.equal(effective({ ...DEFAULT_SETTINGS, level: 'custom', pcMinDiscount: 55 }).pcMinDiscount, 55);
-  assert.deepEqual(wants({ ...DEFAULT_SETTINGS }).sections, ['free', 'pc']);
-  assert.deepEqual(wants({ ...DEFAULT_SETTINGS, switch: true }).sections, ['free', 'pc', 'switch']);
+  assert.deepEqual(wants({ ...DEFAULT_SETTINGS }).sections, ['free', 'pc', 'bundle']);
+  assert.deepEqual(wants({ ...DEFAULT_SETTINGS, switch: true }).sections, ['free', 'pc', 'bundle', 'switch']);
   assert.deepEqual(wants({ ...DEFAULT_SETTINGS, pc: false, switch: true }).sections, ['switch']);
   const noStore = { ...DEFAULT_SETTINGS, stores: Object.fromEntries(Object.keys(DEFAULT_SETTINGS.stores).map((k) => [k, false])) };
   assert.deepEqual(wants(noStore).sections, []);
@@ -1119,4 +1119,167 @@ test('Pages Dealabs : température, prix de référence, expirées, locales', ()
   const merged = mergeDealabsItems([rssItem, ...parseDealabsPage(page(thread({ isExpired: true })), 'switch')]);
   assert.equal(merged.length, 1);
   assert.equal(merged[0].expired, true);
+});
+
+// ===========================================================================
+// v1.3 : doublons, bundles, jeux gratuits, niveaux, recommandations
+// ===========================================================================
+import { gameKey, titlesMatch as sameTitle, sameGameStrict as sameStrict } from '../extension/src/titles.js';
+import { groupDeals, dealKey } from '../extension/src/deals.js';
+import { parseLootScraper, primeStoreFromUrl, parseGogGifts } from '../extension/src/sources/lootscraper.js';
+import { gmgTiers, indieGalaTiers } from '../extension/src/sources/bundles.js';
+import { keepAtLevel, WIDEST } from '../extension/src/levels.js';
+import { tasteFrom, genresToHide, rankFranchises, filterHits, recommendedLevel } from '../extension/src/recommend.js';
+import { assembleDeals } from '../extension/src/refresh-deals.js';
+import { bundleStoreOf, PC_STORE_ORDER } from '../extension/src/config.js';
+
+test('Doublons : même jeu écrit autrement', () => {
+  const same = [
+    ['Contractor: The Clean Up Part 2', 'Contractor: The Clean Up Part II'], ['The Last of Us Part Two', 'The Last of Us Part 2'], ['Grand Theft Auto V', 'Grand Theft Auto 5'],
+    ['FINAL FANTASY VII REBIRTH', 'Final Fantasy 7 Rebirth'], ['Mortal Kombat11', 'Mortal Kombat 11'], ['Assassins Creed Odyssey', 'Assassin’s Creed® Odyssey'], ['Ratchet & Clank', 'Ratchet and Clank'],
+    ['Hades II', 'Hades 2'], ['Super Mega Baseball™ 4', 'Super Mega Baseball 4'], ['The Witcher 3: Wild Hunt', 'Witcher 3 Wild Hunt'], ['Cleanup Crew', 'Clean Up Crew'], ['DOOM Eternal Deluxe Edition', 'DOOM Eternal'],
+    ['Dragon Quest I & II', 'Dragon Quest I and 2'],
+  ];
+  for (const [a, b] of same) {
+    assert.ok(sameStrict(a, b), `${a} = ${b}`);
+    assert.ok(sameTitle(a, b), `${a} ~ ${b}`);
+    assert.equal(gameKey(a), gameKey(b));
+  }
+  const different = [
+    ['Contractor: The Clean Up', 'Contractor: The Clean Up Part 2'], ['Hades', 'Hades II'], ['Mega Man X', 'Mega Man 10'], ['DOOM', 'DOOM Eternal'], ['Hollow Knight', 'Hollow Knight: Silksong'],
+    ['Borderlands 2', 'Borderlands 3'], ['Dragon Quest VII Reimagined', 'Dragon Quest XI S'], ['Resident Evil 2', 'Resident Evil Village'], ['FIFA 23', 'FIFA 24'], ['Dark Souls II', 'Dark Souls III'], ['Autumn’s end (Part 1)', 'Autumn’s end (Part 2)'],
+  ];
+  for (const [a, b] of different) {
+    assert.ok(!sameStrict(a, b), `${a} ≠ ${b}`);
+    assert.ok(!sameTitle(a, b), `${a} !~ ${b}`);
+  }
+});
+
+test('Doublons : jeux gratuits vus par plusieurs sources', () => {
+  const item = (source, title, o = {}) => ({ source, store: 'epic', title, url: source, images: [], status: 'active', ...o });
+  const games = mergeGames([[item('epic', 'Mark of the Deep')], [item('gamerpower', 'Contractor: The Clean Up Part 2'), item('gamerpower', 'Mark of the Deep')], [item('dealabs', 'Contractor: The Clean Up Part II')]]);
+  assert.deepEqual(games.map((g) => [g.title, g.sources.length]).sort(), [['Contractor: The Clean Up Part 2', 2], ['Mark of the Deep', 2]]);
+  // Un même jeu Prime annoncé sur deux plateformes
+  const prime = mergeGames([[item('lootscraper', 'WarBreeds', { store: 'gog', prime: true })], [item('gamerpower', 'WarBreeds', { store: 'amazon', prime: true })]]);
+  assert.equal(prime.length, 1);
+  assert.equal(prime[0].store, 'gog');
+  // Offert séparément sur Epic et GOG : deux vraies offres
+  assert.equal(mergeGames([[item('epic', 'Hades')], [item('gog', 'Hades', { store: 'gog' })]]).length, 2);
+});
+
+test('Doublons : une carte par jeu dans les promos', () => {
+  const dl = (id, title, price, merchant, o = {}) => ({ id, source: 'dealabs', section: 'switch', channel: 'physical', platform: 'switch2', title, price, merchant, currency: 'EUR', url: id, images: [], flags: {}, ...o });
+  const out = groupDeals([
+    dl('dl:1', 'The Legend of Zelda : Ocarina of Time sur Nintendo Switch 2 (Via Retrait Magasin)', 51.49, 'E.Leclerc', { temperature: 4841, flags: { hot: true } }),
+    dl('dl:2', 'Legend of Zelda: Ocarina of Time sur Nintendo Switch 2 - Ormesson (94)', 42.9, 'Courses U', { temperature: 300 }),
+    dl('dl:3', 'Dragon Quest VII Reimagined sur Nintendo Switch', 32.46, 'Amazon', { platform: 'switch1' }),
+    dl('dl:4', 'Dragon Quest VII: Reimagined sur Nintendo Switch 2', 33.68, 'E.Leclerc'),
+    dl('dl:5', 'Sélection de jeux Nintendo Switch en promotion', 9.95, 'Action'),
+    dl('dl:6', 'Sélection de jeux Nintendo Switch en promotion', 8, 'Fnac'),
+  ]);
+  const zelda = out.find((d) => /Zelda/.test(d.title));
+  assert.equal(zelda.price, 42.9);
+  assert.equal(zelda.temperature, 4841);
+  assert.ok(zelda.flags.hot);
+  assert.deepEqual(zelda.ids, ['dl:2', 'dl:1']);
+  assert.deepEqual(zelda.others.map((o) => [o.merchant, o.price]), [['E.Leclerc', 51.49]]);
+  assert.equal(out.length, 5, 'Switch et Switch 2 séparées, sélections laissées à part');
+  // Bundles : Humble Choice écrit de deux façons
+  const bd = (id, title, price) => ({ id, source: 'bundle', section: 'bundle', channel: 'bundle', store: 'humble', merchant: 'Humble Bundle', title, price, flags: {}, images: [] });
+  const choice = groupDeals([bd('bd:1', 'November 2026 Humble Choice (#84)', null), { ...bd('dl:9', 'Humble Bundle Choice - Novembre 2026', 12.99), source: 'dealabs' }]);
+  assert.equal(choice.length, 1);
+  assert.equal(choice[0].price, 12.99);
+  // Promo PC vue sur CheapShark et sur Dealabs : une carte, l'offre Dealabs ajoutée
+  const cs = { id: 'cs:1', source: 'cheapshark', section: 'pc', channel: 'official', platform: 'steam', title: 'Metro Exodus', price: 3, currency: 'EUR', flags: {}, offers: { steam: { price: 3, merchant: 'Steam' } } };
+  const deals = buildDeals({ cheapshark: [cs], dealabs: [{ id: 'dl:7', source: 'dealabs', section: 'pc', channel: 'official', platform: 'steam', title: 'Metro Exodus sur PC (Dématérialisé)', price: 2.99, currency: 'EUR', merchant: 'Steam', flags: { hot: true } }] }, {}, {}, now);
+  assert.equal(deals.length, 1);
+  assert.equal(deals[0].price, 2.99);
+  assert.ok(deals[0].flags.hot);
+  assert.equal(dealKey({ source: 'dealabs', section: 'pc', title: 'Sélection de jeux EA sur PC' }), null);
+});
+
+test('LootScraper : Prime, GOG, Ubisoft ; cadeaux GOG', () => {
+  const entry = (source, title, url, platform = 'PC', to = '2099-01-08 00:00') => `<entry><title>${source === 'AMAZON' ? 'Amazon Prime' : source} (Game, ${platform}) - ${title}</title><content type="xhtml"><div><img src="https://img/x.jpg" /><ul><li><b>Offer valid from:</b> 2026-10-08 18:00</li><li><b>Offer valid to:</b> ${to}</li><li><b>Recommended price (Steam):</b> 5.99 EUR</li></ul></div></content><link href="${url}"/><category term="source:${source}"/><category term="platform:${platform}"/><category term="type:GAME"/></entry>`;
+  const items = parseLootScraper([
+    entry('AMAZON', 'WarBreeds', 'https://luna.amazon.com/claims/warbreeds-gog/dp/x?a=1&amp;b=2'), entry('AMAZON', 'Kiborg', 'https://luna.amazon.com/claims/kiborg-aga/dp/x'),
+    entry('UBISOFT', 'Watch Dogs', 'https://store.ubisoft.com/x'), entry('EPIC', 'Lonesome Village', 'https://x', 'ANDROID'), entry('GOG', 'Fini', 'https://gog.com/x', 'PC', '2020-01-01 00:00'),
+  ].join(''), now);
+  assert.deepEqual(items.map((i) => [i.title, i.store, i.prime]), [['WarBreeds', 'gog', true], ['Kiborg', 'amazon', true], ['Watch Dogs', 'ubisoft', false]]);
+  assert.equal(items[0].worth, '5,99 €');
+  assert.match(items[0].url, /a=1&b=2/);
+  assert.equal(primeStoreFromUrl('https://luna.amazon.com/claims/time-travel-escape-room-game-legacy/dp/1'), 'legacy');
+  assert.equal(primeStoreFromUrl('https://luna.amazon.com/claims/ad-infinitum-epic/dp/1'), 'epic');
+  const gift = (final, base) => ({ title: 'X', storeLink: 'u', price: { finalMoney: { amount: final }, baseMoney: { amount: base } } });
+  assert.equal(parseGogGifts({ products: [gift('0.00', '19.99'), gift('0.00', '0.00'), gift('5.00', '9.99')] }).length, 1);
+});
+
+test('Bundles : sites, prix GMG et IndieGala', () => {
+  assert.deepEqual(['Humble Bundle', 'Fanatical', 'Green Man Gaming', 'Indiegala', 'Digiphile', 'Steam', ''].map(bundleStoreOf), ['humble', 'fanatical', 'gmg', 'indiegala', 'digiphile', 'other', 'other']);
+  assert.deepEqual(gmgTiers('Worth €175.93 <span class="price">€5.00</span> <span class="price">€16.00</span> <span class="price">€11.00</span>').map((t) => t.price), [5, 11, 16]);
+  const ig = indieGalaTiers('Pay <strong class="plt">$3.99</strong> or more');
+  assert.equal(ig[0].price, 3.99);
+  const games = Object.fromEntries([1, 2, 3].map((i) => [i, { name: 'G' + i, game: true, normal: 10, rating: 90, reviews: 2000 }]));
+  const [b] = buildBundles([{ id: '7', merchant: 'IndieGala', title: 'Pixel', url: 'https://www.indiegala.com/bundle/x', start: 1, end: now + 1e9, appids: ['1', '2', '3'] }], games, { 7: ig }, { ...DEFAULT_SETTINGS }, 0.9);
+  assert.equal(b.price, 3.59, 'dollars convertis');
+  assert.equal(b.approx, true);
+  assert.equal(b.section, 'bundle');
+  assert.equal(b.store, 'indiegala');
+});
+
+test('Launcher : toujours déduit, jamais « non précisé »', () => {
+  const pc = (title, merchant, description = '') => classifyDealabs({ guid: title, title, merchant, description, link: 'https://www.dealabs.com/bons-plans/x-1234567', pubDate: now, category: 'Consoles & Jeux vidéo', priceText: '9,99€', feed: 'pc', hot: true }, { ...DEFAULT_SETTINGS, stores: Object.fromEntries(PC_STORE_ORDER.map((s) => [s, true])) }, now)?.platform;
+  assert.equal(pc('Lies of P sur PC (Dématérialisé)', 'Fanatical'), 'steam');
+  assert.equal(pc('Lies of P sur PC (Dématérialisé)', 'Gamivo'), 'steam');
+  assert.equal(pc('Red Dead Redemption sur PC (Dématérialisé)', '', 'Clé à activer sur Epic Games Store'), 'epic');
+  assert.equal(pc('Like a Dragon sur Xbox Series X|S & PC (Dématérialisé)', 'Xbox Store'), 'microsoft');
+});
+
+test('Niveaux : lecture au plus large, tri ensuite', () => {
+  const at = (level) => ({ ...DEFAULT_SETTINGS, ...LEVELS[level], level });
+  const cs = { source: 'cheapshark', crit: { normal: 59.99, meta: 90, steam: 92, count: 9000 }, flags: {}, offers: { steam: { price: 20, discount: 65 }, epic: { price: 25, discount: 45 } }, platform: 'steam', price: 20, discount: 65 };
+  const n = (d, level) => keepAtLevel([structuredClone(d)], at(level)).length;
+  assert.deepEqual(['strict', 'balanced', 'wide'].map((l) => n(cs, l)), [0, 1, 1]);
+  assert.deepEqual(Object.keys(keepAtLevel([structuredClone(cs)], at('balanced'))[0].offers), ['steam']);
+  assert.deepEqual(Object.keys(keepAtLevel([structuredClone(cs)], at('wide'))[0].offers), ['steam', 'epic']);
+  const es = { source: 'eshop', discount: 45, flags: { popular: false } };
+  assert.deepEqual(['strict', 'balanced', 'wide'].map((l) => n(es, l)), [0, 1, 1]);
+  const bd = { source: 'bundle', bundle: { good: 4 }, flags: {} };
+  assert.deepEqual(['strict', 'balanced', 'wide'].map((l) => n(bd, l)), [0, 1, 1]);
+  assert.equal(n({ source: 'gog', discount: 10, flags: { wishlist: true } }, 'strict'), 1, 'souhait toujours gardé');
+  for (const l of Object.values(LEVELS)) for (const k of ['pcMinDiscount', 'gemMinDiscount', 'gemMinRating', 'switchMinDiscount']) assert.ok(WIDEST[k] <= l[k], k);
+  // Sans réseau, depuis le cache, et sans abîmer le cache
+  const cache = { cheapshark: { items: [{ ...cs, id: 'cs:1', section: 'pc', channel: 'official', title: 'A' }], at: now } };
+  const copy = structuredClone(cache);
+  assert.equal(assembleDeals(at('strict'), cache, {}, now).deals.length, 0);
+  assert.equal(assembleDeals(at('wide'), cache, {}, now).deals.length, 1);
+  assert.deepEqual(cache, copy);
+});
+
+test('Recommandations : goûts Steam, effet des filtres, niveau conseillé', () => {
+  const games = [...Array.from({ length: 30 }, (_, i) => ({ name: 'RPG ' + i, tags: [122] })), { name: 'LEGO City', tags: [21] }, { name: 'Borderlands 2', tags: [1663] }, { name: 'Borderlands 3', tags: [1774] }];
+  const taste = tasteFrom(games);
+  assert.equal(taste.total, 33);
+  assert.equal(taste.genres.rpg, 30);
+  assert.equal(taste.franchises.Borderlands, 2);
+  const hide = genresToHide(taste, { sport: 12, racing: 3 }, ['horror']);
+  assert.equal(hide[0], 'sport', 'le plus utile d’abord');
+  assert.ok(!hide.includes('rpg') && !hide.includes('horror') && !hide.includes('shooter'));
+  assert.deepEqual(genresToHide(tasteFrom(games.slice(0, 5)), {}), [], 'trop peu de jeux pour conclure');
+  const ranked = rankFranchises(taste, { 'Mass Effect': 4, LEGO: 9 });
+  assert.equal(ranked[0].keyword, 'Mass Effect');
+  assert.ok(ranked[0].star);
+  assert.ok(ranked.find((r) => r.keyword === 'LEGO').owned === 1 && !ranked.find((r) => r.keyword === 'LEGO').star);
+  assert.equal(rankFranchises(null, { LEGO: 9 })[0].keyword, 'LEGO', 'sans Steam : seulement l’effet sur les annonces');
+  const hits = filterHits([{ title: 'LEGO Batman' }, { title: 'EA FC 27' }], [{ title: 'Zombie Army 4' }]);
+  assert.equal(hits.keywords.LEGO, 1);
+  assert.equal(hits.keywords['EA Sports FC'], 1);
+  assert.equal(hits.keywords['Zombie Army'], 1);
+  assert.equal(recommendedLevel({ strict: 100, balanced: 200, wide: 240 }), 'balanced');
+  assert.equal(recommendedLevel({ strict: 200, balanced: 430, wide: 450 }), 'strict');
+});
+
+test('Réglages par défaut et listes demandées', () => {
+  assert.equal(DEFAULT_SETTINGS.intervalHours, 0.25);
+  assert.deepEqual(PC_STORE_ORDER, ['steam', 'epic', 'gog', 'ea', 'ubisoft', 'battlenet', 'microsoft', 'itch', 'indiegala', 'other']);
+  for (const k of ['BioShock', 'Borderlands', 'Dead Island', 'Killing Floor', 'Mass Effect', 'Zombie Army']) assert.ok(KEYWORD_SUGGESTIONS.includes(k), k);
 });

@@ -20,7 +20,7 @@ export function mergeGames(lists, now = Date.now()) {
 
     const g = merged.find(
       (m) =>
-        m.store === item.store &&
+        (m.store === item.store || (m.prime && item.prime)) && // un même jeu Prime peut être annoncé sur deux plateformes
         ((m.appid && item.appid && m.appid === item.appid) || m._titles.some((t) => titlesMatch(t, item.title))),
     );
 
