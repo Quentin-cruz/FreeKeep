@@ -1,4 +1,5 @@
-// Le vrai service worker, dans un navigateur simulé : les clics faits pendant une vérification ne doivent pas se perdre.
+// Le vrai service worker, dans un navigateur simulé : les clics et les réglages changés pendant une vérification
+// ne doivent pas se perdre.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { epicFixture } from './fixtures.js';
@@ -33,6 +34,7 @@ const event = () => {
 };
 
 let nextTab = 1;
+let notified = []; // textes des notifications
 const noop = async () => {};
 globalThis.chrome = {
   runtime: { onInstalled: event(), onStartup: event(), onMessage: event(), getURL: (p) => p, openOptionsPage: noop },
@@ -43,14 +45,16 @@ globalThis.chrome = {
     create: async () => { await tick(); return { id: nextTab++ }; },
     sendMessage: noop,
   },
-  notifications: { onClicked: event(), onButtonClicked: event(), create: () => {}, clear: () => {} },
+  notifications: { onClicked: event(), onButtonClicked: event(), create: (id, n) => notified.push(`${n.title} ${n.message}`), clear: () => {} },
   action: { setBadgeBackgroundColor: noop, setBadgeTextColor: noop, setBadgeText: noop, setTitle: noop, openPopup: noop },
 };
 
 // Réseau : Epic répond quand le test le décide, les autres sources tout de suite.
 let gate = null;
+let epicCalls = 0;
 globalThis.fetch = async (url) => {
   if (String(url).includes('freeGamesPromotions')) {
+    epicCalls++;
     if (gate) await gate.promise;
     return new Response(JSON.stringify(epicFixture(Date.now())));
   }
@@ -165,4 +169,113 @@ test('Une erreur dans une action ne bloque pas les suivantes', async () => {
   assert.match(res.error, /disque plein/);
   const after = await send({ type: 'setClaimed', key: game.key, claimed: true });
   assert.equal(after.states[game.key].claimed, true);
+});
+
+// ---------- Réglages changés pendant une vérification ----------
+
+// Enregistre des réglages et prévient le service worker, comme le fait le navigateur.
+async function changeSettings(patch) {
+  const { settings: oldValue } = await chrome.storage.sync.get('settings');
+  const newValue = { ...oldValue, ...patch };
+  await chrome.storage.sync.set({ settings: newValue });
+  chrome.storage.onChanged.listeners.forEach((fn) => fn({ settings: { oldValue, newValue } }, 'sync'));
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const DEBOUNCE = 1700; // le service worker attend 1,5 s après un changement de réglage
+async function idle() {
+  for (let i = 0; i < 400; i++) {
+    const state = await send({ type: 'getState' });
+    if (!state.refreshing) return state;
+    await sleep(5);
+  }
+  throw new Error('la vérification ne finit pas');
+}
+async function startBlocked() {
+  closeGate();
+  send({ type: 'refresh' });
+  for (let i = 0; i < 20; i++) await tick();
+}
+
+test('Réglage changé pendant une vérification : une nouvelle part avec les bons réglages', async () => {
+  await setup();
+  await startBlocked();
+  await changeSettings({ stores: { ...DEFAULT_SETTINGS.stores, epic: false } });
+  await sleep(DEBOUNCE);
+  gate.open();
+  const { games } = await idle();
+  assert.equal(games.filter((g) => g.store === 'epic').length, 0, 'Epic décoché : plus aucun jeu Epic');
+});
+
+test('Plusieurs réglages changés pendant une vérification : une seule relance', async () => {
+  await setup();
+  await startBlocked();
+  epicCalls = 0;
+  await changeSettings({ level: 'wide' });
+  await sleep(DEBOUNCE);
+  await changeSettings({ level: 'strict' });
+  await sleep(DEBOUNCE);
+  gate.open();
+  await idle();
+  assert.equal(epicCalls, 1);
+});
+
+test('Fin du tutoriel : la vérification déjà lancée avec ces réglages n’est pas refaite', async () => {
+  await setup();
+  epicCalls = 0;
+  await changeSettings({ level: 'wide' });
+  closeGate();
+  send({ type: 'refresh', force: ['steamlib', 'cheapshark', 'eshop', 'ggdeals'] });
+  await sleep(DEBOUNCE);
+  gate.open();
+  await idle();
+  assert.equal(epicCalls, 1);
+});
+
+test('« Vérifier maintenant » pendant une vérification : une nouvelle part ensuite', async () => {
+  await setup();
+  await startBlocked();
+  epicCalls = 0;
+  const manual = send({ type: 'refresh', force: ['cheapshark'] });
+  for (let i = 0; i < 20; i++) await tick();
+  gate.open();
+  await manual;
+  assert.equal(epicCalls, 1);
+});
+
+test('Ouvrir le popup pendant une vérification : pas de relance inutile', async () => {
+  await setup();
+  await startBlocked();
+  epicCalls = 0;
+  const popup = send({ type: 'refresh' });
+  for (let i = 0; i < 20; i++) await tick();
+  gate.open();
+  await popup;
+  await idle();
+  assert.equal(epicCalls, 0);
+});
+
+test('Notifications coupées pendant une vérification : aucune ne part', async () => {
+  await setup();
+  await chrome.storage.local.set({ seen: [] });
+  notified = [];
+  await startBlocked();
+  await changeSettings({ notifyNew: false, notifyLastDay: false });
+  gate.open();
+  await idle();
+  assert.deepEqual(notified, []);
+});
+
+test('Jeu banni pendant une vérification : pas de notification pour lui, mais pour les autres si', async () => {
+  const [banned, other] = await setup();
+  await chrome.storage.local.set({ seen: [] });
+  notified = [];
+  await startBlocked();
+  await changeSettings({ bannedKeywords: [banned.title] });
+  await sleep(50);
+  gate.open(); // la vérification finit avant même que la relance soit programmée
+  await sleep(DEBOUNCE);
+  await idle();
+  const text = notified.join(' | ');
+  assert.ok(!text.includes(banned.title), text);
+  assert.ok(text.includes(other.title), text);
 });

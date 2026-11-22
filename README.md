@@ -142,7 +142,7 @@ extension/
 tests/
 ├── fixtures.js                # données calquées sur le format réel des API
 ├── unit.test.js               # 40 tests
-└── background.test.js         # 8 tests : clics pendant une vérification
+└── background.test.js         # 15 tests : clics et réglages changés pendant une vérification
 ```
 
 ## Tests

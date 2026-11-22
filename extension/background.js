@@ -58,14 +58,18 @@ const CHEAP_SETTINGS = ['notifyNew', 'notifyLastDay', 'notifyDeals', 'notifyWish
 const REFETCH_SETTINGS = ['pc', 'switch', 'switch2', 'stores', 'level', 'pcMinDiscount', 'gemMinDiscount', 'gemMinRating', 'switchMinDiscount', 'ggdealsKey', 'keyshops', 'pcDeals', 'switchDeals'];
 const LIBRARY_SETTINGS = ['steamProfile', 'steamOwnedSync', 'useWishlist'];
 const GOG_SETTINGS = ['gogSessionSync'];
+const NOTIFY_SETTINGS = ['notifyNew', 'notifyLastDay', 'notifyDeals', 'notifyWishlist'];
+
+const changedSettings = (a, b) => Object.keys({ ...a, ...b }).filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k]));
+const needsRefresh = (changed) => changed.some((k) => !CHEAP_SETTINGS.includes(k));
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'sync' || !changes.settings) return;
   const before = changes.settings.oldValue || {};
   const after = changes.settings.newValue || {};
-  const changed = Object.keys({ ...before, ...after }).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]));
+  const changed = changedSettings(before, after);
   if (changed.includes('intervalHours')) scheduleAlarm();
-  if (!changed.length || changed.every((k) => CHEAP_SETTINGS.includes(k))) {
+  if (!needsRefresh(changed)) {
     updateBadge();
     return;
   }
@@ -82,10 +86,13 @@ let pendingForce = new Set();
 function settingsRefresh(force = []) {
   force.forEach((f) => pendingForce.add(f));
   clearTimeout(settingsTimer);
-  settingsTimer = setTimeout(() => {
+  settingsTimer = setTimeout(async () => {
     const f = [...pendingForce];
     pendingForce = new Set();
-    refresh('settings', { force: f });
+    const settings = await getSettings();
+    // La vérification en cours a déjà pris ces réglages (fin du tutoriel) : inutile d'en refaire une.
+    if (running && current?.settings && !needsRefresh(changedSettings(current.settings, settings)) && f.every((x) => current.force.includes(x))) return;
+    refresh('settings', { force: f, fresh: true });
   }, 1500);
 }
 
@@ -106,15 +113,40 @@ async function scheduleAlarm() {
 // Rafraîchissement des sources
 // ---------------------------------------------------------------------------
 
-let running = null;
+let running = null; // vérification en cours
+let current = null; // ses réglages et les sources qu'elle recharge
+let next = null;    // vérification à lancer juste après
 
-function refresh(reason = 'manual', opts = {}) {
-  if (!running) running = doRefresh(reason, opts).finally(() => { running = null; });
+function start(reason, force) {
+  current = { settings: null, force };
+  running = doRefresh(reason, force).finally(() => { running = null; });
   return running;
 }
 
-async function doRefresh(reason, { force = [] } = {}) {
-  const settings = effective(await getSettings());
+/**
+ * Une seule vérification à la fois. Pendant qu'une tourne :
+ *  - sans demande particulière (popup, alarme), on attend simplement celle en cours ;
+ *  - avec `force` ou `fresh` (réglage changé), une seule autre part juste après, avec les réglages du moment.
+ */
+function refresh(reason = 'manual', { force = [], fresh = false } = {}) {
+  if (!running && !next) return start(reason, force);
+  if (running && !fresh && !force.length) return running;
+  if (!next) {
+    next = { reason, force: new Set() };
+    next.promise = running.catch(() => {}).then(() => {
+      const n = next;
+      next = null;
+      return start(n.reason, [...n.force]);
+    });
+  }
+  force.forEach((f) => next.force.add(f));
+  return next.promise;
+}
+
+async function doRefresh(reason, force) {
+  const rawSettings = await getSettings();
+  current.settings = rawSettings;
+  const settings = effective(rawSettings);
   const w = wants(settings);
   const data = await getData();
   const enabled = w.free ? w.stores : [];
@@ -219,20 +251,30 @@ async function doRefresh(reason, { force = [] } = {}) {
     data.dealStates = current.dealStates;
     markSteamOwned(games, data.states, data.steamLib, sessionIds);
     syncGogOwned(games, data.states, owned);
-    await finishRefresh({ data, games, deals, settings, now, reason, errors, dealErrors, sources: { ...sourceStatus, ...dealStatus } });
+    const latest = await getSettings();
+    await finishRefresh({
+      data, games, deals, now, reason, errors, dealErrors,
+      sources: { ...sourceStatus, ...dealStatus },
+      // Réglages de notification du moment, même coupés en cours de route
+      settings: { ...settings, ...Object.fromEntries(NOTIFY_SETTINGS.map((k) => [k, latest[k]])) },
+      // Réglages changés : ces résultats sont dépassés, la prochaine vérification notifiera les bons.
+      outdated: needsRefresh(changedSettings(rawSettings, latest)),
+    });
   });
   await updateBadge();
   return { ok: true, errors, dealErrors };
 }
 
 // Notifications + enregistrement (appelé sous verrou).
-async function finishRefresh({ data, games, deals, settings, now, reason, errors, dealErrors, sources }) {
+async function finishRefresh({ data, games, deals, settings, now, reason, errors, dealErrors, sources, outdated }) {
   // Pas de notification pendant le tutoriel
   const visibleGames = games.filter((g) => !g.hiddenBy);
   const visibleDeals = deals.filter((d) => !d.hiddenBy);
   if (settings.onboarded) {
-    notifyChanges(visibleGames, data, settings, now);
-    notifyDeals(visibleDeals, data, settings);
+    if (!outdated) {
+      notifyChanges(visibleGames, data, settings, now);
+      notifyDeals(visibleDeals, data, settings);
+    }
   } else {
     // On mémorise ce qui existe déjà pour ne pas tout notifier après le tutoriel.
     const seen = new Set(data.seen);
@@ -243,7 +285,8 @@ async function finishRefresh({ data, games, deals, settings, now, reason, errors
   for (const [id, st] of Object.entries(data.dealStates)) if (now - (st.at || 0) > 60 * DAY) delete data.dealStates[id];
 
   data.meta = {
-    ...data.meta, lastRefresh: now, lastReason: reason, errors, dealErrors, initialized: true, dealsInitialized: true,
+    ...data.meta, lastRefresh: now, lastReason: reason, errors, dealErrors,
+    initialized: data.meta.initialized || !outdated, dealsInitialized: data.meta.dealsInitialized || !outdated,
     sources,
   };
   await saveData({
@@ -667,7 +710,7 @@ function libSummary(lib = {}) {
 async function publicState() {
   const [settings, data] = await Promise.all([getSettings(), getData()]);
   return {
-    settings, games: data.games, states: data.states, meta: data.meta, refreshing: !!running,
+    settings, games: data.games, states: data.states, meta: data.meta, refreshing: !!(running || next),
     deals: data.deals, dealStates: data.dealStates, steamLib: libSummary(data.steamLib),
     gogLib: { username: data.gogLib?.username || '', count: data.gogLib?.count || 0, at: data.gogLib?.at || null, error: data.gogLib?.error || null },
   };
@@ -742,7 +785,7 @@ async function handleMessage(msg, sender) {
       }
     case 'resetData':
       // Une vérification en cours réenregistrerait les anciennes données : on la laisse finir d'abord.
-      if (running) await running.catch(() => {});
+      while (running || next) await (next?.promise || running).catch(() => {});
       await locked(() => chrome.storage.local.clear());
       await refresh('reset');
       return publicState();
