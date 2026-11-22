@@ -71,18 +71,19 @@ export function storeGrid(stores, onChange, ids = PC_STORE_ORDER) {
 // Bloc « Bundles » : oui / non, puis les sites
 export function bundleBox(d, onChange) {
   const sub = h('div', { class: 'sub' },
-    h('p', { class: 'note' }, 'Packs de jeux Steam à petit prix. Seuls ceux qui contiennent plusieurs jeux bien notés sont montrés.'),
+    h('p', { class: 'note' }, 'Packs de jeux à petit prix. Seuls ceux qui valent le coup sont montrés (jeux bien notés, grosse remise).'),
     h('div', { class: 'tgrid' }, Object.values(BUNDLE_STORES).map((b) =>
       toggleCard({
         icon: h('span', { class: 'store-dot', style: `background:${b.bg};color:${b.color}` }, b.short.slice(0, 2)),
         title: b.name,
+        desc: b.desc,
         checked: d.bundleStores?.[b.id] !== false,
         accent: b.color,
         onChange: (on) => onChange('store', b.id, on),
       }))));
   sub.hidden = !d.bundles;
   return h('div', { class: 'prime-box' },
-    switchRow({ title: '📚 Bundles', desc: 'Humble Bundle, Fanatical, Green Man Gaming…', checked: d.bundles, onChange: (v) => { sub.hidden = !v; onChange('bundles', v); } }),
+    switchRow({ title: '📚 Bundles', desc: 'Humble Bundle, Fanatical, Steam, GOG, itch.io…', checked: d.bundles, onChange: (v) => { sub.hidden = !v; onChange('bundles', v); } }),
     sub,
   );
 }

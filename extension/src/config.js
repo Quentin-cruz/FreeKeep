@@ -27,16 +27,15 @@ export const STORES = {
 
 export const PC_STORE_ORDER = ['steam', 'epic', 'gog', 'ea', 'ubisoft', 'battlenet', 'microsoft', 'itch', 'indiegala', 'other'];
 
-// Sites de bundles
+// Bundles : quatre choix
 export const BUNDLE_STORES = {
-  humble:    { id: 'humble',    name: 'Humble Bundle',     short: 'Humble',    color: '#ff8f8f', bg: '#4a1414', re: /humble/i },
-  fanatical: { id: 'fanatical', name: 'Fanatical',         short: 'Fanatical', color: '#ffc15c', bg: '#4a2f08', re: /fanatical/i },
-  gmg:       { id: 'gmg',       name: 'Green Man Gaming',  short: 'GMG',       color: '#8fe28f', bg: '#103a1c', re: /green ?man|\bgmg\b/i },
-  indiegala: { id: 'indiegala', name: 'IndieGala',         short: 'IndieGala', color: '#ffd27a', bg: '#3d2a0a', re: /indie ?gala/i },
-  digiphile: { id: 'digiphile', name: 'Digiphile',         short: 'Digiphile', color: '#7cc4ff', bg: '#0b2a4a', re: /digiphile/i },
-  other:     { id: 'other',     name: 'Autres (Steam, GOG, Planetplay, Xsolla…)', short: 'Autres', color: '#d0c2ff', bg: '#2a1f4a', re: /.*/ },
+  humble: { id: 'humble', name: 'Humble Bundle', short: 'Humble', color: '#ff8f8f', bg: '#4a1414', re: /humble/i },
+  keys:   { id: 'keys', name: 'Fanatical + Green Man Gaming + Digiphile', short: 'Fanatical & co', color: '#ffc15c', bg: '#4a2f08', re: /fanatical|green ?man|\bgmg\b|digiphile/i },
+  stores: { id: 'stores', name: 'Stores sélectionnés au-dessus', short: 'Mes stores', desc: 'Bundles vendus par Steam, GOG…', color: '#7cc4ff', bg: '#0b2a4a', re: /^\s*(?:steam|gog(?:\.com)?|epic(?: games)?(?: store)?|ubisoft(?: \w+)?|ea(?: app)?|electronic arts|microsoft(?: store)?|xbox(?: store)?|battle\.?net)\s*$/i },
+  indie:  { id: 'indie', name: 'Indie sans DRM', short: 'Indie', desc: 'itch.io + IndieGala', color: '#ff9e9e', bg: '#5c1f24', re: /itch|indie ?gala/i },
 };
-export const bundleStoreOf = (merchant) => Object.values(BUNDLE_STORES).find((b) => b.re.test(String(merchant || ''))).id;
+/** Case de bundles d'un vendeur, ou null s'il n'est pas suivi. */
+export const bundleStoreOf = (merchant) => Object.values(BUNDLE_STORES).find((b) => b.re.test(String(merchant || '')))?.id || null;
 
 // Licences proposées à bannir
 export const KEYWORD_SUGGESTIONS = [
@@ -131,6 +130,7 @@ export const ENDPOINTS = {
   eaDeals: 'https://www.ea.com/fr-fr/sales/deals',
   barter: 'https://barter.vg/bundles/json/',
   lootscraper: 'https://feed.eikowagenknecht.com',
+  itchBundles: 'https://itch.io/bundles',
   fanatical: 'https://www.fanatical.com/api/all/fr',
   enebaSwitch: 'https://www.eneba.com/fr/store/nintendo-games',
   kinguin: 'https://www.kinguin.net/services/library/api/v1/products/search',
@@ -166,7 +166,7 @@ export const DEFAULT_SETTINGS = {
   physical: true,         // jeux en boîte (magasins)
   keyshops: true,         // sites de clés (marché gris)
   bundles: true,
-  bundleStores: { humble: true, fanatical: true, gmg: true, indiegala: true, digiphile: true, other: true },
+  bundleStores: { humble: true, keys: true, stores: true, indie: true },
   level: 'balanced',      // strict | balanced | wide | custom
   pcMinDiscount: 60,      // seuils (utilisés quand level = custom)
   gemMinDiscount: 70,
@@ -203,7 +203,7 @@ export const DEFAULT_SETTINGS = {
 };
 
 // Sources à relire quand un réglage de bons plans change.
-export const DEAL_SOURCES = ['cheapshark', 'eshop', 'ggdeals', 'gog', 'ea', 'bundles', 'switchkeys', 'dealabsPages'];
+export const DEAL_SOURCES = ['cheapshark', 'eshop', 'ggdeals', 'gog', 'ea', 'bundles', 'storebundles', 'itchbundles', 'switchkeys', 'dealabsPages'];
 
 // Fréquence des vérifications, en heures.
 export const INTERVALS = [

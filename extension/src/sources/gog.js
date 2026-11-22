@@ -1,6 +1,7 @@
 // Catalogue officiel GOG : promos en euros, avec la note des joueurs.
 import { ENDPOINTS } from '../config.js';
 import { fetchJson } from '../util.js';
+import { GOG_PACK } from './storebundles.js';
 
 const ORDERS = ['desc:trending', 'desc:bestselling'];
 const PAGES = 2;
@@ -35,6 +36,7 @@ export function parseGog(products, settings) {
     const price = Number(p?.price?.finalMoney?.amount);
     const normal = Number(p?.price?.baseMoney?.amount);
     if (!p?.id || !p.title || !(normal > 0) || Number.isNaN(price) || p.price.finalMoney.currency !== 'EUR') continue;
+    if (p.productType === 'pack' && GOG_PACK.test(p.title)) continue; // dans la section Bundles
     const discount = Math.round((1 - price / normal) * 100);
     const rating = (Number(p.reviewsRating) || 0) / 10; // note sur 5
     // Bons jeux seulement : un vrai prix de départ et une note solide

@@ -130,7 +130,7 @@ function render() {
 
   const sources = {
     free: ['Epic, Steam, GOG, ', h('a', { href: 'https://feed.eikowagenknecht.com/lootscraper/', target: '_blank' }, 'LootScraper'), ', ', h('a', { href: 'https://www.gamerpower.com', target: '_blank' }, 'GamerPower'), S.settings.dealabs ? ', Dealabs' : ''],
-    bundle: ['Bundles : ', h('a', { href: 'https://barter.vg', target: '_blank' }, 'Barter.vg'), ', Fanatical, Humble Bundle, GMG, IndieGala, Digiphile, Steam'],
+    bundle: ['Bundles : ', h('a', { href: 'https://barter.vg', target: '_blank' }, 'Barter.vg'), ', Humble Bundle, Fanatical, GMG, Digiphile, Steam, GOG, itch.io, IndieGala'],
     pc: ['Prix : ', h('a', { href: 'https://www.cheapshark.com', target: '_blank' }, 'CheapShark'), ', GOG, EA, Barter.vg, Dealabs', S.settings.ggdealsKey ? [', ', h('a', { href: 'https://gg.deals', target: '_blank' }, 'GG.deals')] : ''],
     switch: ['Prix : eShop, Eneba, Kinguin, Instant Gaming, ', h('a', { href: 'https://www.dealabs.com', target: '_blank' }, 'Dealabs')],
   }[ui.section];
@@ -145,10 +145,10 @@ function renderBanner() {
   box.replaceChildren();
   const names = {
     epic: 'Epic Games', steam: 'Steam', gamerpower: 'GamerPower', lootscraper: 'LootScraper', cheapshark: 'CheapShark', eshop: 'eShop Nintendo',
-    dealabs: 'Dealabs', ggdeals: 'GG.deals', gog: 'GOG', ea: 'EA', bundles: 'bundles', switchkeys: 'clés Switch', watchlist: 'CheapShark', bons_plans: 'bons plans',
+    dealabs: 'Dealabs', ggdeals: 'GG.deals', gog: 'GOG', ea: 'EA', bundles: 'bundles', storebundles: 'bundles Steam et GOG', itchbundles: 'itch.io', switchkeys: 'clés Switch', watchlist: 'CheapShark', bons_plans: 'bons plans',
   };
   const relevant = {
-    bundle: ['bundles', 'dealabs'],
+    bundle: ['bundles', 'storebundles', 'itchbundles', 'dealabs'],
     free: ['epic', 'steam', 'gamerpower', 'lootscraper'],
     pc: ['cheapshark', 'gog', 'dealabs', 'ggdeals', 'watchlist', 'bons_plans'],
     switch: ['eshop', 'switchkeys', 'dealabs', 'bons_plans'],
@@ -233,7 +233,7 @@ function platformFilters(section) {
   }
   if (section === 'bundle') {
     return Object.values(BUNDLE_STORES).filter((b) => S.settings.bundleStores?.[b.id] !== false)
-      .map((b) => ({ id: b.id, label: b.short, color: b.color, always: b.id !== 'other', test: (d) => d.store === b.id }));
+      .map((b) => ({ id: b.id, label: b.short, color: b.color, always: true, test: (d) => d.store === b.id }));
   }
   return PC_STORE_ORDER.filter((id) => S.settings.stores?.[id])
     .map((id) => ({ id, label: STORES[id].short, color: STORES[id].color, always: true, test: (d) => onPlatform(d, id) }));
@@ -244,7 +244,7 @@ function kindFilters(section) {
   const top = { id: 'top', label: '🔥 Top', test: (d) => d.exceptional };
   if (section === 'bundle') {
     return [
-      { id: 'best', label: '👍 Les meilleurs', test: (d) => (d.bundle?.good ?? 0) >= 6 },
+      { id: 'best', label: '👍 Les meilleurs', test: (d) => (d.bundle?.good ?? 0) >= 6 || (d.source === 'storebundle' && d.discount >= 85) },
       { id: 'cheap', label: 'Moins de 10 €', test: (d) => d.price != null && d.price < 10 },
       { id: 'wishlist', label: '❤️ Contient un souhait', test: (d) => !!d.flags?.wishlist },
     ];
@@ -345,7 +345,8 @@ function dealPills(d) {
   if (f.nintendo) out.push(pill('Nintendo', 'nintendo'));
   if (f.gem) out.push(pill('💎 Pépite', 'gem', 'Très bien noté par les joueurs'));
   if (d.priceNote) out.push(pill(`💶 ${d.priceNote}`, 'muted'));
-  if (d.bundle) out.push(pill(`👍 ${d.bundle.good} jeux bien notés sur ${d.bundle.games}`, 'gem', 'Au moins 80 % d’avis positifs et 1 000 avis Steam'));
+  if (d.bundle?.average) out.push(pill(`👍 ${d.bundle.average} % d’avis positifs en moyenne`, 'gem', 'Moyenne des avis Steam de ses jeux'));
+  else if (d.bundle) out.push(pill(`👍 ${d.bundle.good} jeux bien notés sur ${d.bundle.games}`, 'gem', 'Au moins 80 % d’avis positifs et 1 000 avis Steam'));
   if (d.bundle?.owned) out.push(pill(`🎮 tu en as déjà ${d.bundle.owned}`, 'muted'));
   if (d.rating?.gog) out.push(pill(`GOG ${String(d.rating.gog.toFixed(1)).replace('.', ',')}/5`, 'score', 'Note des joueurs GOG'));
   if (d.rating?.metacritic) out.push(pill(`MC ${d.rating.metacritic}`, 'score', 'Note Metacritic'));
@@ -372,7 +373,7 @@ function compareUrl(d) {
 function dealCard(d, isHidden) {
   const coverEl = cover(d.images, d.section === 'switch' ? 'switch' : 'pc', d.square);
   if (d.section === 'pc' && STORES[d.platform]) coverEl.append(badge(d.platform));
-  if (d.section === 'bundle' && BUNDLE_STORES[d.store]) coverEl.append(h('span', { class: 'store-badge', style: `color:${BUNDLE_STORES[d.store].color};background:${BUNDLE_STORES[d.store].bg}` }, d.store === 'other' ? d.merchant : BUNDLE_STORES[d.store].short));
+  if (d.section === 'bundle' && BUNDLE_STORES[d.store]) coverEl.append(h('span', { class: 'store-badge', style: `color:${BUNDLE_STORES[d.store].color};background:${BUNDLE_STORES[d.store].bg}` }, d.merchant));
   if (d.platform === 'switch2') coverEl.append(h('span', { class: 'store-badge', style: 'color:#fff;background:#e60012' }, 'Switch 2'));
   if (d.discount) coverEl.append(h('span', { class: 'disc' }, `-${d.discount} %`));
   if (d.exceptional) coverEl.append(h('span', { class: 'flame', title: 'Affaire exceptionnelle' }, '🔥'));

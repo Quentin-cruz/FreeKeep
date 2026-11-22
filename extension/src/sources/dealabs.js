@@ -268,6 +268,8 @@ export function classifyDealabs(it, settings, now = Date.now()) {
   const hot = !!it.hot || (it.temperature ?? 0) >= 100;
   const bundle = /\bbundle\b|pack de \d+ jeux|lot de \d+ jeux/i.test(title);
   const section = isSwitch ? 'switch' : bundle ? 'bundle' : 'pc';
+  const bundleStore = section === 'bundle' ? bundleStoreOf(it.merchant) : null;
+  if (section === 'bundle' && !bundleStore) return null; // vendeur de bundles non suivi
   let channel;
   if (keyshop) channel = 'keyshop';
   else if (bundle) channel = 'bundle';
@@ -291,7 +293,7 @@ export function classifyDealabs(it, settings, now = Date.now()) {
     source: 'dealabs',
     section,
     channel,
-    ...(section === 'bundle' ? { store: bundleStoreOf(it.merchant) } : {}),
+    ...(section === 'bundle' ? { store: bundleStore } : {}),
     title,
     url: it.link,
     images: [biggerImage(it.image)].filter(Boolean),

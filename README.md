@@ -8,7 +8,7 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en quatre se
 |---|---|
 | 🎁 **Gratuits** | Jeux PC offerts à garder à vie : Epic, Steam, GOG, Ubisoft, EA, Battle.net, Microsoft Store, **Amazon Prime** (Amazon Games, Legacy Games, Luna), **et les drops ponctuels** (Alienware Arena, Fanatical, Humble Bundle, IndieGala, itch.io…) |
 | 💻 **Promos PC** | Seulement les **gros jeux bien notés** et les **pépites** très appréciées à grosse remise, sur les stores officiels et les sites de clés |
-| 📚 **Bundles** | Les meilleurs packs de jeux Steam : Humble Bundle, Fanatical, Green Man Gaming, IndieGala, Digiphile… |
+| 📚 **Bundles** | Les meilleurs packs : Humble Bundle · Fanatical + Green Man Gaming + Digiphile · bundles de tes stores (Steam, GOG) · indie sans DRM (itch.io + IndieGala) |
 | 🎮 **Switch** | Grosses promos **eShop** (jeux jouables sur Switch 1), **jeux en boîte** (Amazon, Fnac, Leclerc…) et **clés** |
 
 ## Installation
@@ -104,7 +104,7 @@ Chaque bon plan Switch est classé **Switch** (jouable sur Switch 1, et donc aus
 |---|---|
 | [GOG](https://www.gog.com) | Catalogue officiel, en euros, jeux notés 4/5 et plus |
 | EA | Offres du site EA, en euros |
-| Bundles | Humble Bundle, Fanatical, Green Man Gaming, IndieGala : contenu via [Barter.vg](https://barter.vg), gardés s'ils ont au moins 3 jeux bien notés sur Steam (2 à 6 selon le niveau) |
+| Bundles | Humble Bundle, Fanatical, Green Man Gaming, Digiphile : contenu via [Barter.vg](https://barter.vg), gardés s'ils ont au moins 3 jeux bien notés sur Steam (2 à 6 selon le niveau). Steam et GOG : remise d'au moins 60 à 85 % sur la valeur du contenu selon le niveau. IndieGala : au moins 4 jeux et 70 à 85 % d'avis positifs en moyenne (clés Steam). [itch.io](https://itch.io/bundles) : lots de 4 jeux et plus à 2,50 € le jeu maximum (pas de note disponible) |
 | Steam | Prix officiels en euros, et promos de ta liste de souhaits |
 | [CheapShark](https://www.cheapshark.com) | Promos sur 30+ stores officiels (Steam, GOG, Humble, Fanatical, GMG, Gamesplanet, Battle.net…), avec la note Metacritic et les avis Steam |
 | [Dealabs](https://www.dealabs.com) | Deals **hot** validés par la communauté, y compris sur les sites de clés (Eneba, Instant Gaming, G2A…), et **erreurs de prix** (avec le groupe « erreur de prix ») |
@@ -149,7 +149,8 @@ extension/
 │       ├── eshop.js                              # promos Switch
 │       ├── dealabs.js                            # boîtes, clés, erreurs de prix, jeux offerts (RSS)
 │       ├── dealabspages.js                       # température, prix de référence, offres récentes
-│       ├── gog.js, ea.js, bundles.js             # promos officielles en euros, bundles
+│       ├── gog.js, ea.js                         # promos officielles en euros
+│       ├── bundles.js, storebundles.js           # Humble, Fanatical… ; Steam, GOG, itch.io
 │       ├── switchkeys.js                         # clés Switch (Eneba, Kinguin, Instant Gaming)
 │       ├── steamstore.js, rates.js               # prix Steam en euros, taux BCE
 │       └── goglibrary.js                         # jeux GOG via la session gog.com
@@ -161,7 +162,7 @@ extension/
 ├── popup/  options/  icons/
 tests/
 ├── fixtures.js                # données calquées sur le format réel des API
-├── unit.test.js               # 68 tests
+├── unit.test.js               # 71 tests
 └── background.test.js         # 19 tests : service worker dans un navigateur simulé
 ```
 
@@ -188,7 +189,7 @@ Une version précédente (0.3) a aussi été testée de bout en bout dans Chrome
 ## Limites connues
 
 - **Prix en euros** : exacts pour Steam, GOG, EA, l'eShop, les clés Switch, les bundles et Dealabs. CheapShark (Epic, Ubisoft, revendeurs) et GamerPower ne donnent que des dollars : le prix est converti au taux de la Banque centrale européenne et précédé de « ≈ ».
-- **Bundles** : le prix n'est pas connu pour Digiphile, certains Fanatical et les petits sites. Seul le contenu est comparé.
+- **Bundles** : le prix n'est pas connu pour Digiphile et certains Fanatical. Seul le contenu est comparé.
 - **G2A** bloque les lectures automatiques : ses offres n'apparaissent que si elles sont postées sur Dealabs.
 - **Clés PC** : sans clé API GG.deals, seules celles postées sur Dealabs sont vues.
 - **Dealabs** : les flux par groupe ne donnent pas la température (le flux « Hot » la met en tête du titre, FreeKeep<3 la retire). FreeKeep s'appuie donc sur le flux « Hot » officiel et garde un historique de 14 jours. Un deal peut avoir expiré même s'il est encore listé.

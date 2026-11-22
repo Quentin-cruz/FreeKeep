@@ -988,7 +988,7 @@ test('Prix en euros : taux BCE, prix Steam exacts, conversion signalée', () => 
 
 test('GOG et EA : promos officielles en euros', () => {
   const p = (id, title, final, base, rating, count, currency = 'EUR') => ({ id, title, slug: 's', storeLink: `https://www.gog.com/fr/game/${id}`, coverHorizontal: 'https://img', price: { finalMoney: { amount: String(final), currency }, baseMoney: { amount: String(base) } }, reviewsRating: rating, reviewsCount: count, genres: [{ slug: 'strategy' }] });
-  const gog = parseGog([p(1, 'Sleeping Dogs', 2.99, 19.99, 46, 2000), p(2, 'Mal noté', 1, 19.99, 30, 900), p(3, 'Trop petit', 0.49, 4.99, 48, 900), p(4, 'Peu remisé', 15, 19.99, 48, 900), p(5, 'En dollars', 2, 19.99, 48, 900, 'USD')], { ...DEFAULT_SETTINGS });
+  const gog = parseGog([p(1, 'Sleeping Dogs', 2.99, 19.99, 46, 2000), p(2, 'Mal noté', 1, 19.99, 30, 900), p(3, 'Trop petit', 0.49, 4.99, 48, 900), p(4, 'Peu remisé', 15, 19.99, 48, 900), p(5, 'En dollars', 2, 19.99, 48, 900, 'USD'), { ...p(6, 'Mafia Trilogy', 5, 59.99, 48, 900), productType: 'pack' }], { ...DEFAULT_SETTINGS });
   assert.deepEqual(gog.map((d) => d.title), ['Sleeping Dogs']);
   assert.equal(gog[0].currency, 'EUR');
   assert.equal(gog[0].platform, 'gog');
@@ -1128,6 +1128,7 @@ import { gameKey, titlesMatch as sameTitle, sameGameStrict as sameStrict } from 
 import { groupDeals, dealKey } from '../extension/src/deals.js';
 import { parseLootScraper, primeStoreFromUrl, parseGogGifts } from '../extension/src/sources/lootscraper.js';
 import { gmgTiers, indieGalaTiers } from '../extension/src/sources/bundles.js';
+import { parsePurchaseOptions, buildSteamBundles, parseGogPacks, parseItch } from '../extension/src/sources/storebundles.js';
 import { keepAtLevel, WIDEST } from '../extension/src/levels.js';
 import { tasteFrom, genresToHide, rankFranchises, filterHits, recommendedLevel } from '../extension/src/recommend.js';
 import { assembleDeals } from '../extension/src/refresh-deals.js';
@@ -1213,17 +1214,11 @@ test('LootScraper : Prime, GOG, Ubisoft ; cadeaux GOG', () => {
   assert.equal(parseGogGifts({ products: [gift('0.00', '19.99'), gift('0.00', '0.00'), gift('5.00', '9.99')] }).length, 1);
 });
 
-test('Bundles : sites, prix GMG et IndieGala', () => {
-  assert.deepEqual(['Humble Bundle', 'Fanatical', 'Green Man Gaming', 'Indiegala', 'Digiphile', 'Steam', ''].map(bundleStoreOf), ['humble', 'fanatical', 'gmg', 'indiegala', 'digiphile', 'other', 'other']);
+test('Bundles : quatre cases, vendeurs suivis et prix GMG', () => {
+  assert.deepEqual(Object.keys(DEFAULT_SETTINGS.bundleStores), ['humble', 'keys', 'stores', 'indie']);
+  assert.deepEqual(['Humble Bundle', 'Fanatical', 'Green Man Gaming', 'Digiphile', 'Steam', 'GOG', 'Epic Games Store', 'itch.io', 'Indiegala'].map(bundleStoreOf), ['humble', 'keys', 'keys', 'keys', 'stores', 'stores', 'stores', 'indie', 'indie']);
+  for (const m of ['Xsolla', 'Planetplay', 'Into Games', 'Tiltify', 'Steamground', '']) assert.equal(bundleStoreOf(m), null, m);
   assert.deepEqual(gmgTiers('Worth €175.93 <span class="price">€5.00</span> <span class="price">€16.00</span> <span class="price">€11.00</span>').map((t) => t.price), [5, 11, 16]);
-  const ig = indieGalaTiers('Pay <strong class="plt">$3.99</strong> or more');
-  assert.equal(ig[0].price, 3.99);
-  const games = Object.fromEntries([1, 2, 3].map((i) => [i, { name: 'G' + i, game: true, normal: 10, rating: 90, reviews: 2000 }]));
-  const [b] = buildBundles([{ id: '7', merchant: 'IndieGala', title: 'Pixel', url: 'https://www.indiegala.com/bundle/x', start: 1, end: now + 1e9, appids: ['1', '2', '3'] }], games, { 7: ig }, { ...DEFAULT_SETTINGS }, 0.9);
-  assert.equal(b.price, 3.59, 'dollars convertis');
-  assert.equal(b.approx, true);
-  assert.equal(b.section, 'bundle');
-  assert.equal(b.store, 'indiegala');
 });
 
 test('Launcher : toujours déduit, jamais « non précisé »', () => {
@@ -1282,4 +1277,77 @@ test('Réglages par défaut et listes demandées', () => {
   assert.equal(DEFAULT_SETTINGS.intervalHours, 0.25);
   assert.deepEqual(PC_STORE_ORDER, ['steam', 'epic', 'gog', 'ea', 'ubisoft', 'battlenet', 'microsoft', 'itch', 'indiegala', 'other']);
   for (const k of ['BioShock', 'Borderlands', 'Dead Island', 'Killing Floor', 'Mass Effect', 'Zombie Army']) assert.ok(KEYWORD_SUGGESTIONS.includes(k), k);
+});
+
+test('Bundles Steam, GOG et itch.io', () => {
+  const options = parsePurchaseOptions({ response: { store_items: [{ purchase_options: [
+    { bundleid: 1, purchase_option_name: 'Metro Saga Bundle', final_price_in_cents: '900', included_game_count: 3, active_discounts: [{ discount_end_date: 1796317200 }] },
+    { packageid: 9, final_price_in_cents: '299', included_game_count: 1 }, { bundleid: 2, purchase_option_name: 'Cher', final_price_in_cents: '5000', included_game_count: 3 },
+    { bundleid: 3, purchase_option_name: 'Mal noté', final_price_in_cents: '100', included_game_count: 2 },
+  ] }] } });
+  assert.deepEqual(Object.keys(options), ['1', '2', '3']);
+  const it = (name, rating = 90, game = true) => ({ name, game, normal: 20, rating, reviews: 5000 });
+  const items = { 10: it('Metro 2033'), 11: it('Metro Exodus'), 12: it('Metro DLC', 90, false), 13: it('Bof', 40), 14: it('Bof 2', 45) };
+  const steam = buildSteamBundles(options, { 1: [10, 11, 12], 2: [10, 11], 3: [13, 14] }, items);
+  assert.deepEqual(steam.map((d) => d.title), ['Metro Saga Bundle']);
+  assert.equal(steam[0].normalPrice, 40, 'les DLC ne comptent pas');
+  assert.equal(steam[0].discount, 78);
+  assert.equal(steam[0].store, 'stores');
+
+  const p = (title, final, base, rating = 0, count = 0) => ({ id: title, title, storeLink: 'u', price: { finalMoney: { amount: String(final), currency: 'EUR' }, baseMoney: { amount: String(base) } }, reviewsRating: rating, reviewsCount: count });
+  const gog = parseGogPacks([p('Mafia Trilogy', 11.99, 59.99, 42, 43), p('Fallout Franchise Bundle', 21.95, 109.75), p('Sans note et peu remisé Bundle', 35, 100), p('Fallout 3 GOTY', 4.99, 19.99, 46, 2000), p('Mal noté Collection', 2, 20, 30, 900)]);
+  assert.deepEqual(gog.map((d) => d.title), ['Mafia Trilogy', 'Fallout Franchise Bundle']);
+  assert.equal(gog[0].platform, 'gog');
+
+  const row = (id, title, label, icons = 'icon-windows8', end = '2099-01-01T00:00:00Z') => `<div data-sale_id="${id}" class="sale_row"><div class="sale_title"><a href="/b/${id}/x">${title}</a></div><div class="game_count">${label}</div><span class="date_format">${end}</span><span class="icon ${icons}"></span><img data-lazy_src="https://img/x.png"/></div>`;
+  const soon = new Date(now + 20 * 24 * 3600e3).toISOString();
+  const itch = parseItch([
+    row(1, 'SpeedJam &amp; co', '7 items for <del>$20.00</del> <strong>$4.00</strong> (save 80%)', 'icon-windows8', soon), row(2, 'Assets', '4 asset packs for $9.99', 'icon-windows8', soon), row(3, 'Livres', '3 books for $18.99', '', soon),
+    row(4, 'Trop cher', '6 games for $60.00', 'icon-windows8', soon), row(5, 'Trop petit', '2 games for $1.00', 'icon-windows8', soon), row(6, 'Permanent', '9 games for $5.00'), row(7, 'En euros', '10 games for 8.00€', 'icon-windows8', soon),
+  ].join(''), 0.9, now);
+  assert.deepEqual(itch.map((d) => d.title), ['En euros', 'SpeedJam & co']);
+  assert.equal(itch[0].approx, false);
+  assert.equal(itch[1].price, 3.6);
+  assert.equal(itch[1].normalPrice, 18);
+  assert.match(itch[1].priceNote, /7 jeux, sans DRM/);
+  assert.equal(itch[1].store, 'indie');
+});
+
+test('Cases de bundles : stores cochés, cases décochées, vendeurs écartés', () => {
+  const b = (id, store, platform, merchant) => ({ id, source: 'storebundle', section: 'bundle', channel: 'bundle', store, platform, merchant, title: id, price: 5, discount: 90, currency: 'EUR', flags: {} });
+  const cache = {
+    storebundles: { at: now, items: [b('Metro Saga', 'stores', 'steam', 'Steam'), b('Mafia Trilogy', 'stores', 'gog', 'GOG')] },
+    itchbundles: { at: now, items: [{ ...b('Jam', 'indie', 'itch', 'itch.io'), source: 'itch' }] },
+    bundles: { at: now, items: [{ ...b('Resident Evil', 'humble', 'steam', 'Humble Bundle'), source: 'bundle', bundle: { good: 8, games: 9, highlights: [], appids: [] } }, { ...b('Vieux cache', 'other', 'steam', 'Xsolla'), source: 'bundle', store: null, bundle: { good: 9 } }] },
+  };
+  const titles = (o) => assembleDeals({ ...DEFAULT_SETTINGS, ...LEVELS.balanced, dealabs: false, ...o }, cache, {}, now).deals.map((d) => d.title).sort();
+  assert.deepEqual(titles({}), ['Jam', 'Mafia Trilogy', 'Metro Saga', 'Resident Evil']);
+  assert.deepEqual(titles({ stores: { ...DEFAULT_SETTINGS.stores, gog: false } }), ['Jam', 'Metro Saga', 'Resident Evil'], 'GOG décoché : pas ses bundles');
+  assert.deepEqual(titles({ bundleStores: { humble: true, keys: true, stores: false, indie: false } }), ['Resident Evil']);
+  assert.deepEqual(titles({ bundles: false }), []);
+  const dl = (merchant) => classifyDealabs({ guid: 'g', title: 'Super Bundle sur PC (Dématérialisé)', merchant, description: '', link: 'https://www.dealabs.com/bons-plans/x-1234567', pubDate: now, category: 'Consoles & Jeux vidéo', priceText: '5€', feed: 'pc', hot: true }, { ...DEFAULT_SETTINGS }, now);
+  assert.equal(dl('Humble Bundle').store, 'humble');
+  assert.equal(dl('Xsolla'), null);
+});
+
+test('Indie sans DRM : bundles IndieGala (notes réelles), adultes et packs de DLC écartés', () => {
+  const g = (name, rating, reviews, game = true) => ({ name, rating, reviews, game, normal: 4.9 });
+  const items = {
+    1: g('Defense high', 83, 112), 2: g('Lab Inspect', 86, 37), 3: g('Power Driver', 96, 25), 4: g('Halt', 70, 60), 5: g('Wanderer', 75, 56),
+    11: g('Pixel Puzzles Pack 4', 50, 2, false), 12: g('Pixel Puzzles Pack 5', 50, 2, false), 13: g('Pixel Puzzles Pack 6', 100, 1, false), 14: g('Pixel Puzzles XL', 33, 3, false),
+    21: g('Lust Epidemic 18+', 90, 175), 22: g('A', 90, 20), 23: g('B', 90, 20), 24: g('C', 90, 20),
+    31: g('Nul 1', 40, 50), 32: g('Nul 2', 45, 50), 33: g('Nul 3', 50, 50), 34: g('Nul 4', 60, 50),
+  };
+  const b = (id, title, appids) => ({ id, merchant: 'IndieGala', title, url: 'https://www.indiegala.com/bundle/x', start: 1, end: now + 1e9, appids });
+  const tiers = indieGalaTiers('Pay <strong class="plt-color-main">$3.49</strong> or more');
+  const out = buildBundles([b('1', 'Power Halt Bundle', ['1', '2', '3', '4', '5']), b('2', 'Pixel Traditions', ['11', '12', '13', '14']), b('3', 'Bundle discret', ['21', '22', '23', '24']), b('4', 'Nul', ['31', '32', '33', '34'])], items, { 1: tiers }, { ...DEFAULT_SETTINGS, ...WIDEST }, 0.9);
+  assert.deepEqual(out.map((d) => d.title), ['Power Halt Bundle']);
+  assert.equal(out[0].store, 'indie');
+  assert.equal(out[0].price, 3.14);
+  assert.equal(out[0].approx, true);
+  assert.equal(out[0].bundle.average, 82);
+  assert.match(out[0].priceNote, /clés Steam/);
+  const at = (level) => keepAtLevel(structuredClone(out), { ...DEFAULT_SETTINGS, ...LEVELS[level], level }).length;
+  assert.deepEqual(['strict', 'balanced', 'wide'].map(at), [0, 1, 1]);
+  assert.equal(parseBarter({ bundles: { 9: { meta: { storename: 'Indiegala', title: 'Lusty Lab Bundle', url: 'u', start: 1, end: Math.round(now / 1000) + 9999 }, games: { 1: { type: 1, id: 1 } } } } }, now).length, 0);
 });

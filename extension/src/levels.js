@@ -49,7 +49,10 @@ export function keepAtLevel(items, s) {
       case 'switchkeys':
         return discount >= (d.flags.nintendo ? 20 : s.switchMinDiscount);
       case 'bundle':
+        if (d.bundle?.average) return d.bundle.average >= { strict: 85, balanced: 75, wide: 70 }[s.level] || (s.level === 'custom' && d.bundle.average >= 75);
         return (d.bundle?.good ?? 0) >= (MIN_GOOD[s.level] ?? 3);
+      case 'storebundle': // remise sur la valeur réelle du contenu
+        return discount >= { strict: 85, balanced: 75, wide: 60 }[s.level] || (s.level === 'custom' && discount >= 75);
       default:
         return true;
     }

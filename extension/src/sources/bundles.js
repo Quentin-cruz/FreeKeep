@@ -1,20 +1,19 @@
-// Bundles de jeux Steam (Humble Bundle, Fanatical, Green Man Gaming, IndieGala…).
+// Bundles de jeux Steam (Humble Bundle, Fanatical, Green Man Gaming, Digiphile, IndieGala).
 // Contenu : Barter.vg. Qualité : avis Steam. Prix : API Fanatical et pages Humble Bundle.
 import { ENDPOINTS, bundleStoreOf } from '../config.js';
 import { MIN_GOOD } from '../levels.js';
-import { toEur, DEFAULT_USD_EUR } from './rates.js';
 import { fetchJson, fetchText } from '../util.js';
+import { toEur, DEFAULT_USD_EUR } from './rates.js';
 import { fetchSteamItems } from './steamstore.js';
 import { steamHeaderImages } from './cheapshark.js';
 
 const STORES = {
-  'humble bundle': 'Humble Bundle', fanatical: 'Fanatical', 'green man gaming': 'Green Man Gaming', gamesplanet: 'Gamesplanet', indiegala: 'IndieGala', steam: 'Steam',
-  digiphile: 'Digiphile', planetplay: 'Planetplay', xsolla: 'Xsolla', tiltify: 'Tiltify', 'into games': 'Into Games', gamebillet: 'GameBillet', 'itch.io': 'itch.io', '2game': '2Game',
+  'humble bundle': 'Humble Bundle', fanatical: 'Fanatical', 'green man gaming': 'Green Man Gaming', digiphile: 'Digiphile', indiegala: 'IndieGala',
 };
 // Sites dont la page donne le prix
 const PRICED = { 'Humble Bundle': humbleTiers, 'Green Man Gaming': gmgTiers, IndieGala: indieGalaTiers };
-const ADULT = /\b(adult|sexy|lusty|hentai|nsfw)\b/i;
-const MAX_PAGES = 12;
+const ADULT = /\b(adult|sexy|lust\w*|hentai|nsfw|futa\w*|femboy|orgasm\w*|erotic\w*)\b|18\+|🔞/i;
+const MAX_PAGES = 20;
 const MAX_ITEMS = 60;
 const pause = () => new Promise((r) => setTimeout(r, 300));
 
@@ -79,9 +78,13 @@ export function buildBundles(bundles, items, prices, settings, rate = DEFAULT_US
   for (const b of bundles) {
     const games = b.appids.map((id) => ({ id, ...items[id] })).filter((g) => g.name && g.game);
     const good = games.filter((g) => (g.rating ?? 0) >= 80 && g.reviews >= 1000).sort((x, y) => y.reviews - x.reviews);
-    if (good.length < minGood) continue;
+    const store = bundleStoreOf(b.merchant);
+    const indie = store === 'indie';
+    // Petits jeux indés : trop peu d'avis pour le critère des gros jeux. On demande au moins 4 jeux et une bonne moyenne.
+    const rated = games.filter((g) => g.rating != null && g.reviews >= 4);
+    const average = rated.length ? Math.round(rated.reduce((s, g) => s + g.rating, 0) / rated.length) : 0;
+    if (indie ? games.length < 4 || rated.length < 4 || average < 70 || games.some((g) => ADULT.test(g.name)) : good.length < minGood) continue;
     const tiers = (prices[b.id] || []).map((t) => (t.usd ? { ...t, price: toEur(t.price, rate) } : t));
-    const approx = tiers.some((t) => t.usd);
     const pick = /pick-and-mix|build your own/i.test(`${b.url} ${b.title}`);
     const top = tiers[tiers.length - 1];
     const value = Math.round(games.reduce((s, g) => s + (g.normal || 0), 0) * 100) / 100;
@@ -92,19 +95,19 @@ export function buildBundles(bundles, items, prices, settings, rate = DEFAULT_US
       source: 'bundle',
       section: 'bundle',
       channel: 'bundle',
-      store: bundleStoreOf(b.merchant),
+      store,
       title: b.title,
       url: b.url,
-      images: steamHeaderImages(good[0].id),
+      images: steamHeaderImages((good[0] || [...games].sort((x, y) => y.reviews - x.reviews)[0]).id),
       price,
-      priceNote: pick && tiers[0] ? `${tiers[0].n} jeu${tiers[0].n > 1 ? 'x' : ''} au choix` : tiers.length > 1 ? `dès ${tiers[0].price.toFixed(2).replace('.', ',')} €` : null,
-      approx,
+      priceNote: pick && tiers[0] ? `${tiers[0].n} jeu${tiers[0].n > 1 ? 'x' : ''} au choix` : tiers.length > 1 ? `dès ${tiers[0].price.toFixed(2).replace('.', ',')} €` : indie ? `${games.length} jeux, clés Steam` : null,
+      approx: tiers.some((t) => t.usd),
       normalPrice: !pick && price ? value : null,
       currency: 'EUR',
       discount: !pick && price && value > price ? Math.round((1 - price / value) * 100) : null,
       merchant: b.merchant,
       platform: 'steam',
-      bundle: { games: games.length, good: good.length, highlights: good.slice(0, 4).map((g) => g.name), appids: games.map((g) => g.id) },
+      bundle: { games: games.length, good: good.length, ...(indie ? { average } : {}), highlights: (indie ? [...games].sort((x, y) => y.reviews - x.reviews) : good).slice(0, 4).map((g) => g.name), appids: games.map((g) => g.id) },
       posted: b.start,
       end: b.end,
       flags: { bundle: true },

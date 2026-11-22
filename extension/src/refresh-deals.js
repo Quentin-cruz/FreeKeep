@@ -7,6 +7,7 @@ import { fetchDealabsPages } from './sources/dealabspages.js';
 import { fetchGog } from './sources/gog.js';
 import { fetchEa } from './sources/ea.js';
 import { fetchBundles } from './sources/bundles.js';
+import { fetchSteamBundles, fetchGogPacks, fetchItchBundles } from './sources/storebundles.js';
 import { fetchSwitchKeys } from './sources/switchkeys.js';
 import { fetchSteamItems, wishlistDeals } from './sources/steamstore.js';
 import { fetchUsdToEur, DEFAULT_USD_EUR } from './sources/rates.js';
@@ -24,6 +25,8 @@ const GAPS = {
   gog: 28 * MIN,
   ea: 3 * 60 * MIN,
   bundles: 2 * 60 * MIN,
+  storebundles: 4 * 60 * MIN,
+  itchbundles: 3 * 60 * MIN,
   switchkeys: 2 * 60 * MIN,
   wishlist: 28 * MIN,
   rate: 12 * 60 * MIN,
@@ -48,7 +51,9 @@ const enabledSources = (settings, w) => {
     eshop: w.switchDeals,
     gog: w.pcDeals && !!st.gog,
     ea: w.pcDeals && !!st.ea,
-    bundles: w.bundles,
+    bundles: w.bundles && ['humble', 'keys', 'indie'].some((b) => settings.bundleStores?.[b] !== false),
+    storebundles: w.bundles && settings.bundleStores?.stores !== false && !!(st.steam || st.gog),
+    itchbundles: w.bundles && settings.bundleStores?.indie !== false,
     switchkeys: w.switchDeals && settings.keyshops !== false,
     dealabsPages: !!settings.dealabs && (w.pcDeals || w.switchDeals || w.free),
     dealabs: !!settings.dealabs && (w.pcDeals || w.switchDeals || w.free || w.bundles),
@@ -117,6 +122,17 @@ export async function fetchDealSources(rawSettings, cache, now = Date.now(), for
     }),
   ]);
 
+  await run('itchbundles', on.itchbundles, async () => ({ items: await fetchItchBundles(cache.rate?.usdEur, now) }));
+  await run('storebundles', on.storebundles, async () => {
+    const results = await Promise.allSettled([
+      st.steam ? fetchPopularAppIds().catch(() => []).then((ids) => fetchSteamBundles([...ids, ...(cache.cheapshark?.items || []).map((d) => d.steamAppID), ...wishlist])) : [],
+      st.gog ? fetchGogPacks() : [],
+    ]);
+    const ok = results.filter((r) => r.status === 'fulfilled');
+    if (!ok.length) throw results[0].reason;
+    return { items: ok.flatMap((r) => r.value) };
+  });
+
   const withKey = settings.pcDeals && !!settings.ggdealsKey && settings.keyshops !== false && !!settings.stores?.steam;
   await run('watchlist', withKey, async () => ({ appids: await fetchPopularAppIds() }));
   await run('ggdeals', withKey, async () => {
@@ -133,6 +149,8 @@ export function assembleDeals(rawSettings, cache, history, now = Date.now(), err
   const on = enabledSources(rawSettings, w);
   const items = (name) => (on[name] ? keepAtLevel(structuredClone(cache[name]?.items || []), settings) : []);
   const withKey = settings.pcDeals && !!settings.ggdealsKey && settings.keyshops !== false && !!settings.stores?.steam;
+  // « Stores sélectionnés au-dessus » : seulement les bundles des stores cochés
+  const bundleWanted = (d) => !!d.store && settings.bundleStores?.[d.store] !== false && (d.store !== 'stores' || !d.platform || !!settings.stores?.[d.platform]);
 
   const rate = cache.rate?.usdEur || DEFAULT_USD_EUR;
   const dealabsRaw = mergeDealabsItems([...(cache.dealabs?.raw || []), ...(settings.dealabs ? cache.dealabsPages?.raw || [] : [])]);
@@ -151,10 +169,10 @@ export function assembleDeals(rawSettings, cache, history, now = Date.now(), err
       wishlist: settings.pcDeals ? structuredClone(cache.wishlist?.items || []) : [],
       gog: items('gog'),
       ea: items('ea'),
-      bundles: items('bundles').filter((d) => settings.bundleStores?.[d.store] !== false),
+      bundles: [...items('bundles'), ...items('storebundles'), ...items('itchbundles')].filter(bundleWanted),
       switchkeys: items('switchkeys').filter((d) => settings.switch2 || d.platform !== 'switch2'),
       eshop: items('eshop').filter((d) => settings.switch2 || d.platform !== 'switch2'),
-      dealabs: dealabs.filter((d) => d.section !== 'bundle' || settings.bundleStores?.[d.store] !== false),
+      dealabs: dealabs.filter((d) => d.section !== 'bundle' || bundleWanted(d)),
       ggdeals: settings.pcDeals ? ggKeyshopDeals(gg) : [],
     },
     history,
@@ -169,6 +187,8 @@ export function assembleDeals(rawSettings, cache, history, now = Date.now(), err
     gog: cache.gog?.items?.length,
     ea: cache.ea?.items?.length,
     bundles: cache.bundles?.items?.length,
+    storebundles: cache.storebundles?.items?.length,
+    itchbundles: cache.itchbundles?.items?.length,
     switchkeys: cache.switchkeys?.items?.length,
     dealabsPages: cache.dealabsPages?.raw?.length,
     dealabs: dealabs.length + freebies.length,

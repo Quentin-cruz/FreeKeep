@@ -30,7 +30,7 @@ export function groupDeals(deals) {
       out.push(d);
       continue;
     }
-    const id = [d.section, d.section === 'bundle' ? d.store : d.channel, d.section === 'switch' ? d.platform : '', key].join('|');
+    const id = [d.section, d.section === 'bundle' ? String(d.merchant).toLowerCase() : d.channel, d.section === 'switch' ? d.platform : '', key].join('|');
     if (!groups.has(id)) {
       groups.set(id, []);
       out.push(groups.get(id));
