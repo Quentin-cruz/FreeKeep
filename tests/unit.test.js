@@ -861,3 +861,57 @@ test('Dealabs : jeu Prime reconnu même si Prime n’est cité que dans la descr
     assert.equal(got.prime, false, text);
   }
 });
+
+test('Dealabs : faux jeux PC gratuits écartés (titres réels), vrais jeux gardés', () => {
+  const st = { ...DEFAULT_SETTINGS, prime: true, dealabsOnlyHot: true };
+  const stores = ['steam', 'epic', 'gog', 'ea', 'ubisoft', 'battlenet', 'microsoft', 'itch', 'amazon'];
+  const item = (title, merchant, priceText = '') => ({ guid: title, title, merchant, priceText, description: '', category: 'Consoles & Jeux vidéo', feed: 'jeux', hot: true, link: 'https://www.dealabs.com/bons-plans/x-1234567', pubDate: now });
+  const free = (t, m) => dealabsFreebie(item(t, m), { stores, prime: true }, now);
+  const deal = (t, m, p) => classifyDealabs(item(t, m, p), st, now);
+
+  const fake = [
+    ['Lonesome Village gratuit sur Android / iOS (Dématérialisé)', 'Epic Games Store'],
+    ['Chants of Sennaar Gratuit sur Android et iOS (Dématérialisé)', 'Epic Games Store'],
+    ['Morpion Jumbo Pro gratuit sur Android (Dématérialisé - Play Store)', 'Google Play'],
+    ['[Twitch Drops] Grand Theft Auto VI - Badges GTA 6 offerts en visionnant 6h de stream (Dématérialisé)', 'Prime Gaming'],
+    ['World of Warships - Yūbari Pack gratuit sur PC (Dématérialisé)', 'Xbox Store'],
+    ['Starter Pack offert pour Warframe sur PC (Dématérialisé - Steam)', 'Steam'],
+    ['Emote Mini Pekka offerte sur PC (Dématérialisé - Steam)', 'Steam'],
+    ['[Possesseurs Final Fantasy XIV] 30 Jours de Jeu gratuit pour FFXIV Online sur PC (Steam)', 'Square Enix'],
+    // déjà écartés avant, et à ne pas retrouver dans les promos
+    ['Crusader Kings III Jouable Gratuitement jusqu’au 23 novembre sur PC (Dématérialisé - Steam)', 'Steam'],
+    ['Payday 3 jouable gratuitement sur PC jusqu’au 9/11/2026 (Dématérialisé)', 'Steam'],
+    ['Legacy - Reawakening sur PC devient Free-to-play (Dématérialisé - Steam)', 'Steam'],
+    ['Essai Gratuit du mode DMZ de Call of Duty: Modern Warfare 4 sur PC, Xbox & PS5 (Dématérialisé)', 'Steam'],
+  ];
+  for (const [t, m] of fake) {
+    assert.equal(free(t, m), null, `gratuit : ${t}`);
+    assert.equal(deal(t, m), null, `promo : ${t}`);
+  }
+
+  const real = [
+    ['Bread and Fred Gratuit sur PC (Dématérialisé)', 'Epic Games Store', 'epic', 'Bread and Fred'],
+    ['The Ghost Of Solaris gratuit sur PC (Dématérialisé)', 'Steam', 'steam', 'The Ghost Of Solaris'],
+    ['Contractor: The Clean Up Part II Gratuit sur PC (Dématérialisé)', 'Epic Games Store', 'epic', 'Contractor: The Clean Up Part II'],
+    ['Mark of the Deep Gratuit sur PC (Dématérialisé)', 'Epic Games Store', 'epic', 'Mark of the Deep'],
+    ['Knightica Gratuit sur PC, Android et iOS (Dématérialisé)', 'Epic Games Store', 'epic', 'Knightica'],
+    ['Fallout: New Vegas gratuit sur PC (Dématérialisé - Steam)', 'Lenovo', 'steam', 'Fallout: New Vegas'],
+    ["Letter Quest: Grimm's Journey Remastered gratuit sur PC (Dématérialisé - Steam)", 'Fanatical', 'steam', "Letter Quest: Grimm's Journey Remastered"],
+    ['Epic World - Hunt For Quest gratuit sur PC (Dématérialisé)', 'Epic Games Store', 'epic', 'Epic World - Hunt For Quest'],
+    ['The Jackbox Party Pack 2 gratuit sur PC (Dématérialisé - Steam)', 'Steam', 'steam', 'The Jackbox Party Pack 2'],
+    ['Avatar: Frontiers of Pandora offert sur PC (Dématérialisé)', 'Ubisoft Store', 'ubisoft', 'Avatar: Frontiers of Pandora'],
+    ['Streamer Life Simulator gratuit sur PC (Dématérialisé - Steam)', 'Steam', 'steam', 'Streamer Life Simulator'],
+  ];
+  for (const [t, m, store, name] of real) {
+    const got = free(t, m);
+    assert.equal(got?.store, store, t);
+    assert.equal(got.title, name);
+    assert.equal(deal(t, m), null, `pas en double dans les promos : ${t}`);
+  }
+
+  // Une vraie promo payante qui contient « offert » ou « gratuit » reste une promo
+  assert.equal(deal('Metro Exodus sur PC + extension offerte (Dématérialisé - Steam)', 'Steam', '2,99€').price, 2.99);
+  assert.equal(deal('Forza Horizon 6 sur PC + poster offert (Dématérialisé - Steam)', 'Steam', '52,49€').price, 52.49);
+  assert.equal(dealabsFreebie(item('Forza Horizon 6 sur PC + poster offert (Dématérialisé - Steam)', 'Steam', '52,49€'), { stores, prime: true }, now), null);
+  assert.equal(deal('Hollow Knight sur Nintendo Switch (livraison gratuite)', 'Amazon', '24,99€').channel, 'physical');
+});

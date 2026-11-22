@@ -88,7 +88,7 @@ Chaque bon plan Switch est classé **Switch** (jouable sur Switch 1, et donc aus
 
 ## 🎁 Gratuits
 
-- Sources : API officielle Epic, recherche Steam (-100 %), [GamerPower](https://www.gamerpower.com), qui recense les giveaways de jeux PC (dont Prime), et les jeux offerts postés sur [Dealabs](https://www.dealabs.com) (Prime, Microsoft Store, Battle.net…). Les week-ends gratuits, démos, free-to-play et DLC sont écartés.
+- Sources : API officielle Epic, recherche Steam (-100 %), [GamerPower](https://www.gamerpower.com), qui recense les giveaways de jeux PC (dont Prime), et les jeux offerts postés sur [Dealabs](https://www.dealabs.com) (Prime, Microsoft Store, Battle.net…). Les week-ends gratuits, démos, free-to-play, DLC, jeux mobiles, bonus de stream (Twitch Drops…) et packs de contenu sont écartés.
 - Le site qui organise le giveaway est affiché, par exemple « via Alienware Arena ». Ces sites demandent parfois un compte.
 - Le bouton **Récupérer** ouvre la page du store et clique sur « Obtenir » pour toi. Sur Epic, la commande n'est validée que si le total est à 0 €. Les captchas restent à faire toi-même.
 - Les jeux que tu possèdes déjà sont détectés : sur Steam et GOG via ta session, sur les stores quand la page affiche « Dans la bibliothèque ».
@@ -146,7 +146,7 @@ extension/
 ├── popup/  options/  icons/
 tests/
 ├── fixtures.js                # données calquées sur le format réel des API
-├── unit.test.js               # 50 tests
+├── unit.test.js               # 51 tests
 └── background.test.js         # 17 tests : service worker dans un navigateur simulé
 ```
 

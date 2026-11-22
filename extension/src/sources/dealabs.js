@@ -140,7 +140,7 @@ const biggerImage = (url) => (url ? url.replace(/\/re\/\d+x\d+\//, '/re/300x300/
 
 // ---------- Jeux PC offerts à garder (Prime, Microsoft Store, Battle.net…) ----------
 
-const FREE_WORDS = /\b(gratuit|gratuitement|offerts?|free)\b|\b0[,.]?0{0,2}\s?€/i;
+const FREE_WORDS = /\b(gratuite?s?|gratuitement|offerte?s?|free)\b|\b0[,.]?0{0,2}\s?€/i;
 // Pas « à garder » : week-end gratuit, démo, free-to-play, DLC, abonnement…
 const NOT_KEEP = /week-?end|jouable gratuitement|en essai|essai gratuit|d[ée]mo\b|free[- ]to[- ]play|\bf2p\b|\bdlc\b|extension|contenu|\bskin|cosm[ée]tique|bonus in-?game|monnaie|game ?pass|ps plus|playstation plus|abonnement|jours? d'essai|pr[ée]co/i;
 const PRIME_TEXT = /prime gaming|amazon prime|\bprime\b.*\bluna\b|amazon luna|\bluna\b|avec prime|abonn[ée]s? prime|membres? prime/i;
@@ -159,7 +159,18 @@ function primeOnly(title, merchant, description) {
 
 const CLOUD = /\bcloud\b|streaming|en ligne via luna|jouable sur luna/i;
 
-export const isFreebieTitle = (title) => FREE_WORDS.test(title) && !NOT_KEEP.test(title);
+// Bonus de stream et contenu de jeu : offerts, mais ce ne sont pas des jeux.
+const STREAM_BONUS = /\btwitch\b|\bdrops\b|\bbadges?\b|en (?:visionnant|regardant)|\bstreams?\b/i;
+const GAME_CONTENT = /\bemotes?\b|\bpour avatar\b|\bjours? de jeu\b|\btenues?\b|\b(?:starter|bonus|welcome|founder'?s?|supporter) pack\b|\bpack (?:de )?(?:d[ée]marrage|bienvenue|bonus|ressources)|\bpack\b.*\bpour\b|\s[-–:]\s[^-–:]*\bpack\b/i;
+// … sauf les vrais jeux et lots de jeux (« Jackbox Party Pack », « pack de 5 jeux »)
+const GAME_PACK = /\bparty pack\b|\bpack de \d+ jeux\b/i;
+const mobileOnly = (t) => /\b(android|ios|iphone|ipad|play store|google play|app store)\b/i.test(t) && !/\b(pc|windows|mac|steam|gog)\b/i.test(t);
+
+// Offert, mais pas un jeu PC à garder.
+const notKeepable = (title, merchant = '') => NOT_KEEP.test(title) || STREAM_BONUS.test(title)
+  || (GAME_CONTENT.test(title) && !GAME_PACK.test(title)) || mobileOnly(`${title} ${merchant}`);
+
+export const isFreebieTitle = (title, merchant = '') => FREE_WORDS.test(title) && !notKeepable(title, merchant);
 // Console seulement (l'Xbox App / Xbox PC, c'est le Microsoft Store sur PC).
 const consoleOnly = (t) => /\b(ps[345]|playstation)\b/i.test(t) || (/\bxbox\b/i.test(t) && !/\b(pc|windows|xbox app|xbox pc|microsoft store)\b/i.test(t));
 // Post qui regroupe plusieurs jeux (« 8 jeux offerts avec Prime en novembre »)
@@ -167,11 +178,13 @@ const MULTI = /^(\[[^\]]*\]\s*)*(\d+\s+)?jeux\b|s[ée]lection|\b\d+\s+jeux\b/i;
 
 // Nom du jeu dans un titre Dealabs du type « Jeu Mafia offert sur PC (Dématérialisé - GOG) ».
 export function freebieName(title) {
-  return String(title || '')
+  const base = String(title || '')
     .replace(/^\s*(\[[^\]]*\]\s*)+/, '')
-    .replace(/^(jeux?|le jeu)\s+(pc\s+)?/i, '')
-    .split(/\s+(?:offerts?|gratuits?|gratuitement|free|jouable)\b|\s+(?:sur|pour|via|avec|on)\s+(?:pc|steam|epic|gog|amazon|prime|luna|le |l'|xbox|microsoft|battle)|\s*[([]|\s+[-–]\s+/i)[0]
-    .trim();
+    .replace(/^(jeux?|le jeu)\s+(pc\s+)?/i, '');
+  const [head] = base.split(/\s+(?:offerte?s?|gratuite?s?|gratuitement|free|jouable)\b/i);
+  const name = head.split(/\s+(?:sur|pour|via|avec|on)\s+(?:pc|steam|epic|gog|amazon|prime|luna|le |l'|xbox|microsoft|battle)|\s*[([]/i)[0];
+  // « Epic World - Hunt For Quest gratuit » : le tiret fait partie du nom. Sans « gratuit » après, il introduit un détail.
+  return (head === base ? name.split(/\s+[-–]\s+/)[0] : name).trim();
 }
 
 /**
@@ -183,7 +196,8 @@ export function dealabsFreebie(it, { stores = [], prime = false, maxAgeDays = 7 
   const title = it.title || '';
   if (!title || (it.pubDate && now - it.pubDate > maxAgeDays * DAY)) return null;
   const price = parsePrice(it.priceText);
-  if (!(isFreebieTitle(title) || (price === 0 && !NOT_KEEP.test(title)))) return null;
+  if (price > 0) return null; // « … + poster offert à 19,99 € » est une promo
+  if (!(isFreebieTitle(title, it.merchant) || (price === 0 && !notKeepable(title, it.merchant)))) return null;
   if (consoleOnly(title) || mentionsSwitch1(title) || mentionsSwitch2(title)) return null;
   const text = `${title} ${it.merchant || ''} ${stripHtml(it.description).slice(0, 600)}`;
   const isPrime = primeOnly(title, it.merchant, it.description);
@@ -215,8 +229,11 @@ export function dealabsFreebie(it, { stores = [], prime = false, maxAgeDays = 7 
 
 export function classifyDealabs(it, settings, now = Date.now()) {
   const title = it.title || '';
+  // Offert mais pas à garder (week-end gratuit, mobile, bonus de stream…) : ce n'est pas une promo non plus.
+  const unpaid = !parsePrice(it.priceText);
+  if (unpaid && FREE_WORDS.test(title) && notKeepable(title, it.merchant)) return null;
   // Les jeux PC offerts à garder vont dans « Jeux gratuits », pas dans les promos.
-  if (isFreebieTitle(title) && !consoleOnly(title) && !mentionsSwitch1(title) && !mentionsSwitch2(title)) return null;
+  if (unpaid && isFreebieTitle(title, it.merchant) && !consoleOnly(title) && !mentionsSwitch1(title) && !mentionsSwitch2(title)) return null;
   if (MIXED_FEEDS.includes(it.feed) && !/consoles|jeux vid/i.test(it.category)) return null;
   if (!title || NOT_A_GAME.test(title)) return null;
   if (it.pubDate && now - it.pubDate > (settings.dealMaxAgeDays || 7) * DAY) return null;
