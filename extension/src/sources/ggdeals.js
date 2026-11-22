@@ -55,6 +55,7 @@ export function ggKeyshopDeals(prices) {
       discount,
       merchant: 'Sites de clés',
       steamAppID: appid,
+      platform: 'steam',
       end: null,
       posted: null,
       flags: { historicLow, watch: true },

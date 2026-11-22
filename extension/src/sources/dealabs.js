@@ -71,7 +71,26 @@ export function mentionsSwitch1(title) {
   return hits.some((h) => !h[1] || h[1].trim() !== '2');
 }
 
-const PC_WORDS = /\b(pc|steam|epic games|gog|ubisoft connect|uplay|ea app|battle\.?net|windows|mac)\b/i;
+export const mentionsSwitch2 = (title) => /switch\s*2\b/i.test(String(title));
+
+// Plateforme d'activation d'un jeu PC d'après le titre Dealabs.
+export function pcPlatformOf(title, merchant = '') {
+  const t = `${title} ${merchant}`;
+  if (/\bsteam\b/i.test(t)) return 'steam';
+  if (/\bepic\b/i.test(t)) return 'epic';
+  if (/\bgog\b/i.test(t)) return 'gog';
+  if (/ubisoft|uplay/i.test(t)) return 'ubisoft';
+  if (/\b(ea app|origin)\b/i.test(t)) return 'ea';
+  if (/itch\.io/i.test(t)) return 'itch';
+  if (/indie\s?gala/i.test(t)) return 'indiegala';
+  if (/battle\.?net|blizzard/i.test(t)) return 'battlenet';
+  if (/microsoft store|xbox app|windows store|xbox pc/i.test(t)) return 'microsoft';
+  if (/legacy games/i.test(t)) return 'legacy';
+  if (/amazon games/i.test(t)) return 'amazon';
+  return null; // inconnu : on ne filtre pas
+}
+
+const PC_WORDS = /\b(pc|steam|epic games|gog|ubisoft connect|uplay|ea app|battle\.?net|microsoft store|xbox app|windows|mac)\b/i;
 const OTHER_CONSOLES = /\b(ps[345]|playstation|xbox|switch)\b/i;
 const PRICE_ERROR = /erreur de prix|bug de prix|prix bugg?[ée]|price error|prix cass[ée] par erreur/i;
 
@@ -82,8 +101,72 @@ const isKeyshop = (merchant) => {
 
 const biggerImage = (url) => (url ? url.replace(/\/re\/\d+x\d+\//, '/re/300x300/') : null);
 
+// ---------- Jeux PC offerts à garder (Prime, Microsoft Store, Battle.net…) ----------
+
+const FREE_WORDS = /\b(gratuit|gratuitement|offerts?|free)\b|\b0[,.]?0{0,2}\s?€/i;
+// Pas « à garder » : week-end gratuit, démo, free-to-play, DLC, abonnement…
+const NOT_KEEP = /week-?end|jouable gratuitement|en essai|essai gratuit|d[ée]mo\b|free[- ]to[- ]play|\bf2p\b|\bdlc\b|extension|contenu|\bskin|cosm[ée]tique|bonus in-?game|monnaie|game ?pass|ps plus|playstation plus|abonnement|jours? d'essai|pr[ée]co/i;
+const PRIME_TEXT = /prime gaming|amazon prime|\bprime\b.*\bluna\b|amazon luna|\bluna\b|avec prime|abonn[ée]s? prime|membres? prime/i;
+const CLOUD = /\bcloud\b|streaming|en ligne via luna|jouable sur luna/i;
+
+export const isFreebieTitle = (title) => FREE_WORDS.test(title) && !NOT_KEEP.test(title);
+// Console seulement (l'Xbox App / Xbox PC, c'est le Microsoft Store sur PC).
+const consoleOnly = (t) => /\b(ps[345]|playstation)\b/i.test(t) || (/\bxbox\b/i.test(t) && !/\b(pc|windows|xbox app|xbox pc|microsoft store)\b/i.test(t));
+// Post qui regroupe plusieurs jeux (« 8 jeux offerts avec Prime en novembre »)
+const MULTI = /^(\[[^\]]*\]\s*)*(\d+\s+)?jeux\b|s[ée]lection|\b\d+\s+jeux\b/i;
+
+// Nom du jeu dans un titre Dealabs du type « Jeu Mafia offert sur PC (Dématérialisé - GOG) ».
+export function freebieName(title) {
+  return String(title || '')
+    .replace(/^\s*(\[[^\]]*\]\s*)+/, '')
+    .replace(/^(jeux?|le jeu)\s+(pc\s+)?/i, '')
+    .split(/\s+(?:offerts?|gratuits?|gratuitement|free|jouable)\b|\s+(?:sur|pour|via|avec|on)\s+(?:pc|steam|epic|gog|amazon|prime|luna|le |l'|xbox|microsoft|battle)|\s*[([]|\s+[-–]\s+/i)[0]
+    .trim();
+}
+
+/**
+ * Jeu PC offert repéré sur Dealabs → même format que les autres sources de jeux gratuits.
+ * Sert surtout pour Amazon Prime (pas d'API publique), le Microsoft Store et Battle.net.
+ * @param settings réglages effectifs ; `stores` = liste des plateformes voulues
+ */
+export function dealabsFreebie(it, { stores = [], prime = false, maxAgeDays = 7 } = {}, now = Date.now()) {
+  const title = it.title || '';
+  if (!title || (it.pubDate && now - it.pubDate > maxAgeDays * DAY)) return null;
+  const price = parsePrice(it.priceText);
+  if (!(isFreebieTitle(title) || (price === 0 && !NOT_KEEP.test(title)))) return null;
+  if (consoleOnly(title) || mentionsSwitch1(title) || mentionsSwitch2(title)) return null;
+  const text = `${title} ${it.merchant || ''} ${stripHtml(it.description).slice(0, 600)}`;
+  const isPrime = PRIME_TEXT.test(`${title} ${it.merchant || ''}`);
+  if (isPrime && !prime) return null;
+  let store = pcPlatformOf(title, it.merchant);
+  if (isPrime) {
+    if (/\bluna\b/i.test(text) && CLOUD.test(text)) store = 'luna';
+    else if (!store || store === 'amazon') store = /legacy games/i.test(text) ? 'legacy' : /microsoft store|xbox app/i.test(text) ? 'microsoft' : 'amazon';
+  }
+  if (!store || !stores.includes(store)) return null;
+  const name = MULTI.test(title) ? title.replace(/^\s*(\[[^\]]*\]\s*)+/, '').trim() : freebieName(title) || title;
+  if (name.length < 2) return null;
+  return {
+    source: 'dealabs',
+    store,
+    via: isPrime ? 'Amazon Prime' : 'Dealabs',
+    title: name,
+    url: it.link,
+    images: [biggerImage(it.image)].filter(Boolean),
+    start: it.pubDate || null,
+    end: null,
+    status: 'active',
+    worth: null,
+    description: stripHtml(it.description).slice(0, 280),
+    prime: isPrime,
+    cloud: store === 'luna',
+  };
+}
+
 export function classifyDealabs(it, settings, now = Date.now()) {
   const title = it.title || '';
+  // Les jeux PC offerts à garder vont dans « Jeux gratuits », pas dans les promos.
+  if (isFreebieTitle(title) && !consoleOnly(title) && !mentionsSwitch1(title) && !mentionsSwitch2(title)) return null;
   // Le flux « hot » mélange toutes les catégories : on ne garde que les jeux vidéo.
   if (it.feed === 'hot' && !/consoles|jeux vid/i.test(it.category)) return null;
   if (!title || NOT_A_GAME.test(title)) return null;
@@ -95,10 +178,15 @@ export function classifyDealabs(it, settings, now = Date.now()) {
   const depts = String(settings.departments || '').split(/[\s,;]+/).map((d) => d.trim().toUpperCase()).filter(Boolean);
   if (dept && !depts.includes(dept)) return null;
 
-  const isSwitch = mentionsSwitch1(title);
+  const switch1 = mentionsSwitch1(title);
+  const switch2Only = !switch1 && mentionsSwitch2(title);
+  if (switch2Only && !settings.switch2) return null;
+  const isSwitch = switch1 || switch2Only;
   const keyshop = isKeyshop(it.merchant);
   const isPC = !isSwitch && (PC_WORDS.test(title) || ((keyshop || /steam|gog|epic|fanatical|humble|gamesplanet|green ?man/i.test(it.merchant)) && !OTHER_CONSOLES.test(title)));
   if (!isSwitch && !isPC) return null;
+  const pcPlatform = isPC ? pcPlatformOf(title, it.merchant) : null;
+  if (pcPlatform && settings.stores && !settings.stores[pcPlatform]) return null;
 
   const text = `${title} ${stripHtml(it.description).slice(0, 800)}`;
   const priceError = PRICE_ERROR.test(text);
@@ -112,6 +200,7 @@ export function classifyDealabs(it, settings, now = Date.now()) {
   else if (bundle) channel = 'bundle';
   else if (section === 'switch') channel = /nintendo/i.test(it.merchant) || /d[ée]mat[ée]rialis[ée]/i.test(title) ? 'eshop' : 'physical';
   else channel = 'official';
+  if ((channel === 'keyshop' && settings.keyshops === false) || (channel === 'physical' && settings.physical === false) || (channel === 'bundle' && settings.bundles === false)) return null;
 
   const price = parsePrice(it.priceText);
   const discount = Number(/-\s?(\d{1,2})\s?%/.exec(title)?.[1]) || null;
@@ -131,6 +220,7 @@ export function classifyDealabs(it, settings, now = Date.now()) {
     currency: 'EUR',
     discount,
     merchant: it.merchant || 'Dealabs',
+    platform: section === 'switch' ? (switch2Only ? 'switch2' : 'switch1') : pcPlatform,
     posted: it.pubDate,
     end: null,
     flags: { hot, priceError, free: price === 0, local: !!dept, bundle },

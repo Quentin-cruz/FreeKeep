@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bienvenue dans FreeKeep&lt;3</title>
+  <link rel="stylesheet" href="../ui/ui.css">
+  <link rel="stylesheet" href="onboarding.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="ob-head">
+      <img src="../icons/icon48.png" alt="" width="32" height="32">
+      <span class="brand">FreeKeep<span class="heart">&lt;3</span></span>
+      <div class="progress" aria-hidden="true"><div class="bar" id="bar"></div></div>
+      <span class="step-count" id="step-count"></span>
+    </header>
+
+    <main class="ob-card">
+      <div id="step"></div>
+    </main>
+
+    <footer class="ob-foot">
+      <button id="btn-back" class="btn ghost" type="button">← Retour</button>
+      <span class="spacer"></span>
+      <button id="btn-skip" class="btn ghost" type="button">Passer</button>
+      <button id="btn-next" class="btn primary" type="button">Suivant →</button>
+    </footer>
+  </div>
+  <script type="module" src="onboarding.js"></script>
+</body>
+</html>

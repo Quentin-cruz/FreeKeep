@@ -41,6 +41,8 @@ export function mergeGames(lists, now = Date.now()) {
         description: item.description || '',
         sources: [item.source],
         via: item.via || null,
+        prime: !!item.prime,
+        cloud: !!item.cloud,
         _titles: [item.title],
       });
       continue;
@@ -57,6 +59,7 @@ export function mergeGames(lists, now = Date.now()) {
     if (!g.slug && item.slug) g.slug = item.slug;
     if (!g.description && item.description) g.description = item.description;
     if (!g.via && item.via) g.via = item.via;
+    if (item.prime) g.prime = true;
     if (status === 'active' && g.status !== 'active') {
       g.status = 'active';
       if (item.end != null) g.end = item.end;

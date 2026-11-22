@@ -5,7 +5,7 @@ import { fetchJson } from '../util.js';
 
 const FIELDS = [
   'title', 'url', 'nsuid_txt', 'fs_id', 'price_regular_f', 'price_lowest_f', 'price_discount_percentage_f',
-  'image_url_h2x1_s', 'image_url', 'downloads_rank_i', 'publisher', 'playable_on_txt',
+  'image_url_h2x1_s', 'image_url', 'downloads_rank_i', 'publisher', 'playable_on_txt', 'game_categories_txt',
 ].join(',');
 
 async function search(fq, rows) {
@@ -16,13 +16,15 @@ async function search(fq, rows) {
 export async function fetchEshop(settings) {
   const min = settings.switchMinDiscount;
   const base = 'type:GAME AND price_has_discount_b:true';
-  let platform = 'playable_on_txt:HAC';
+  // HAC = Switch 1 (jouable aussi sur Switch 2) ; BEE = Switch 2
+  let platform = settings.switch2 ? '(playable_on_txt:HAC OR playable_on_txt:BEE)' : 'playable_on_txt:HAC';
   let big;
   try {
     big = await search(`${base} AND ${platform} AND price_discount_percentage_f:[${min} TO 100]`, 400);
     if (!big?.response?.numFound) throw new Error('vide');
   } catch {
     platform = 'system_type:nintendoswitch*';
+    // (repli : le tri Switch 1 / Switch 2 se fait ensuite dans parseEshop)
     big = await search(`${base} AND ${platform} AND price_discount_percentage_f:[${min} TO 100]`, 400);
   }
   // Les jeux Nintendo dépassent rarement -40 % : on les prend dès -20 %.
@@ -48,7 +50,9 @@ export function parseEshop(responses, settings) {
     for (const doc of docs) {
       const nsuid = (doc.nsuid_txt || []).find((n) => String(n).startsWith('7001'));
       if (!nsuid || byId.has(nsuid) || !doc.title) continue;
-      if (doc.playable_on_txt && !doc.playable_on_txt.some((p) => /HAC/i.test(p))) continue; // Switch 2 uniquement
+      const playable = doc.playable_on_txt || ['HAC'];
+      const platform = playable.some((p) => /HAC/i.test(p)) ? 'switch1' : playable.some((p) => /BEE/i.test(p)) ? 'switch2' : null;
+      if (!platform || (platform === 'switch2' && !settings.switch2)) continue;
 
       const discount = Math.round(Number(doc.price_discount_percentage_f) || 0);
       const regular = Number(doc.price_regular_f) || null;
@@ -77,6 +81,8 @@ export function parseEshop(responses, settings) {
         merchant: 'Nintendo eShop',
         nsuid,
         rank,
+        platform,
+        categories: doc.game_categories_txt || [],
         end: null,
         posted: null,
         flags: { nintendo, popular, big },

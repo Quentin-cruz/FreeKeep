@@ -1,9 +1,10 @@
 // Récupère toutes les sources de bons plans, avec un cache par source (pour ménager les API).
 import { fetchCheapShark, fetchPopularAppIds } from './sources/cheapshark.js';
 import { fetchEshop } from './sources/eshop.js';
-import { fetchDealabs, mergeDealabsItems, classifyDealabs } from './sources/dealabs.js';
+import { fetchDealabs, mergeDealabsItems, classifyDealabs, dealabsFreebie } from './sources/dealabs.js';
 import { fetchGgDeals, ggKeyshopDeals } from './sources/ggdeals.js';
 import { buildDeals } from './deals.js';
+import { wants } from './prefs.js';
 
 const MIN = 60 * 1000;
 const DAY = 24 * 60 * MIN;
@@ -20,7 +21,9 @@ const GAPS = {
  * @param history dernier prix vu par deal (modifié en place)
  * @param force   noms de sources à recharger même si le cache est récent
  */
-export async function refreshDeals(settings, cache, history, now = Date.now(), force = []) {
+export async function refreshDeals(rawSettings, cache, history, now = Date.now(), force = [], { wishlist = [] } = {}) {
+  const w = wants(rawSettings);
+  const settings = { ...rawSettings, pcDeals: w.pcDeals, switchDeals: w.switchDeals };
   const errors = {};
   const run = async (name, enabled, job) => {
     if (!enabled) {
@@ -37,9 +40,10 @@ export async function refreshDeals(settings, cache, history, now = Date.now(), f
   };
 
   await Promise.all([
-    run('cheapshark', settings.pcDeals, async () => ({ items: await fetchCheapShark(settings) })),
+    run('cheapshark', settings.pcDeals, async () => ({ items: await fetchCheapShark(settings, settings.useWishlist ? wishlist : []) })),
     run('eshop', settings.switchDeals, async () => ({ items: await fetchEshop(settings) })),
-    run('dealabs', settings.dealabs && (settings.pcDeals || settings.switchDeals), async (prev) => {
+    // Dealabs sert aussi aux jeux offerts sans API (Prime, Microsoft Store, Battle.net).
+    run('dealabs', settings.dealabs && (settings.pcDeals || settings.switchDeals || w.free), async (prev) => {
       // Les flux RSS ne montrent que les derniers deals : on les accumule sur 14 jours.
       const raw = mergeDealabsItems([...(prev?.raw || []), ...(await fetchDealabs())])
         .filter((it) => !it.pubDate || now - it.pubDate < 14 * DAY)
@@ -48,7 +52,7 @@ export async function refreshDeals(settings, cache, history, now = Date.now(), f
     }),
   ]);
 
-  const withKey = settings.pcDeals && !!settings.ggdealsKey;
+  const withKey = settings.pcDeals && !!settings.ggdealsKey && settings.keyshops !== false && !!settings.stores?.steam;
   await run('watchlist', withKey, async () => ({ appids: await fetchPopularAppIds() }));
   await run('ggdeals', withKey, async () => {
     const ids = [...(cache.cheapshark?.items || []).map((d) => d.steamAppID), ...(cache.watchlist?.appids || [])];
@@ -59,6 +63,9 @@ export async function refreshDeals(settings, cache, history, now = Date.now(), f
     .map((it) => classifyDealabs(it, settings, now))
     .filter((d) => d && (d.section === 'pc' ? settings.pcDeals : settings.switchDeals));
   const gg = cache.ggdeals?.prices || {};
+  const freebies = w.free
+    ? (cache.dealabs?.raw || []).map((it) => dealabsFreebie(it, { stores: w.stores, prime: w.prime, maxAgeDays: settings.dealMaxAgeDays || 7 }, now)).filter(Boolean)
+    : [];
 
   const deals = buildDeals(
     {
@@ -77,13 +84,13 @@ export async function refreshDeals(settings, cache, history, now = Date.now(), f
   const counts = {
     cheapshark: cache.cheapshark?.items?.length,
     eshop: cache.eshop?.items?.length,
-    dealabs: dealabs.length,
+    dealabs: dealabs.length + freebies.length,
     ggdeals: cache.ggdeals ? Object.keys(cache.ggdeals.prices || {}).length : undefined,
   };
   const enabled = {
     cheapshark: settings.pcDeals,
     eshop: settings.switchDeals,
-    dealabs: settings.dealabs && (settings.pcDeals || settings.switchDeals),
+    dealabs: settings.dealabs && (settings.pcDeals || settings.switchDeals || w.free),
     ggdeals: withKey,
   };
   const status = {};
@@ -94,5 +101,5 @@ export async function refreshDeals(settings, cache, history, now = Date.now(), f
       : { ok: true, count: counts[name] ?? 0, at: cache[name]?.at || null };
   }
 
-  return { deals: deals.filter((d) => !d.end || d.end > now), errors, status };
+  return { deals: deals.filter((d) => !d.end || d.end > now), freebies, errors, status };
 }

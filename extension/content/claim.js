@@ -83,7 +83,7 @@
       if (box && isVisible(box)) return true;
     }
     if (findByText(TEXT.owned)) return true;
-    if (!linked) return false; // les phrases ci-dessous ne comptent que pour l'onglet ouvert par FreeKeep
+    if (!linked) return false; // les phrases ci-dessous ne comptent que pour l'onglet ouvert par FreeKeep<3
     const text = bodyText();
     return [...TEXT.success, ...(TEXT.ownedText || [])].some((p) => text.includes(p));
   }
@@ -129,7 +129,7 @@
           button:hover{color:#fff}
           @keyframes in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
         </style>
-        <div class="t"><span class="b">FreeKeep</span><span class="m"></span><button title="Fermer">×</button></div>`;
+        <div class="t"><span class="b">FreeKeep&lt;3</span><span class="m"></span><button title="Fermer">×</button></div>`;
       root.querySelector('button').addEventListener('click', () => toastHost.remove());
       document.documentElement.appendChild(toastHost);
     }
@@ -173,7 +173,7 @@
     });
 
     if (linked && TOP && !autoClick) {
-      toast(`Clique sur le bouton de récupération pour ajouter ${game.title}. FreeKeep détectera l'ajout.`, 'info', true);
+      toast(`Clique sur le bouton de récupération pour ajouter ${game.title}. FreeKeep<3 détectera l'ajout.`, 'info', true);
     }
 
     const tick = async () => {
@@ -198,7 +198,7 @@
           toast(`J'ai cliqué sur « ${label} ». Si un captcha ou une confirmation s'affiche, termine-la toi-même.`, 'info', true);
         } else if (!warnedManual && Date.now() - started > 15000) {
           warnedManual = true;
-          toast(`Bouton introuvable automatiquement : clique toi-même pour récupérer ${game.title}. FreeKeep détectera l'ajout.`, 'warn', true);
+          toast(`Bouton introuvable automatiquement : clique toi-même pour récupérer ${game.title}. FreeKeep<3 détectera l'ajout.`, 'warn', true);
         }
       }
 

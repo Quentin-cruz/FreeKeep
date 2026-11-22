@@ -7,15 +7,40 @@ export const LOCALE = 'fr';
 // Jeux gratuits à garder
 // ---------------------------------------------------------------------------
 
+// Plateformes PC où les jeux s'activent (= ce que l'utilisateur coche dans le tutoriel).
 export const STORES = {
-  epic:    { id: 'epic',    name: 'Epic Games Store', short: 'Epic',    color: '#f4f4f5', bg: '#2b2b31' },
-  steam:   { id: 'steam',   name: 'Steam',            short: 'Steam',   color: '#66c0f4', bg: '#1b2838' },
-  gog:     { id: 'gog',     name: 'GOG',              short: 'GOG',     color: '#e9b8ff', bg: '#45185a' },
-  ubisoft: { id: 'ubisoft', name: 'Ubisoft Connect',  short: 'Ubisoft', color: '#9cc9ff', bg: '#0c3473' },
-  other:   { id: 'other',   name: 'Autres (itch.io, DRM-free, Battle.net…)', short: 'Autre', color: '#fcd34d', bg: '#3f3212' },
+  steam:     { id: 'steam',     name: 'Steam',            short: 'Steam',     color: '#66c0f4', bg: '#1b2838' },
+  epic:      { id: 'epic',      name: 'Epic Games',       short: 'Epic',      color: '#f4f4f5', bg: '#2b2b31' },
+  ubisoft:   { id: 'ubisoft',   name: 'Ubisoft Connect',  short: 'Ubisoft',   color: '#9cc9ff', bg: '#0c3473' },
+  gog:       { id: 'gog',       name: 'GOG',              short: 'GOG',       color: '#e9b8ff', bg: '#45185a' },
+  ea:        { id: 'ea',        name: 'EA app',           short: 'EA',        color: '#ff8f8f', bg: '#4a1414' },
+  battlenet: { id: 'battlenet', name: 'Battle.net',       short: 'Battle.net', color: '#7cc4ff', bg: '#0b2a4a' },
+  microsoft: { id: 'microsoft', name: 'Microsoft Store',  short: 'MS Store',  color: '#8fe28f', bg: '#103a1c' },
+  itch:      { id: 'itch',      name: 'itch.io',          short: 'itch.io',   color: '#ff9e9e', bg: '#5c1f24' },
+  indiegala: { id: 'indiegala', name: 'IndieGala',        short: 'IndieGala', color: '#ffd27a', bg: '#3d2a0a' },
+  other:     { id: 'other',     name: 'Autres (DRM-free…)', short: 'Autre',   color: '#fcd34d', bg: '#3f3212' },
+  // Avantages Amazon Prime (ex-Prime Gaming, désormais dans Amazon Luna)
+  amazon:    { id: 'amazon',    name: 'Amazon Games',     short: 'Amazon',    color: '#ffc15c', bg: '#2e2108', prime: true },
+  legacy:    { id: 'legacy',    name: 'Legacy Games',     short: 'Legacy',    color: '#d0c2ff', bg: '#2a1f4a', prime: true },
+  luna:      { id: 'luna',      name: 'Luna (cloud)',     short: 'Luna',      color: '#b9a4ff', bg: '#24164a', prime: true },
 };
 
-export const STORE_ORDER = ['epic', 'steam', 'gog', 'ubisoft', 'other'];
+export const PC_STORE_ORDER = ['steam', 'epic', 'ubisoft', 'gog', 'ea', 'battlenet', 'microsoft', 'itch', 'indiegala', 'other'];
+export const PRIME_STORES = ['amazon', 'legacy', 'luna'];
+export const STORE_ORDER = [...PC_STORE_ORDER, ...PRIME_STORES];
+
+// Plateformes Switch
+export const SWITCH_PLATFORMS = {
+  switch1: { label: 'Switch', short: 'Switch', color: '#f87171' },
+  switch2: { label: 'Switch 2', short: 'Switch 2', color: '#fb7185' },
+};
+
+// Niveaux d'exigence (seuils des bons plans)
+export const LEVELS = {
+  strict:   { label: 'Que les affaires de fou', emoji: '🔥', desc: 'Très peu de résultats, uniquement des remises énormes.', pcMinDiscount: 75, gemMinDiscount: 80, gemMinRating: 95, switchMinDiscount: 60 },
+  balanced: { label: 'Équilibré', emoji: '⚖️', desc: 'Grosses remises sur de bons jeux. Recommandé.', pcMinDiscount: 60, gemMinDiscount: 70, gemMinRating: 90, switchMinDiscount: 40 },
+  wide:     { label: 'Large', emoji: '🌊', desc: 'Plus de choix, remises plus modestes.', pcMinDiscount: 40, gemMinDiscount: 50, gemMinRating: 85, switchMinDiscount: 30 },
+};
 
 // Sites d'où viennent les giveaways ponctuels (repérés dans le texte GamerPower).
 export const GIVEAWAY_SITES = [
@@ -23,13 +48,14 @@ export const GIVEAWAY_SITES = [
   { id: 'fanatical', name: 'Fanatical', re: /fanatical/i },
   { id: 'humble', name: 'Humble Bundle', re: /humble/i },
   { id: 'indiegala', name: 'IndieGala', re: /indie\s?gala/i },
-  { id: 'prime', name: 'Prime Gaming', re: /prime gaming|amazon games|amazon prime/i },
+  { id: 'prime', name: 'Amazon Prime', re: /prime gaming|amazon games|amazon prime|amazon luna|\bluna\b/i },
   { id: 'gamesplanet', name: 'Gamesplanet', re: /gamesplanet/i },
   { id: 'gmg', name: 'Green Man Gaming', re: /green ?man ?gaming/i },
   { id: 'steelseries', name: 'SteelSeries', re: /steelseries/i },
   { id: 'keyhub', name: 'Keyhub', re: /keyhub/i },
   { id: 'gleam', name: 'Gleam', re: /gleam\.io/i },
   { id: 'itch', name: 'itch.io', re: /itch\.io/i },
+  { id: 'ea', name: 'EA', re: /\b(ea app|origin)\b/i },
   { id: 'ubisoft', name: 'Ubisoft', re: /ubisoft (?:store|connect)/i },
 ];
 
@@ -82,36 +108,68 @@ export const ENDPOINTS = {
   eshopPrice: 'https://api.ec.nintendo.com/v1/price',
   dealabs: 'https://www.dealabs.com/rss',
   ggdeals: 'https://api.gg.deals/v1/prices/by-steam-app-id/',
+  steamCommunity: 'https://steamcommunity.com',
+  steamWishlist: 'https://api.steampowered.com/IWishlistService/GetWishlist/v1/',
+  steamAppDetails: 'https://store.steampowered.com/api/appdetails',
+  steamSpy: 'https://steamspy.com/api.php',
+  gogUser: 'https://www.gog.com/userData.json',
+  gogOwned: 'https://www.gog.com/account/getFilteredProducts',
 };
 
 export const DEFAULT_SETTINGS = {
-  // Jeux gratuits
-  stores: { epic: true, steam: true, gog: true, ubisoft: true, other: true },
-  intervalHours: 1,       // fréquence de vérification (heures)
-  notifyNew: true,        // notif quand un nouveau jeu passe gratuit
-  notifyLastDay: true,    // rappel quand il reste moins de 24 h
-  autoClick: true,        // clic auto sur « Obtenir » quand on passe par « Récupérer »
-  steamOwnedSync: true,   // détecte les jeux Steam déjà possédés (session Steam du navigateur)
-  showUpcoming: true,     // affiche les jeux Epic de la semaine prochaine
+  onboarded: false,       // tutoriel terminé ?
 
-  // Bons plans PC
+  // Mes plateformes
+  pc: true,
+  switch: false,
+  switch2: false,
+  stores: {
+    steam: true, epic: true, ubisoft: true, gog: true, ea: true, battlenet: true, microsoft: true, itch: false, indiegala: true, other: false,
+    amazon: true, legacy: false, luna: false,
+  },
+  prime: false,           // abonné Amazon Prime (jeux offerts chaque mois via Luna, ex-Prime Gaming)
+
+  // Ce que je veux voir
+  freeGames: true,        // jeux PC gratuits à garder
+  showUpcoming: true,     // jeux Epic de la semaine prochaine
   pcDeals: true,
-  pcMinDiscount: 60,      // remise mini sur les gros jeux (%)
-  gemMinDiscount: 70,     // remise mini sur les pépites (%)
-  gemMinRating: 90,       // note Steam mini d'une pépite (%)
+  switchDeals: true,
+  physical: true,         // jeux en boîte (magasins)
+  keyshops: true,         // sites de clés (marché gris)
+  bundles: true,
+  level: 'balanced',      // strict | balanced | wide | custom
+  pcMinDiscount: 60,      // seuils (utilisés quand level = custom)
+  gemMinDiscount: 70,
+  gemMinRating: 90,
+  switchMinDiscount: 40,
   ggdealsKey: '',         // clé API GG.deals (facultative) -> prix des sites de clés
 
-  // Switch
-  switchDeals: true,
-  switchMinDiscount: 40,  // remise mini sur l'eShop (%)
+  // Ce que je ne veux pas voir
+  excludedGenres: ['adult'],
+  bannedKeywords: [],
 
-  // Dealabs (physique, sites de clés, erreurs de prix)
+  // Bibliothèque Steam
+  steamProfile: '',       // lien du profil public
+  hideOwned: true,        // masquer les promos sur les jeux possédés
+  useWishlist: true,      // mettre en avant la liste de souhaits
+  steamOwnedSync: true,   // aussi via la session Steam du navigateur
+  gogSessionSync: true,   // jeux GOG possédés via la session gog.com du navigateur
+
+  // Dealabs
   dealabs: true,
-  dealabsOnlyHot: true,   // seulement les deals validés « hot » par la communauté (+ erreurs de prix)
-  departments: '80',      // départements pour les deals en magasin (ex. "80, 60")
+  dealabsOnlyHot: true,
+  departments: '',        // départements pour les deals en magasin (ex. "80, 60")
   dealMaxAgeDays: 7,
 
-  notifyDeals: true,      // notif pour les affaires exceptionnelles
+  // Alertes
+  intervalHours: 1,
+  notifyNew: true,
+  notifyLastDay: true,
+  notifyDeals: true,
+  notifyWishlist: true,
+
+  // Récupération
+  autoClick: true,
 };
 
 export const ALARM_NAME = 'freekeep-refresh';

@@ -10,6 +10,7 @@ export function isExceptional(d) {
   return !!(
     f.priceError ||
     f.drop ||
+    (f.wishlist && disc >= 50) ||
     (f.historicLow && disc >= 75) ||
     (f.hot && (f.free || disc >= 60)) ||
     (d.section === 'switch' && f.nintendo && disc >= 40) ||
@@ -24,6 +25,7 @@ export function scoreDeal(d) {
   if (f.drop) s += 35;
   if (f.historicLow) s += 15;
   if (f.hot) s += 20;
+  if (f.wishlist) s += 30;
   if (f.aaa) s += 10;
   if (f.nintendo) s += 25;
   if (f.popular) s += 10;

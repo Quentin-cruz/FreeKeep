@@ -1,13 +1,15 @@
 // FreeKeep — popup : 3 sections (Gratuits, Promos PC, Switch)
-import { STORES, STORE_ORDER, CHANNELS, STALE_AFTER_MS } from '../src/config.js';
+import { STORES, CHANNELS, SWITCH_PLATFORMS, STALE_AFTER_MS } from '../src/config.js';
 import { stateFor } from '../src/store.js';
+import { wants, showsGame } from '../src/prefs.js';
+import { GENRE_BY_ID } from '../src/genres.js';
 import { normTitle, formatDuration, formatDate, formatShortDate, formatAgo, formatPrice } from '../src/util.js';
 
 const $ = (sel) => document.querySelector(sel);
 const send = (msg) => chrome.runtime.sendMessage(msg);
 
 let S = null; // état renvoyé par le service worker
-const ui = { section: 'free', tab: 'active', filter: 'all', showHidden: false, refreshing: false };
+const ui = { section: 'free', tab: 'active', filter: 'all', showHidden: false, showFiltered: false, refreshing: false };
 
 const params = new URLSearchParams(location.search);
 if (params.has('tab')) document.body.classList.add('in-tab');
@@ -42,10 +44,11 @@ function deriveFree() {
   const now = Date.now();
   const { settings, games, states } = S;
   const rows = games
-    .filter((g) => settings.stores[g.store] && (!g.end || g.end > now))
+    .filter((g) => showsGame(g, wants(settings)) && (!g.end || g.end > now))
     .map((g) => ({ g, s: stateFor(states, g) }));
 
-  const active = rows.filter((r) => r.g.status === 'active' && !r.s.claimed);
+  const filtered = rows.filter((r) => r.g.hiddenBy && r.g.status === 'active' && !r.s.claimed);
+  const active = rows.filter((r) => r.g.status === 'active' && !r.s.claimed && !r.g.hiddenBy);
   const seen = new Set();
   const claimed = Object.entries(states)
     .filter(([, s]) => s.claimed && s.snapshot)
@@ -61,8 +64,9 @@ function deriveFree() {
   return {
     available: active.filter((r) => !r.s.hidden),
     hidden: active.filter((r) => r.s.hidden),
-    upcoming: settings.showUpcoming ? rows.filter((r) => r.g.status === 'upcoming') : [],
+    upcoming: wants(settings).upcoming ? rows.filter((r) => r.g.status === 'upcoming' && !r.g.hiddenBy) : [],
     claimed,
+    filtered,
   };
 }
 
@@ -71,8 +75,9 @@ function deriveDeals(section) {
   const all = (S.deals || []).filter((d) => d.section === section && (!d.end || d.end > now));
   const hiddenIds = S.dealStates || {};
   return {
-    visible: all.filter((d) => !hiddenIds[d.id]?.hidden),
-    hidden: all.filter((d) => hiddenIds[d.id]?.hidden),
+    visible: all.filter((d) => !hiddenIds[d.id]?.hidden && !d.hiddenBy),
+    hidden: all.filter((d) => hiddenIds[d.id]?.hidden && !d.hiddenBy),
+    filtered: all.filter((d) => d.hiddenBy),
   };
 }
 
@@ -84,6 +89,13 @@ function render() {
   const free = deriveFree();
   const pc = deriveDeals('pc');
   const sw = deriveDeals('switch');
+
+  // Sections selon la personnalisation
+  const w = wants(S.settings);
+  if (!w.sections.includes(ui.section) && w.sections.length) ui.section = w.sections[0];
+  $('.sections').hidden = w.sections.length < 2;
+  document.querySelectorAll('.section').forEach((b) => { b.hidden = !w.sections.includes(b.dataset.section); });
+  $('#onboard').hidden = !!S.settings.onboarded;
 
   // Sélecteur de section
   const counts = { free: free.available.length, pc: pc.visible.length, switch: sw.visible.length };
@@ -103,16 +115,19 @@ function render() {
     : [n ? `${n} ${n > 1 ? 'jeux gratuits' : 'jeu gratuit'}` : null, nHot ? `${nHot} ${nHot > 1 ? 'affaires' : 'affaire'} 🔥` : null]
       .filter(Boolean).join(' · ') || 'Tout est à jour';
 
-  $('#free-tabs').hidden = ui.section !== 'free';
+  $('#free-tabs').hidden = ui.section !== 'free' || !w.sections.length;
   renderBanner();
 
   const list = $('#list');
   list.replaceChildren();
-  if (ui.section === 'free') renderFree(list, free);
+  if (!w.sections.length) {
+    $('#filters').replaceChildren();
+    list.append(empty('🧭', 'Rien d’activé pour l’instant', h('button', { class: 'link-btn', onclick: () => chrome.runtime.openOptionsPage() }, 'Choisir ce que je veux voir')));
+  } else if (ui.section === 'free') renderFree(list, free);
   else renderDeals(list, ui.section === 'pc' ? pc : sw, ui.section);
 
   const sources = {
-    free: ['Epic, Steam, ', h('a', { href: 'https://www.gamerpower.com', target: '_blank' }, 'GamerPower')],
+    free: ['Epic, Steam, ', h('a', { href: 'https://www.gamerpower.com', target: '_blank' }, 'GamerPower'), S.settings.dealabs ? ', Dealabs' : ''],
     pc: ['Prix : ', h('a', { href: 'https://www.cheapshark.com', target: '_blank' }, 'CheapShark'), ', Dealabs', S.settings.ggdealsKey ? [', ', h('a', { href: 'https://gg.deals', target: '_blank' }, 'GG.deals')] : ''],
     switch: ['Prix : eShop Nintendo, ', h('a', { href: 'https://www.dealabs.com', target: '_blank' }, 'Dealabs')],
   }[ui.section];
@@ -147,10 +162,11 @@ function renderFree(list, d) {
     document.querySelector(`[data-count="${tab}"]`).textContent = rows.length;
   }
   document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === ui.tab));
-  $('.tab[data-tab="upcoming"]').hidden = !S.settings.showUpcoming;
+  $('.tab[data-tab="upcoming"]').hidden = !wants(S.settings).upcoming;
 
+  if (ui.tab === 'upcoming' && !wants(S.settings).upcoming) ui.tab = 'active';
   const current = ui.tab === 'active' ? d.available : ui.tab === 'upcoming' ? d.upcoming : d.claimed;
-  const stores = STORE_ORDER.filter((s) => S.settings.stores[s]);
+  const stores = wants(S.settings).stores;
   renderChips(
     current,
     stores.map((s) => ({ id: s, label: STORES[s].short, color: STORES[s].color })),
@@ -163,6 +179,7 @@ function renderFree(list, d) {
     list.append(...[0, 1, 2].map(() => h('div', { class: 'skeleton' })));
   } else if (ui.tab === 'active') {
     renderAvailable(list, filtered, d.hidden.filter((r) => ui.filter === 'all' || r.g.store === ui.filter));
+    filteredToggle(list, d.filtered.length, () => d.filtered.forEach((r) => list.append(gameCard(r, 'filtered'))));
   } else if (ui.tab === 'upcoming') {
     if (!filtered.length) list.append(empty('🗓️', 'Rien d’annoncé pour l’instant', 'Epic dévoile ses prochains jeux offerts chaque jeudi.'));
     filtered.forEach((r) => list.append(gameCard(r, 'upcoming')));
@@ -185,7 +202,7 @@ function renderAvailable(list, rows, hidden) {
     list.append(
       hidden.length
         ? empty('🙈', 'Tous les jeux restants sont masqués', '')
-        : empty('🎮', 'Rien à récupérer pour l’instant', `FreeKeep vérifie toutes les ${S.settings.intervalHours < 1 ? `${Math.round(S.settings.intervalHours * 60)} min` : `${S.settings.intervalHours} h`} et te prévient dès qu’un jeu passe gratuit.`),
+        : empty('🎮', 'Rien à récupérer pour l’instant', `FreeKeep<3 vérifie toutes les ${S.settings.intervalHours < 1 ? `${Math.round(S.settings.intervalHours * 60)} min` : `${S.settings.intervalHours} h`} et te prévient dès qu’un jeu passe gratuit.`),
     );
   }
   rows.forEach((r) => list.append(gameCard(r, 'active')));
@@ -196,20 +213,23 @@ function renderAvailable(list, rows, hidden) {
 const DEAL_FILTERS = {
   pc: [
     { id: 'top', label: '🔥 Top', test: (d) => d.exceptional },
+    { id: 'wishlist', label: '❤️ Souhaits', test: (d) => !!d.flags?.wishlist },
     { id: 'official', label: 'Officiel', color: CHANNELS.official.color, test: (d) => d.channel === 'official' },
     { id: 'keyshop', label: 'Clés', color: CHANNELS.keyshop.color, test: (d) => d.channel === 'keyshop' || !!d.keyshop },
     { id: 'bundle', label: 'Bundles', color: CHANNELS.bundle.color, test: (d) => d.channel === 'bundle' },
   ],
   switch: [
     { id: 'top', label: '🔥 Top', test: (d) => d.exceptional },
+    { id: 'switch1', label: 'Switch', color: SWITCH_PLATFORMS.switch1.color, test: (d) => d.platform !== 'switch2', onlyIf: () => S.settings.switch2 },
+    { id: 'switch2', label: 'Switch 2', color: SWITCH_PLATFORMS.switch2.color, test: (d) => d.platform === 'switch2', onlyIf: () => S.settings.switch2 },
     { id: 'eshop', label: 'eShop', color: CHANNELS.eshop.color, test: (d) => d.channel === 'eshop' },
     { id: 'physical', label: 'Physique', color: CHANNELS.physical.color, test: (d) => d.channel === 'physical' },
     { id: 'keyshop', label: 'Clés', color: CHANNELS.keyshop.color, test: (d) => d.channel === 'keyshop' },
   ],
 };
 
-function renderDeals(list, { visible, hidden }, section) {
-  const filters = DEAL_FILTERS[section];
+function renderDeals(list, { visible, hidden, filtered }, section) {
+  const filters = DEAL_FILTERS[section].filter((f) => !f.onlyIf || f.onlyIf());
   renderChips(visible, filters, (d, id) => filters.find((f) => f.id === id).test(d), true);
   const active = filters.find((f) => f.id === ui.filter);
   const rows = active ? visible.filter(active.test) : visible;
@@ -227,11 +247,12 @@ function renderDeals(list, { visible, hidden }, section) {
     list.append(
       section === 'pc'
         ? empty('🔎', 'Aucune pépite pour l’instant', 'Seuls les gros jeux et les jeux très bien notés à grosse remise sont gardés. Les seuils se règlent dans les réglages.')
-        : empty('🔎', 'Aucune grosse promo Switch', 'FreeKeep écarte les petits jeux bradés : seuls les jeux populaires, les gros jeux et les jeux Nintendo sont gardés.'),
+        : empty('🔎', 'Aucune grosse promo Switch', 'FreeKeep<3 écarte les petits jeux bradés : seuls les jeux populaires, les gros jeux et les jeux Nintendo sont gardés.'),
     );
   }
   rows.forEach((d) => list.append(dealCard(d, false)));
   hiddenToggle(list, hidden.length, () => hidden.forEach((d) => list.append(dealCard(d, true))));
+  filteredToggle(list, filtered.length, () => filtered.forEach((d) => list.append(dealCard(d, true))));
 }
 
 function priceBlock(d) {
@@ -251,6 +272,8 @@ function pill(text, cls, title) {
 function dealPills(d) {
   const f = d.flags || {};
   const out = [];
+  if (d.hiddenBy) out.push(pill(hiddenLabel(d.hiddenBy), 'muted'));
+  if (f.wishlist) out.push(pill('❤️ Liste de souhaits', 'wish'));
   if (f.priceError) out.push(pill('⚠️ Erreur de prix ?', 'danger', 'Signalé comme erreur de prix sur Dealabs : peut être annulé par le vendeur'));
   if (f.drop) out.push(pill('📉 Chute soudaine', 'warn', d.prevPrice ? `Avant : ${formatPrice(d.prevPrice, d.currency)}` : ''));
   if (f.historicLow) out.push(pill('🏆 Plus bas historique', 'gold'));
@@ -279,6 +302,8 @@ function compareUrl(d) {
 
 function dealCard(d, isHidden) {
   const coverEl = cover(d.images, d.section === 'switch' ? 'switch' : 'pc', d.square);
+  if (d.section === 'pc' && STORES[d.platform]) coverEl.append(badge(d.platform));
+  if (d.platform === 'switch2') coverEl.append(h('span', { class: 'store-badge', style: 'color:#fff;background:#e60012' }, 'Switch 2'));
   if (d.discount) coverEl.append(h('span', { class: 'disc' }, `-${d.discount} %`));
   if (d.exceptional) coverEl.append(h('span', { class: 'flame', title: 'Affaire exceptionnelle' }, '🔥'));
   const cmp = compareUrl(d);
@@ -317,6 +342,25 @@ function renderChips(rows, defs, match, show) {
       .filter(({ f, n }) => n > 0 || ui.filter === f.id) // pas de filtre vide
       .map(({ f, n }) => chip(f.id, f.label, f.color, n)),
   );
+}
+
+function hiddenLabel(reason) {
+  if (reason === 'owned') return '🎮 Déjà dans ta bibliothèque';
+  if (reason?.startsWith('genre:')) {
+    const g = GENRE_BY_ID[reason.slice(6)];
+    return `🚫 ${g ? `${g.emoji} ${g.label}` : 'Genre masqué'}`;
+  }
+  if (reason?.startsWith('keyword:')) return `🚫 « ${reason.slice(8)} »`;
+  return '🚫 Filtré';
+}
+
+function filteredToggle(list, n, renderFiltered) {
+  if (!n) return;
+  list.append(
+    h('button', { class: 'link-btn toggle-hidden', onclick: () => { ui.showFiltered = !ui.showFiltered; render(); } },
+      ui.showFiltered ? 'Cacher ce que tes filtres masquent' : `🚫 ${n} masqué${n > 1 ? 's' : ''} par tes filtres (voir)`),
+  );
+  if (ui.showFiltered) renderFiltered();
 }
 
 function hiddenToggle(list, n, renderHidden) {
@@ -378,6 +422,8 @@ function gameCard({ g }, mode) {
       ? [h('button', { class: 'btn', onclick: () => open(g.url) }, 'Voir la page')]
       : mode === 'hidden'
         ? [h('button', { class: 'btn', onclick: () => setHidden(g, false) }, 'Réafficher')]
+        : mode === 'filtered'
+          ? [h('button', { class: 'btn', onclick: () => claim(g) }, 'Récupérer quand même'), h('span', { class: 'pill muted' }, hiddenLabel(g.hiddenBy))]
         : [
             h('button', { class: 'btn primary', onclick: () => claim(g) }, 'Récupérer'),
             h('button', { class: 'btn ghost', onclick: () => setClaimed(g, true), title: 'Je possède déjà ce jeu' }, 'Je l’ai'),
@@ -388,14 +434,16 @@ function gameCard({ g }, mode) {
   coverEl.append(badge(g.store));
   const via = g.via ? `via ${g.via}` : viaAggregator ? 'via GamerPower' : null;
 
-  return h('article', { class: `card${mode === 'hidden' ? ' dim' : ''}` },
+  return h('article', { class: `card${mode === 'hidden' || mode === 'filtered' ? ' dim' : ''}` },
     coverEl,
     h('div', { class: 'body' },
       h('h3', { class: 'title', title: g.title }, g.title),
       h('div', { class: 'meta' },
         timerEl(g, mode),
         g.worth ? h('span', {}, `Valeur ${g.worth}`) : null,
-        via ? h('span', { class: g.via ? 'via' : '', title: 'Site qui organise le giveaway (compte parfois requis)' }, via) : null,
+        via && !g.prime ? h('span', { class: g.via ? 'via' : '', title: 'Site qui organise le giveaway (compte parfois requis)' }, via) : null,
+        g.prime ? h('span', { class: 'pill prime', title: 'Réservé aux abonnés Amazon Prime' }, '👑 Prime') : null,
+        g.cloud ? h('span', { class: 'pill cloud', title: 'Jouable en streaming avec Prime, pas ajouté à ta bibliothèque' }, '☁️ Cloud · pas à garder') : null,
       ),
       h('div', { class: 'actions' }, ...actions),
     ),
@@ -495,6 +543,7 @@ function setSection(section) {
   ui.section = section;
   ui.filter = 'all';
   ui.showHidden = false;
+  ui.showFiltered = false;
   try {
     localStorage.setItem('fk:section', section);
   } catch { /* rien */ }
@@ -512,6 +561,7 @@ document.querySelectorAll('.tab').forEach((t) =>
   }),
 );
 $('#btn-refresh').addEventListener('click', refresh);
+$('#btn-onboard').addEventListener('click', () => chrome.tabs.create({ url: chrome.runtime.getURL('onboarding/onboarding.html') }));
 $('#btn-options').addEventListener('click', () => chrome.runtime.openOptionsPage());
 
 let reloadTimer = null;

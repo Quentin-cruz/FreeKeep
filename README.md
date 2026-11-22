@@ -1,10 +1,12 @@
-# FreeKeep v2.1 : jeux gratuits à vie & vrais bons plans
+# FreeKeep<3 (v4) : jeux gratuits à vie & vrais bons plans, à ta mesure
+
+<img src="extension/icons/logo-512.png" width="96" alt="Logo FreeKeep<3">
 
 Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en trois sections.
 
 | Section | Contenu |
 |---|---|
-| 🎁 **Gratuits** | Jeux PC offerts à garder à vie : Epic, Steam, GOG, Ubisoft, **et les drops ponctuels** (Alienware Arena, Fanatical, Humble Bundle, IndieGala, Prime Gaming, itch.io…) |
+| 🎁 **Gratuits** | Jeux PC offerts à garder à vie : Epic, Steam, GOG, Ubisoft, EA, Battle.net, Microsoft Store, **Amazon Prime** (Amazon Games, Legacy Games, Luna), **et les drops ponctuels** (Alienware Arena, Fanatical, Humble Bundle, IndieGala, itch.io…) |
 | 💻 **Promos PC** | Seulement les **gros jeux bien notés** et les **pépites** très appréciées à grosse remise, sur les stores officiels et les sites de clés |
 | 🎮 **Switch** | Grosses promos **eShop** (jeux jouables sur Switch 1), **jeux en boîte** (Amazon, Fnac, Leclerc…) et **clés** |
 
@@ -14,14 +16,66 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en trois sec
 2. Ouvre `chrome://extensions` (ou `opera://extensions`, `edge://extensions`).
 3. Active le **Mode développeur**.
 4. Clique sur **Charger l'extension non empaquetée** et choisis le dossier **`extension/`**.
-5. Épingle l'icône 🎁.
+5. Épingle l'icône ❤️ (le cœur).
 
-**Mise à jour depuis la v1** : remplace le contenu du dossier `extension/`, puis clique sur ↻ (Recharger) sur la carte FreeKeep. Ton historique est conservé.
+**Mise à jour** : remplace le contenu du dossier `extension/`, puis clique sur ↻ (Recharger) sur la carte FreeKeep<3. Ton historique est conservé. En passant de la v3 à la v4, les réglages s'ouvrent pour que tu choisisses les nouvelles options (Amazon Prime, Battle.net, Microsoft Store, GOG).
+
+## Personnalisation
+
+**Tutoriel au premier lancement**, relançable depuis Réglages → « Relancer le tutoriel ». Il a 9 étapes, certaines n'apparaissent que si elles te concernent :
+
+1. **Plateformes** : PC, Switch, et « je veux aussi les jeux Switch 2 ».
+2. **Stores PC** où tu actives tes jeux : Steam, Epic Games, Ubisoft Connect, GOG, EA app, Battle.net, Microsoft Store, itch.io, IndieGala, Autres. Puis **« J'ai Amazon Prime »** : Amazon Games, Legacy Games, Luna (cloud).
+3. **Ce que tu veux voir** : jeux gratuits, promos PC, promos Switch, jeux en boîte (+ ton département), sites de clés, bundles.
+4. **Niveau d'exigence** : 🔥 que les affaires de fou, ⚖️ équilibré ou 🌊 large.
+5. **Tes bibliothèques** : lien de ton profil Steam public, et lecture de tes jeux GOG via ta session gog.com. Les promos sur tes jeux sont masquées et ta liste de souhaits Steam est mise en avant.
+6. **Ce que tu ne veux pas voir** : 16 genres à masquer (horreur, sport, contenu adulte…) et des licences à bannir par mot-clé (FIFA, Call of Duty…).
+7. **Alertes** : notifications, fréquence, clic automatique.
+8. **Récapitulatif**.
+
+**Menus adaptatifs** : le popup n'affiche que tes sections. Il n'y a pas de barre de sections s'il n'y en a qu'une, pas de filtre Switch 2 si tu ne l'as pas choisi, et pas d'onglet « Bientôt » sans Epic. Les éléments masqués par tes filtres restent consultables (« 🚫 N masqués par tes filtres »), avec la raison du masquage.
+
+**Réglages en 6 onglets** : Mes plateformes (+ Amazon Prime) · Ce que je veux voir · Filtres · Mes bibliothèques · Alertes · Sources & données.
+
+### Bibliothèque Steam : sans connexion
+
+- FreeKeep lit la liste publique des jeux de ton profil (`steamcommunity.com/id/…/games?xml=1`) et ta liste de souhaits publique.
+- Prérequis : dans tes paramètres de confidentialité Steam, mets « Mon profil » et « Détails des jeux » en **Public**, et « Liste de souhaits » aussi si tu veux l'utiliser.
+- Ce que ça change :
+  - les promos sur les jeux que tu possèdes sont masquées ;
+  - les jeux gratuits Steam que tu as déjà sont cochés « récupérés » ;
+  - les jeux de ta liste de souhaits remontent en tête dès -20 %, et une alerte part dès -50 %.
+- La bibliothèque se resynchronise toutes les 12 h, ou avec le bouton « Synchroniser ».
+
+### Bibliothèque GOG : via ta session, sans mot de passe
+
+- Si tu es déjà connecté à gog.com dans ton navigateur, FreeKeep<3 lit ta liste de jeux GOG (`gog.com/userData.json` puis `account/getFilteredProducts`). Aucun identifiant n'est demandé ni enregistré.
+- Ce que ça change : les promos sur ces jeux sont masquées (correspondance stricte du nom), et les jeux gratuits GOG que tu as déjà sont cochés « récupérés ».
+- Pas connecté ? La carte GOG des réglages l'indique ; connecte-toi sur gog.com puis clique « Synchroniser ». Désactivable à tout moment.
+
+**Autres plateformes** : Epic, Ubisoft, EA, Battle.net, Microsoft Store et Amazon ne publient pas de bibliothèque lisible sans te connecter à ton compte. FreeKeep<3 note donc un jeu comme possédé quand sa page affiche « Dans la bibliothèque », ou quand tu cliques « Je l'ai ».
+
+### Amazon Prime (ex-Prime Gaming)
+
+- Coche « J'ai Amazon Prime » pour voir les jeux offerts aux abonnés. Sans Prime, ils restent cachés : tu ne pourrais pas les récupérer.
+- Les jeux Prime à activer sur **Epic**, **GOG** ou le **Microsoft Store** suivent tes choix de stores. Les autres vont dans **Amazon Games** (l'application d'Amazon), **Legacy Games** (codes) ou **Luna** (jeux en cloud, à jouer en streaming : pas à garder, donc ni comptés dans le badge ni ouverts par « Tout récupérer »).
+- Chaque jeu Prime porte le badge 👑 Prime.
+
+### Switch / Switch 2
+
+Chaque bon plan Switch est classé **Switch** (jouable sur Switch 1, et donc aussi sur Switch 2) ou **Switch 2** (exclusif). Le classement s'appuie sur les codes Nintendo (HAC = Switch 1, BEE = Switch 2) et sur les titres Dealabs. Les jeux Switch 2 n'apparaissent que si tu les as demandés.
+
+### Genres
+
+- Les genres viennent des données officielles Steam (genres et avertissements de contenu) et des catégories de l'eShop Nintendo.
+- Pour l'horreur, le FPS, le puzzle, etc., les tags joueurs viennent de SteamSpy, interrogé seulement si tu masques un de ces genres.
+- Pour les jeux sans données (Epic, Dealabs…), FreeKeep se base sur le titre.
+- La liste de souhaits ignore le filtre de genres, mais pas les mots-clés bannis.
 
 ## Vérifications automatiques
 
 - Les vérifications interrogent les vrais sites. Elles tournent en arrière-plan, même popup fermé, tant que le navigateur est ouvert.
-- **Fréquence** : toutes les heures par défaut, réglable de 30 min à 24 h. Une vérification se lance aussi :
+- **Fréquence** : toutes les heures par défaut, réglable de 30 min à 24 h. Aucune notification n'est envoyée tant que le tutoriel n'est pas terminé. Une vérification se lance aussi :
   - à l'installation ;
   - au démarrage du navigateur ;
   - à l'ouverture du popup si la dernière date de plus de 30 min.
@@ -30,16 +84,16 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en trois sec
 
 ## 🎁 Gratuits
 
-- Sources : API officielle Epic, recherche Steam (-100 %) et [GamerPower](https://www.gamerpower.com), qui recense tous les giveaways de jeux PC.
+- Sources : API officielle Epic, recherche Steam (-100 %), [GamerPower](https://www.gamerpower.com), qui recense les giveaways de jeux PC (dont Prime), et les jeux offerts postés sur [Dealabs](https://www.dealabs.com) (Prime, Microsoft Store, Battle.net…). Les week-ends gratuits, démos, free-to-play et DLC sont écartés.
 - Le site qui organise le giveaway est affiché, par exemple « via Alienware Arena ». Ces sites demandent parfois un compte.
 - Le bouton **Récupérer** ouvre la page du store et clique sur « Obtenir » pour toi. Sur Epic, la commande n'est validée que si le total est à 0 €. Les captchas restent à faire toi-même.
-- Les jeux que tu possèdes déjà sont détectés : sur Steam via ta session, sur les stores quand la page affiche « Dans la bibliothèque ».
+- Les jeux que tu possèdes déjà sont détectés : sur Steam via ton profil public et ta session, sur GOG via ta session, sur les stores quand la page affiche « Dans la bibliothèque ».
 
 ## 💻 Promos PC : que des pépites
 
 | Source | Ce qu'elle apporte |
 |---|---|
-| [CheapShark](https://www.cheapshark.com) | Promos sur 30+ stores officiels (Steam, GOG, Humble, Fanatical, GMG, Gamesplanet…), avec la note Metacritic et les avis Steam |
+| [CheapShark](https://www.cheapshark.com) | Promos sur 30+ stores officiels (Steam, GOG, Humble, Fanatical, GMG, Gamesplanet, Battle.net…), avec la note Metacritic et les avis Steam |
 | [Dealabs](https://www.dealabs.com) | Deals **hot** validés par la communauté, y compris sur les sites de clés (Eneba, Instant Gaming, G2A…), et **erreurs de prix** |
 | [GG.deals](https://gg.deals) *(facultatif)* | Prix des **sites de clés** en euros, plus bas historiques, surveillance des gros jeux |
 
@@ -76,12 +130,17 @@ extension/
 │       ├── epic.js, steam.js, gamerpower.js      # gratuits
 │       ├── cheapshark.js, ggdeals.js             # promos PC
 │       ├── eshop.js                              # promos Switch
-│       └── dealabs.js                            # boîtes, clés, erreurs de prix (RSS)
+│       ├── dealabs.js                            # boîtes, clés, erreurs de prix, jeux offerts (RSS)
+│       └── goglibrary.js                         # jeux GOG via la session gog.com
+├── src/prefs.js, src/genres.js            # personnalisation : sections, exclusions, jeux possédés
+├── src/sources/steamlibrary.js, steamapps.js  # bibliothèque/souhaits Steam, genres Steam/SteamSpy
+├── onboarding/                # tutoriel de premier lancement
+├── ui/                        # composants partagés (tutoriel + réglages)
 ├── content/claim.js           # clic assisté + détection « possédé »
 ├── popup/  options/  icons/
 tests/
 ├── fixtures.js                # données calquées sur le format réel des API
-└── unit.test.js               # 17 tests
+└── unit.test.js               # 31 tests
 ```
 
 ## Tests
@@ -90,8 +149,13 @@ tests/
 node --test tests/unit.test.js
 ```
 
-L'extension a aussi été testée de bout en bout dans Chrome (33 vérifications), avec de fausses versions de toutes les API et pages des stores. Les scénarios couverts :
+L'extension a aussi été testée de bout en bout dans Chrome (36 vérifications), avec de fausses versions de toutes les API et pages des stores. Ces tests ne prouvent pas que les vrais sites répondent comme prévu. Les scénarios couverts :
 
+- installation et tutoriel complet ;
+- bibliothèque et liste de souhaits Steam, bibliothèque GOG via la session ;
+- jeux Prime (Epic, Amazon Games, Legacy), Battle.net et Microsoft Store, Luna cloud ignoré si non coché ;
+- filtres de genres et de mots-clés, tri Switch / Switch 2 ;
+- menus qui s'adaptent quand on décoche une plateforme ;
 - fusion des sources et tri des bons plans ;
 - erreurs de prix, chute soudaine sur un site de clés, notifications ;
 - filtres et masquage dans le popup ;
@@ -104,7 +168,9 @@ L'extension a aussi été testée de bout en bout dans Chrome (33 vérifications
 - Dealabs, CheapShark, Nintendo et GG.deals peuvent changer leurs API. Si une source tombe, un bandeau le signale, l'État des sources passe en ✘ et les dernières données connues restent affichées.
 - Navigateur fermé = pas de vérification : la suivante se fait au redémarrage.
 - Les sites de clés sont du marché gris : prix plus bas, mais pas de garantie éditeur.
+- **Amazon Prime n'a pas d'API publique** (la page des jeux Luna est générée en JavaScript). Les jeux Prime sont repérés via GamerPower et Dealabs : il peut en manquer, surtout les jeux Luna en cloud.
+- **GOG** : `getFilteredProducts` n'est pas une API documentée ; GOG peut la changer. En cas d'échec, la carte GOG passe en ⚠️ et le reste fonctionne.
 
 ---
 
-Données : Epic Games Store, Steam, [GamerPower](https://www.gamerpower.com), [CheapShark](https://www.cheapshark.com), Nintendo eShop, [Dealabs](https://www.dealabs.com), [GG.deals](https://gg.deals). FreeKeep n'est affilié à aucun de ces services.
+Données : Epic Games Store, Steam, GOG, [GamerPower](https://www.gamerpower.com), [CheapShark](https://www.cheapshark.com), Nintendo eShop, [Dealabs](https://www.dealabs.com), [GG.deals](https://gg.deals). FreeKeep<3 n'est affilié à aucun de ces services.

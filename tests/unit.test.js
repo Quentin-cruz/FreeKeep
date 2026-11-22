@@ -130,8 +130,8 @@ import {
   eshopPriceFixture, dealabsFeeds, ggdealsFixture,
 } from './fixtures.js';
 
-const S = { ...DEFAULT_SETTINGS };
-const ALL5 = ['epic', 'steam', 'gog', 'ubisoft', 'other'];
+const S = { ...DEFAULT_SETTINGS, departments: '80', switch: true };
+const ALL5 = ['epic', 'steam', 'gog', 'ubisoft', 'ea', 'itch', 'indiegala', 'other'];
 
 test('GamerPower : drops ponctuels (Alienware, itch.io), DLC exclus', () => {
   const items = parseGamerPower(gamerPowerFixture(now), ALL5, now);
@@ -139,10 +139,13 @@ test('GamerPower : drops ponctuels (Alienware, itch.io), DLC exclus', () => {
   assert.equal(ghost.store, 'steam');
   assert.equal(ghost.via, 'Alienware Arena');
   const itch = items.find((i) => /Tiny Glade/.test(i.title));
-  assert.equal(itch.store, 'other');
+  assert.equal(itch.store, 'itch');
   assert.ok(!items.some((i) => /DLC/.test(i.title)), 'DLC exclu');
   assert.equal(detectSite({ instructions: 'Visit Fanatical and add to cart' }), 'Fanatical');
-  assert.equal(parseGamerPower(gamerPowerFixture(now), ['epic', 'steam', 'gog', 'ubisoft'], now).some((i) => i.store === 'other'), false);
+  assert.equal(parseGamerPower(gamerPowerFixture(now), ['epic', 'steam', 'gog', 'ubisoft'], now).some((i) => i.store === 'itch'), false);
+  assert.equal(detectStore('PC, DRM-Free', { instructions: 'Claim it on IndieGala' }), 'indiegala');
+  assert.equal(detectStore('PC, Origin'), 'ea');
+  assert.equal(detectStore('PC, Battle.net'), 'battlenet');
 });
 
 test('Prix et titres : utilitaires', () => {
@@ -277,4 +280,209 @@ test('buildDeals : fusion Dealabs ↔ eShop, prix clé, affaires exceptionnelles
   const ow = deals2.find((d) => d.title === 'Open World Epic');
   assert.ok(ow.flags.drop && ow.exceptional);
   assert.equal(ow.prevPrice, 17.99);
+});
+
+
+// ===========================================================================
+// v3 : personnalisation
+// ===========================================================================
+import { effective, wants, bannedKeyword, sameGameStrict, extractGameName, makeOwnedIndex, hiddenReason } from '../extension/src/prefs.js';
+import { genresOf, needsTags } from '../extension/src/genres.js';
+import { parseSteamProfile, parseGamesXml } from '../extension/src/sources/steamlibrary.js';
+import { parseAppDetails, parseSteamSpy } from '../extension/src/sources/steamapps.js';
+import { platformOf } from '../extension/src/sources/cheapshark.js';
+import { pcPlatformOf } from '../extension/src/sources/dealabs.js';
+import { steamGamesXmlFixture } from './fixtures.js';
+
+test('Niveaux d’exigence et sections actives', () => {
+  assert.equal(effective({ ...DEFAULT_SETTINGS, level: 'strict' }).pcMinDiscount, 75);
+  assert.equal(effective({ ...DEFAULT_SETTINGS, level: 'custom', pcMinDiscount: 55 }).pcMinDiscount, 55);
+  assert.deepEqual(wants({ ...DEFAULT_SETTINGS }).sections, ['free', 'pc']);
+  assert.deepEqual(wants({ ...DEFAULT_SETTINGS, switch: true }).sections, ['free', 'pc', 'switch']);
+  assert.deepEqual(wants({ ...DEFAULT_SETTINGS, pc: false, switch: true }).sections, ['switch']);
+  const noStore = { ...DEFAULT_SETTINGS, stores: Object.fromEntries(Object.keys(DEFAULT_SETTINGS.stores).map((k) => [k, false])) };
+  assert.deepEqual(wants(noStore).sections, []);
+  assert.equal(wants({ ...DEFAULT_SETTINGS, stores: { ...DEFAULT_SETTINGS.stores, epic: false } }).upcoming, false);
+});
+
+test('Mots-clés bannis et jeux possédés (correspondance stricte)', () => {
+  assert.equal(bannedKeyword('EA SPORTS FC 25 (Steam)', ['EA Sports FC']), 'EA Sports FC');
+  assert.equal(bannedKeyword('Assassin’s Creed Mirage', ["Assassin's Creed"]), "Assassin's Creed");
+  assert.equal(bannedKeyword('Fifty Shades', ['FIFA']), null);
+  assert.equal(extractGameName('DOOM Eternal sur PC (Dématérialisé - Steam)'), 'DOOM Eternal');
+  assert.ok(sameGameStrict('The Witcher 3: Wild Hunt', 'The Witcher 3: Wild Hunt GOTY Edition'));
+  assert.ok(!sameGameStrict('Hollow Knight', 'Hollow Knight Silksong'));
+  assert.ok(!sameGameStrict('DOOM', 'DOOM Eternal'));
+  const owned = makeOwnedIndex({ appids: ['900101'], names: ['DOOM', 'Celeste'] });
+  assert.ok(owned.hasApp('900101'));
+  assert.ok(owned.hasName('Celeste sur PC (Steam)'));
+  assert.ok(!owned.hasName('DOOM Eternal sur PC (Steam)'));
+});
+
+test('Genres : Steam, SteamSpy, eShop et titre', () => {
+  const appInfo = {
+    1: { genres: ['Action', 'Sports'], descriptors: [], tags: [] },
+    2: { genres: ['Indie'], descriptors: [3], tags: [] },
+    3: { genres: ['Action'], descriptors: [], tags: ['Horror', 'Survival'] },
+  };
+  assert.ok(genresOf({ title: 'X', steamAppID: '1' }, appInfo).has('sport'));
+  assert.ok(genresOf({ title: 'X', steamAppID: '2' }, appInfo).has('adult'));
+  assert.ok(genresOf({ title: 'X', steamAppID: '3' }, appInfo).has('horror'));
+  assert.ok(genresOf({ title: 'Kart', categories: ['racing', 'action'] }).has('racing'));
+  assert.ok(genresOf({ title: 'Resident Evil 4 (Steam)' }).has('horror'));
+  assert.ok(!genresOf({ title: 'Celeste' }).size);
+  assert.equal(needsTags(['adult', 'sport']), false);
+  assert.equal(needsTags(['horror']), true);
+});
+
+test('hiddenReason : mot-clé > genre > possédé ; la liste de souhaits ignore les genres', () => {
+  const settings = { ...DEFAULT_SETTINGS, excludedGenres: ['horror'], bannedKeywords: ['FIFA'] };
+  const owned = makeOwnedIndex({ appids: ['10'], names: [] });
+  const appInfo = { 20: { genres: [], descriptors: [], tags: ['Horror'] } };
+  assert.equal(hiddenReason({ title: 'FIFA 23', section: 'pc', flags: {} }, settings, { owned }), 'keyword:FIFA');
+  assert.equal(hiddenReason({ title: 'Scary', steamAppID: '20', section: 'pc', flags: {} }, settings, { appInfo, owned }), 'genre:horror');
+  assert.equal(hiddenReason({ title: 'Scary', steamAppID: '20', section: 'pc', flags: { wishlist: true } }, settings, { appInfo, owned }), null);
+  assert.equal(hiddenReason({ title: 'Owned', steamAppID: '10', section: 'pc', flags: {} }, settings, { owned }), 'owned');
+  assert.equal(hiddenReason({ title: 'Owned', steamAppID: '10', section: 'pc', flags: {} }, { ...settings, hideOwned: false }, { owned }), null);
+});
+
+test('Profil Steam : liens acceptés + lecture de la bibliothèque', () => {
+  assert.deepEqual(parseSteamProfile('https://steamcommunity.com/id/quentin_80/'), { kind: 'id', id: 'quentin_80' });
+  assert.deepEqual(parseSteamProfile('steamcommunity.com/profiles/76561198000000001/games/?tab=all'), { kind: 'profiles', id: '76561198000000001' });
+  assert.deepEqual(parseSteamProfile('76561198000000001'), { kind: 'profiles', id: '76561198000000001' });
+  assert.equal(parseSteamProfile('https://example.com/x'), null);
+  const lib = parseGamesXml(steamGamesXmlFixture());
+  assert.equal(lib.steamID64, '76561198000000001');
+  assert.equal(lib.games.length, 3);
+  assert.deepEqual(lib.games[0], { appid: '900101', name: 'Mega Shooter 4' });
+  assert.throws(() => parseGamesXml('<?xml version="1.0"?><gamesList><error><![CDATA[This profile is private.]]></error></gamesList>'), /privé/);
+  assert.throws(() => parseGamesXml('<html>login</html>'), /inattendue/);
+});
+
+test('Genres Steam : appdetails + SteamSpy', () => {
+  const info = parseAppDetails('7', { 7: { success: true, data: { type: 'game', genres: [{ id: '1', description: 'Action' }], content_descriptors: { ids: [1, 5] } } } });
+  assert.deepEqual(info, { type: 'game', genres: ['Action'], descriptors: [1, 5] });
+  assert.ok(parseAppDetails('8', { 8: { success: false } }).failed);
+  assert.deepEqual(parseSteamSpy({ tags: { Horror: 10, Indie: 500, Puzzle: 3 } }).slice(0, 2), ['Indie', 'Horror']);
+  assert.deepEqual(parseSteamSpy({ tags: [] }), []);
+});
+
+test('Plateformes PC : CheapShark, Dealabs, filtre des stores', () => {
+  assert.equal(platformOf({ storeID: '7', steamAppID: '1' }), 'gog');
+  assert.equal(platformOf({ storeID: '15', steamAppID: '1' }), 'steam');
+  assert.equal(platformOf({ storeID: '25', steamAppID: null }), 'epic');
+  assert.equal(pcPlatformOf('Jeu X sur PC (Dématérialisé - Epic Games)'), 'epic');
+  assert.equal(pcPlatformOf('Jeu X sur PC (Dématérialisé)'), null);
+  // Sans Steam coché, un jeu vendu en clé Steam disparaît
+  const noSteam = { ...S, stores: { ...S.stores, steam: false } };
+  assert.equal(parseCheapShark([...cheapsharkAAAFixture(), ...cheapsharkGemsFixture()], noSteam).find((d) => d.title === 'Mega Shooter 4'), undefined);
+  // GOG décoché : Space Saga (vendu chez GOG) disparaît
+  const noGog = { ...S, stores: { ...S.stores, gog: false } };
+  assert.equal(parseCheapShark(cheapsharkAAAFixture(), noGog).find((d) => d.title === 'Space Saga Remastered'), undefined);
+});
+
+test('Liste de souhaits : promo gardée dès -20 % même hors critères', () => {
+  const wished = [{ ...cheapsharkGemsFixture()[2], salePrice: '3.49', normalPrice: '4.99', savings: '30' }];
+  const deals = parseCheapShark([], S, { wished, wishlist: ['900203'] });
+  assert.equal(deals.length, 1);
+  assert.ok(deals[0].flags.wishlist);
+});
+
+test('Switch 2 : tri eShop et Dealabs selon le réglage', () => {
+  const sw2 = { ...S, switch2: true };
+  const items = parseEshop([eshopSearchFixture(), eshopNintendoFixture()], sw2);
+  const racer = items.find((i) => i.title === 'Switch 2 Exclusive Racer');
+  assert.equal(racer.platform, 'switch2');
+  assert.equal(items.find((i) => i.title === 'Hollow Depths').platform, 'switch1');
+  assert.ok(!parseEshop([eshopSearchFixture()], S).some((i) => i.platform === 'switch2'));
+  const mk = dealabsItems(sw2).find((i) => /Mario Kart World/.test(i.title));
+  assert.equal(mk.platform, 'switch2');
+  assert.equal(dealabsItems(S).some((i) => /Mario Kart World/.test(i.title)), false);
+});
+
+test('Préférences de canaux : sans sites de clés / sans boîtes', () => {
+  assert.equal(dealabsItems({ ...S, keyshops: false }).some((i) => i.channel === 'keyshop'), false);
+  assert.equal(dealabsItems({ ...S, physical: false }).some((i) => i.channel === 'physical'), false);
+});
+
+// ---------- v4 : Amazon Prime, Microsoft Store, Battle.net, bibliothèque GOG ----------
+import { isPrimeGiveaway } from '../extension/src/sources/gamerpower.js';
+import { dealabsFreebie, freebieName } from '../extension/src/sources/dealabs.js';
+import { showsGame } from '../extension/src/prefs.js';
+import { parseGogUser, parseGogProducts } from '../extension/src/sources/goglibrary.js';
+
+const gp = (over) => ({
+  id: 1, title: 'X Giveaway', type: 'Game', status: 'Active', platforms: 'PC', end_date: 'N/A',
+  published_date: '2026-11-01 10:00:00', open_giveaway_url: 'https://www.gamerpower.com/open/x', worth: '$9.99',
+  description: '', instructions: '', image: 'i.jpg', ...over,
+});
+
+test('GamerPower : avantages Prime répartis par plateforme et réservés aux abonnés', () => {
+  const data = [
+    gp({ id: 1, title: 'Fallout 3 GOTY (Prime Gaming) Giveaway', platforms: 'PC, GOG', instructions: 'Claim it with Prime Gaming and redeem on GOG.' }),
+    gp({ id: 2, title: 'Kingdom Come (Amazon Prime) Giveaway', platforms: 'PC, Epic Games Store' }),
+    gp({ id: 3, title: 'Mystery Case Files (Prime Gaming) Giveaway', platforms: 'PC, DRM-Free', instructions: 'Redeem your code on Legacy Games.' }),
+    gp({ id: 4, title: 'Star Wars Racer (Prime Gaming) Giveaway', platforms: 'PC, DRM-Free', instructions: 'Download it with the Amazon Games app.' }),
+    gp({ id: 5, title: 'Diablo (Battle.net) Giveaway', platforms: 'PC, Battle.net' }),
+  ];
+  assert.ok(isPrimeGiveaway(data[0]));
+  assert.ok(!isPrimeGiveaway(data[4]));
+  const stores = ['epic', 'gog', 'amazon', 'legacy', 'battlenet'];
+  const withPrime = parseGamerPower(data, stores, now, { prime: true });
+  const by = Object.fromEntries(withPrime.map((i) => [i.title, i]));
+  assert.equal(by['Fallout 3 GOTY'].store, 'gog');
+  assert.equal(by['Kingdom Come'].store, 'epic');
+  assert.equal(by['Mystery Case Files'].store, 'legacy');
+  assert.equal(by['Star Wars Racer'].store, 'amazon');
+  assert.equal(by['Diablo'].store, 'battlenet');
+  assert.ok(by['Kingdom Come'].prime && !by['Diablo'].prime);
+  // Sans Prime : seuls les jeux hors Prime restent
+  assert.deepEqual(parseGamerPower(data, stores, now).map((i) => i.title), ['Diablo']);
+  // Prime sur Epic visible seulement si Epic est coché
+  assert.ok(!parseGamerPower(data, ['gog', 'amazon'], now, { prime: true }).some((i) => i.store === 'epic'));
+});
+
+test('Dealabs : jeux offerts → jeux gratuits (Prime, MS Store, Battle.net), pas les week-ends ni DLC', () => {
+  const S2 = { stores: ['steam', 'epic', 'gog', 'microsoft', 'battlenet', 'amazon', 'legacy', 'luna'], prime: true };
+  const fb = (title, merchant = '', s = S2) => dealabsFreebie({ title, link: 'https://www.dealabs.com/bons-plans/x-1234567', pubDate: now, merchant }, s, now);
+  assert.equal(freebieName('Jeu Mafia offert sur PC (Dématérialisé - GOG)'), 'Mafia');
+  assert.equal(fb('Jeu Diablo II offert sur Battle.net').store, 'battlenet');
+  assert.equal(fb('Forza Horizon 4 offert sur Xbox PC / Microsoft Store').store, 'microsoft');
+  assert.equal(fb('[Prime Gaming] Fallout 3 gratuit (Dématérialisé - Legacy Games)').store, 'legacy');
+  const luna = fb('Jeux offerts sur Amazon Luna en cloud avec Prime : Fortnite, Sonic');
+  assert.ok(luna.cloud && luna.store === 'luna');
+  assert.equal(fb('Week-end gratuit sur Steam : Tekken 8'), null);
+  assert.equal(fb('DLC gratuit pour Cyberpunk 2077 sur GOG'), null);
+  assert.equal(fb('Jeu Halo offert sur Xbox Series X'), null);
+  // Sans Prime ou plateforme non cochée → ignoré
+  assert.equal(fb('[Prime Gaming] Fallout 3 gratuit (Legacy Games)', '', { ...S2, prime: false }), null);
+  assert.equal(fb('Jeu Diablo II offert sur Battle.net', '', { ...S2, stores: ['steam'] }), null);
+  // Un jeu offert ne reste pas dans les promos
+  assert.equal(classifyDealabs({ title: 'Jeu Mafia offert sur PC (Dématérialisé - GOG)', link: 'x', pubDate: now, category: 'Jeux PC', feed: 'jeux', merchant: 'GOG', priceText: '0€', hot: true }, { ...DEFAULT_SETTINGS, dealabsOnlyHot: false }, now), null);
+});
+
+test('Préférences Prime : plateformes Prime seulement avec Prime ; Battle.net et MS Store', () => {
+  const base = { ...DEFAULT_SETTINGS, onboarded: true };
+  assert.ok(!wants(base).stores.includes('amazon'));
+  assert.ok(wants({ ...base, prime: true }).stores.includes('amazon'));
+  assert.ok(wants(base).stores.includes('battlenet') && wants(base).stores.includes('microsoft'));
+  const w = wants(base);
+  assert.ok(!showsGame({ store: 'epic', prime: true }, w));
+  assert.ok(showsGame({ store: 'epic', prime: true }, wants({ ...base, prime: true })));
+  assert.equal(platformOf({ storeID: '31' }), 'battlenet');
+  assert.equal(pcPlatformOf('Overwatch Collection sur Battle.net'), 'battlenet');
+});
+
+test('Bibliothèque GOG : session, produits, jeux possédés masqués', () => {
+  assert.throws(() => parseGogUser({ isLoggedIn: false }), /pas connecté/);
+  assert.equal(parseGogUser({ isLoggedIn: true, username: 'quentin' }).username, 'quentin');
+  const res = parseGogProducts({ totalPages: 2, products: [{ id: 1, title: 'The Witcher 3: Wild Hunt' }, { id: 2, title: 'Disco Elysium' }] });
+  assert.equal(res.totalPages, 2);
+  assert.equal(res.games.length, 2);
+  const owned = makeOwnedIndex({}, { names: res.games.map((g) => g.title) });
+  const settings = { ...DEFAULT_SETTINGS };
+  assert.equal(hiddenReason({ title: 'Disco Elysium - The Final Cut', section: 'pc', steamAppID: '632470' }, settings, { owned }), 'owned'); // même jeu, autre édition
+  assert.equal(hiddenReason({ title: 'The Witcher 2: Assassins of Kings', section: 'pc' }, settings, { owned }), null); // autre épisode
+  assert.equal(hiddenReason({ title: 'Disco Elysium', section: 'pc', steamAppID: '632470' }, settings, { owned }), 'owned');
+  assert.equal(hiddenReason({ title: 'Hades', section: 'pc' }, settings, { owned }), null);
 });

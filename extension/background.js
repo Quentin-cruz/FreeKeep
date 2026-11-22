@@ -1,11 +1,18 @@
 // FreeKeep — service worker (Manifest V3)
-// Vérifie périodiquement les jeux gratuits, gère notifications, badge et réclamation assistée.
-import { STORES, STORE_ORDER, ALARM_NAME } from './src/config.js';
+// Vérifie périodiquement les jeux gratuits et les bons plans, applique la personnalisation,
+// gère notifications, badge et réclamation assistée.
+import { STORES, ALARM_NAME } from './src/config.js';
 import { fetchEpic } from './src/sources/epic.js';
 import { fetchSteam, fetchSteamOwned } from './src/sources/steam.js';
 import { fetchGamerPower } from './src/sources/gamerpower.js';
+import { fetchSteamLibrary, fetchSteamWishlist } from './src/sources/steamlibrary.js';
+import { fetchGogLibrary } from './src/sources/goglibrary.js';
+import { enrichAppInfo } from './src/sources/steamapps.js';
+import { needsTags } from './src/genres.js';
 import { mergeGames } from './src/merge.js';
 import { refreshDeals } from './src/refresh-deals.js';
+import { isExceptional, scoreDeal } from './src/deals.js';
+import { effective, wants, hiddenReason, makeOwnedIndex, sameGameStrict, showsGame } from './src/prefs.js';
 import {
   getSettings, getData, saveData, stateFor, patchState, keysForHistory, getClaimTabs, setClaimTabs,
 } from './src/store.js';
@@ -15,6 +22,7 @@ const SOURCES = ['epic', 'steam', 'gamerpower']; // ordre de priorité pour la f
 const CACHE_MAX_AGE = 3 * 24 * 3600 * 1000;
 const DAY = 24 * 3600 * 1000;
 const ICON = 'icons/icon128.png';
+const LIBRARY_MAX_AGE = 12 * 3600 * 1000;
 
 const plural = (n, one, many) => (n > 1 ? many : one);
 const storeName = (g) => STORES[g.store]?.short || g.store;
@@ -23,8 +31,16 @@ const storeName = (g) => STORES[g.store]?.short || g.store;
 // Cycle de vie
 // ---------------------------------------------------------------------------
 
-chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+chrome.runtime.onInstalled.addListener(async ({ reason, previousVersion }) => {
   await scheduleAlarm();
+  const settings = await getSettings();
+  // Tutoriel au premier lancement (et après une mise à jour si jamais fait)
+  if (!settings.onboarded && (reason === 'install' || reason === 'update')) {
+    chrome.tabs.create({ url: chrome.runtime.getURL('onboarding/onboarding.html') });
+  } else if (reason === 'update' && previousVersion && Number(previousVersion.split('.')[0]) < 4) {
+    // Passage en v4 : on montre les nouveaux choix (Amazon Prime, Battle.net, Microsoft Store, GOG).
+    chrome.runtime.openOptionsPage();
+  }
   await refresh(reason);
 });
 
@@ -39,27 +55,41 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) refresh('alarm');
 });
 
-const DEAL_SETTINGS = [
-  'pcDeals', 'pcMinDiscount', 'gemMinDiscount', 'gemMinRating', 'ggdealsKey', 'switchDeals', 'switchMinDiscount',
-  'dealabs', 'dealabsOnlyHot', 'departments', 'dealMaxAgeDays',
-];
+// Réglages qui ne demandent qu'un nouveau tri (pas de nouveau téléchargement)
+const CHEAP_SETTINGS = ['notifyNew', 'notifyLastDay', 'notifyDeals', 'notifyWishlist', 'autoClick', 'intervalHours', 'onboarded'];
+// Réglages qui changent ce qu'on demande aux API
+const REFETCH_SETTINGS = ['pc', 'switch', 'switch2', 'stores', 'level', 'pcMinDiscount', 'gemMinDiscount', 'gemMinRating', 'switchMinDiscount', 'ggdealsKey', 'keyshops', 'pcDeals', 'switchDeals'];
+const LIBRARY_SETTINGS = ['steamProfile', 'useWishlist'];
+const GOG_SETTINGS = ['gogSessionSync'];
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'sync' || !changes.settings) return;
   const before = changes.settings.oldValue || {};
   const after = changes.settings.newValue || {};
-  if (before.intervalHours !== after.intervalHours) scheduleAlarm();
-  const dealsChanged = DEAL_SETTINGS.some((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]));
-  if (dealsChanged) settingsRefresh();
-  else if (JSON.stringify(before.stores) !== JSON.stringify(after.stores)) refresh('settings');
-  else updateBadge();
+  const changed = Object.keys({ ...before, ...after }).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]));
+  if (changed.includes('intervalHours')) scheduleAlarm();
+  if (!changed.length || changed.every((k) => CHEAP_SETTINGS.includes(k))) {
+    updateBadge();
+    return;
+  }
+  const force = new Set();
+  if (changed.some((k) => REFETCH_SETTINGS.includes(k))) ['cheapshark', 'eshop', 'ggdeals'].forEach((f) => force.add(f));
+  if (changed.some((k) => LIBRARY_SETTINGS.includes(k))) ['steamlib', 'cheapshark'].forEach((f) => force.add(f));
+  if (changed.some((k) => GOG_SETTINGS.includes(k))) force.add('goglib');
+  settingsRefresh([...force]);
 });
 
-// Les réglages changent souvent en rafale (curseurs) : on attend 1,5 s avant de recharger.
+// Les réglages changent souvent en rafale : on attend 1,5 s avant de recharger.
 let settingsTimer = null;
-function settingsRefresh() {
+let pendingForce = new Set();
+function settingsRefresh(force = []) {
+  force.forEach((f) => pendingForce.add(f));
   clearTimeout(settingsTimer);
-  settingsTimer = setTimeout(() => refresh('settings', { force: ['cheapshark', 'eshop', 'ggdeals'] }), 1500);
+  settingsTimer = setTimeout(() => {
+    const f = [...pendingForce];
+    pendingForce = new Set();
+    refresh('settings', { force: f });
+  }, 1500);
 }
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
@@ -91,17 +121,18 @@ function refresh(reason = 'manual', opts = {}) {
 }
 
 async function doRefresh(reason, { force = [] } = {}) {
-  const settings = await getSettings();
+  const settings = effective(await getSettings());
+  const w = wants(settings);
   const data = await getData();
-  const enabled = STORE_ORDER.filter((s) => settings.stores[s]);
+  const enabled = w.free ? w.stores : [];
   const now = Date.now();
 
+  // ---- 1. Jeux gratuits ----
   const jobs = {
     epic: enabled.includes('epic') ? () => fetchEpic(now) : null,
     steam: enabled.includes('steam') ? () => fetchSteam() : null,
-    gamerpower: enabled.length ? () => fetchGamerPower(enabled, now) : null,
+    gamerpower: enabled.length ? () => fetchGamerPower(enabled, now, { prime: w.prime }) : null,
   };
-
   const errors = {};
   await Promise.all(
     SOURCES.map(async (name) => {
@@ -114,8 +145,6 @@ async function doRefresh(reason, { force = [] } = {}) {
       }
     }),
   );
-
-  // Si une source échoue, on réutilise son dernier résultat (s'il a moins de 3 jours).
   const sourceStatus = {};
   for (const name of SOURCES) {
     if (!jobs[name]) continue;
@@ -124,24 +153,83 @@ async function doRefresh(reason, { force = [] } = {}) {
       : { ok: true, count: data.cache[name]?.items?.length ?? 0, at: data.cache[name]?.at || null };
   }
 
-  const lists = SOURCES
-    .filter((n) => jobs[n] && data.cache[n] && now - data.cache[n].at < CACHE_MAX_AGE)
-    .map((n) => data.cache[n].items.filter((i) => enabled.includes(i.store)));
-  const games = mergeGames(lists, now);
+  // ---- 2. Bibliothèque + liste de souhaits Steam ----
+  const libChanged = await syncSteamLibrary(settings, data, now, force.includes('steamlib'));
+  if (libChanged && !force.includes('cheapshark')) force = [...force, 'cheapshark'];
+  if (settings.steamProfile) {
+    sourceStatus.steamlib = data.steamLib?.error
+      ? { ok: false, error: data.steamLib.error, at: data.steamLib.at || null }
+      : { ok: true, count: data.steamLib?.count || 0, at: data.steamLib?.at || null };
+  }
+  await syncGogLibrary(settings, data, now, force.includes('goglib'));
+  if (data.gogLib?.at) {
+    sourceStatus.goglib = data.gogLib.error
+      ? { ok: false, error: data.gogLib.error, at: data.gogLib.at }
+      : { ok: true, count: data.gogLib.count || 0, at: data.gogLib.at };
+  }
+  const owned = makeOwnedIndex(data.steamLib, data.gogLib);
+  const wishlist = settings.useWishlist ? data.steamLib?.wishlist || [] : [];
+  const wishSet = new Set(wishlist.map(String));
 
-  if (settings.steamOwnedSync) await syncSteamOwned(games, data.states);
-  notifyChanges(games, data, settings, now);
-
-  // Bons plans PC + Switch
+  // ---- 3. Bons plans PC + Switch ----
   let deals = data.deals;
+  let freebies = [];
   let dealErrors = {};
   let dealStatus = {};
   try {
-    ({ deals, errors: dealErrors, status: dealStatus } = await refreshDeals(settings, data.dealCache, data.dealHistory, now, force));
-    notifyDeals(deals, data, settings);
+    ({ deals, freebies, errors: dealErrors, status: dealStatus } = await refreshDeals(settings, data.dealCache, data.dealHistory, now, force, { wishlist }));
   } catch (e) {
     dealErrors = { bons_plans: String(e?.message || e) };
     console.warn('[FreeKeep] bons plans :', e);
+  }
+
+  // Fusion des jeux gratuits. Si une source échoue, on réutilise son dernier résultat (s'il a moins de 3 jours).
+  // Les jeux offerts repérés sur Dealabs (Prime, Microsoft Store, Battle.net…) passent en dernier.
+  const keep = (i) => enabled.includes(i.store) && (!i.prime || w.prime);
+  const lists = SOURCES
+    .filter((n) => jobs[n] && data.cache[n] && now - data.cache[n].at < CACHE_MAX_AGE)
+    .map((n) => data.cache[n].items.filter(keep));
+  lists.push((freebies || []).filter(keep));
+  const games = mergeGames(lists, now);
+
+  // ---- 4. Genres (seulement si l'utilisateur en exclut) ----
+  if ((settings.excludedGenres || []).length) {
+    const appids = [...games.map((g) => g.appid), ...deals.map((d) => d.steamAppID)].filter(Boolean);
+    try {
+      await enrichAppInfo(appids, data.appInfo, { withTags: needsTags(settings.excludedGenres), now });
+    } catch (e) {
+      console.warn('[FreeKeep] genres Steam :', e);
+    }
+  }
+
+  // ---- 5. Personnalisation ----
+  for (const g of games) {
+    g.hiddenBy = hiddenReason({ title: g.title, steamAppID: g.appid }, settings, { appInfo: data.appInfo, isGame: true });
+  }
+  deals = deals.map((d) => {
+    const flags = { ...d.flags, wishlist: d.flags?.wishlist || (!!d.steamAppID && wishSet.has(String(d.steamAppID))) };
+    const out = { ...d, flags };
+    out.hiddenBy = hiddenReason(out, settings, { appInfo: data.appInfo, owned });
+    out.exceptional = isExceptional(out);
+    out.score = scoreDeal(out);
+    return out;
+  }).sort((a, b) => b.score - a.score);
+
+  await syncSteamOwned(games, data.states, settings, data.steamLib);
+  syncGogOwned(games, data.states, owned);
+
+  // ---- 6. Notifications (pas pendant le tutoriel) ----
+  const visibleGames = games.filter((g) => !g.hiddenBy);
+  const visibleDeals = deals.filter((d) => !d.hiddenBy);
+  if (settings.onboarded) {
+    notifyChanges(visibleGames, data, settings, now);
+    notifyDeals(visibleDeals, data, settings);
+  } else {
+    // On mémorise ce qui existe déjà pour ne pas tout notifier après le tutoriel.
+    const seen = new Set(data.seen);
+    games.forEach((g) => g.keys.forEach((k) => seen.add(k)));
+    data.seen = [...seen].slice(-800);
+    data.seenDeals = [...new Set([...data.seenDeals, ...deals.filter((d) => d.exceptional).map((d) => d.id)])].slice(-1500);
   }
   for (const [id, st] of Object.entries(data.dealStates)) if (now - (st.at || 0) > 60 * DAY) delete data.dealStates[id];
 
@@ -152,26 +240,100 @@ async function doRefresh(reason, { force = [] } = {}) {
   await saveData({
     games, states: data.states, meta: data.meta, cache: data.cache, seen: data.seen,
     deals, dealCache: data.dealCache, dealHistory: data.dealHistory, dealStates: data.dealStates, seenDeals: data.seenDeals,
+    steamLib: data.steamLib, gogLib: data.gogLib, appInfo: data.appInfo,
   });
   await updateBadge();
   return { ok: true, errors, dealErrors };
 }
 
-async function syncSteamOwned(games, states) {
-  const candidates = games.filter((g) => {
-    if (g.store !== 'steam') return false;
-    const s = stateFor(states, g);
-    return !s.claimed && (g.appid || s.appid);
-  });
-  if (!candidates.length) return;
+// Bibliothèque GOG via la session gog.com du navigateur (aucun identifiant stocké).
+const gogError = (e) => {
+  const m = String(e?.message || e);
+  return /HTTP 40[13]|JSON|Unexpected token|pas connecté/i.test(m) ? 'pas connecté à gog.com dans ce navigateur' : m;
+};
+
+async function syncGogLibrary(settings, data, now, force) {
+  const lib = data.gogLib || {};
+  if (!(settings.pc && settings.stores?.gog && settings.gogSessionSync)) {
+    data.gogLib = {};
+    return !!lib.at;
+  }
+  // Après une erreur (pas connecté), on réessaie au bout d'une heure.
+  if (!force && lib.at && now - lib.at < (lib.error ? 3600 * 1000 : LIBRARY_MAX_AGE)) return false;
+  const before = lib.count || 0;
   try {
-    const owned = await fetchSteamOwned();
-    for (const g of candidates) {
-      const appid = String(g.appid || stateFor(states, g).appid);
-      if (owned.has(appid)) patchState(states, g, { claimed: true, claimedAt: Date.now(), claimedVia: 'steam' });
-    }
+    const res = await fetchGogLibrary();
+    data.gogLib = { username: res.username, ids: res.games.map((g) => g.id), names: res.games.map((g) => g.title), count: res.games.length, at: now, error: null };
   } catch (e) {
-    console.warn('[FreeKeep] lecture des jeux Steam possédés impossible :', e);
+    data.gogLib = { ...lib, error: gogError(e), at: now };
+  }
+  return (data.gogLib.count || 0) !== before;
+}
+
+// Jeux GOG gratuits déjà dans la bibliothèque GOG → cochés « récupérés ».
+function syncGogOwned(games, states, owned) {
+  for (const g of games) {
+    if (g.store !== 'gog' || stateFor(states, g).claimed) continue;
+    if (owned.hasGogName(g.title)) patchState(states, g, { claimed: true, claimedAt: Date.now(), claimedVia: 'gog' });
+  }
+}
+
+// Bibliothèque Steam depuis le lien du profil public. Renvoie true si elle a changé.
+async function syncSteamLibrary(settings, data, now, force) {
+  const lib = data.steamLib || {};
+  if (!settings.steamProfile) {
+    const had = !!lib.input;
+    data.steamLib = {};
+    return had;
+  }
+  const sameProfile = lib.input === settings.steamProfile;
+  if (!force && sameProfile && lib.at && now - lib.at < LIBRARY_MAX_AGE) return false;
+  const before = `${lib.count}|${(lib.wishlist || []).length}`;
+  try {
+    const res = await fetchSteamLibrary(settings.steamProfile);
+    data.steamLib = {
+      input: settings.steamProfile,
+      steamid: res.steamID64,
+      profileName: res.profileName,
+      appids: res.games.map((g) => g.appid),
+      names: res.games.map((g) => g.name),
+      count: res.games.length,
+      at: now,
+      error: null,
+      wishlist: sameProfile ? lib.wishlist || [] : [],
+    };
+  } catch (e) {
+    data.steamLib = { ...(sameProfile ? lib : {}), input: settings.steamProfile, error: String(e?.message || e), at: now };
+  }
+  if (settings.useWishlist && data.steamLib.steamid) {
+    try {
+      data.steamLib.wishlist = await fetchSteamWishlist(data.steamLib.steamid);
+      data.steamLib.wishlistError = null;
+    } catch (e) {
+      data.steamLib.wishlistError = String(e?.message || e);
+    }
+  }
+  return before !== `${data.steamLib.count}|${(data.steamLib.wishlist || []).length}`;
+}
+
+// Jeux gratuits Steam déjà possédés : via la bibliothèque publique et/ou la session Steam du navigateur.
+async function syncSteamOwned(games, states, settings, lib) {
+  const candidates = games.filter((g) => g.store === 'steam' && !stateFor(states, g).claimed);
+  if (!candidates.length) return;
+  const libIds = new Set((lib?.appids || []).map(String));
+  let sessionIds = new Set();
+  if (settings.steamOwnedSync && candidates.some((g) => g.appid || stateFor(states, g).appid)) {
+    try {
+      sessionIds = await fetchSteamOwned();
+    } catch (e) {
+      console.warn('[FreeKeep] lecture des jeux Steam possédés impossible :', e);
+    }
+  }
+  for (const g of candidates) {
+    const appid = String(g.appid || stateFor(states, g).appid || '');
+    const byLib = (appid && libIds.has(appid)) || (!appid && (lib?.names || []).some((n) => sameGameStrict(n, g.title)));
+    const bySession = appid && sessionIds.has(appid);
+    if (byLib || bySession) patchState(states, g, { claimed: true, claimedAt: Date.now(), claimedVia: byLib ? 'library' : 'steam' });
   }
 }
 
@@ -215,9 +377,11 @@ function notifyGame(g) {
   chrome.notifications.create(`game|${g.key}`, {
     type: 'basic',
     iconUrl: ICON,
-    title: `Gratuit sur ${storeName(g)} : ${g.title}`,
-    message: g.end ? `À garder à vie, jusqu'au ${formatDate(g.end)}` : 'À garder à vie, pour une durée limitée',
-    contextMessage: g.worth ? `Valeur : ${g.worth}` : 'FreeKeep',
+    title: `${g.cloud ? 'Inclus avec Prime sur Luna' : `Gratuit sur ${storeName(g)}`} : ${g.title}`,
+    message: g.cloud
+      ? 'À jouer en cloud (pas à garder)'
+      : `${g.prime ? 'Avec Amazon Prime · ' : ''}${g.end ? `À garder à vie, jusqu'au ${formatDate(g.end)}` : 'À garder à vie, pour une durée limitée'}`,
+    contextMessage: g.worth ? `Valeur : ${g.worth}` : 'FreeKeep<3',
     buttons: claimButtons(),
     priority: 1,
   });
@@ -229,7 +393,7 @@ function notifyLastDay(g, now) {
     iconUrl: ICON,
     title: `Dernier jour : ${g.title}`,
     message: `Encore gratuit sur ${storeName(g)} pendant ${formatDuration(g.end - now)} (jusqu'au ${formatDate(g.end)})`,
-    contextMessage: g.worth ? `Valeur : ${g.worth}` : 'FreeKeep',
+    contextMessage: g.worth ? `Valeur : ${g.worth}` : 'FreeKeep<3',
     buttons: claimButtons(),
     priority: 2,
   });
@@ -243,7 +407,7 @@ function notifySummary(list, firstRun) {
     type: 'basic',
     iconUrl: ICON,
     title: firstRun
-      ? `FreeKeep est prêt : ${n} ${plural(n, 'jeu', 'jeux')} à récupérer`
+      ? `FreeKeep<3 est prêt : ${n} ${plural(n, 'jeu', 'jeux')} à récupérer`
       : `${n} nouveaux jeux gratuits`,
     message: lines.join('\n'),
     priority: 1,
@@ -256,6 +420,7 @@ const SECTION_LABEL = { pc: 'PC', switch: 'Switch' };
 
 function dealHeadline(d) {
   if (d.flags.priceError) return '⚠️ Erreur de prix ?';
+  if (d.flags.wishlist) return '❤️ Liste de souhaits';
   if (d.flags.drop) return '📉 Chute de prix';
   if (d.flags.historicLow) return '🏆 Plus bas historique';
   if (d.flags.hot) return '🔥 Deal hot';
@@ -272,11 +437,12 @@ function dealLine(d) {
 function notifyDeals(deals, data, settings) {
   const seen = new Set(data.seenDeals);
   const first = !data.meta.dealsInitialized;
-  const top = deals.filter((d) => d.exceptional && !data.dealStates[d.id]?.hidden);
+  const top = deals.filter((d) => d.exceptional && !data.dealStates[d.id]?.hidden)
+    .filter((d) => settings.notifyDeals || (settings.notifyWishlist && d.flags.wishlist));
   const fresh = top.filter((d) => !seen.has(d.id));
   top.forEach((d) => seen.add(d.id));
   data.seenDeals = [...seen].slice(-1500);
-  if (!settings.notifyDeals || !fresh.length) return;
+  if (!fresh.length) return;
 
   if (first || fresh.length > 2) {
     const lines = fresh.slice(0, 4).map((d) => `• ${d.title} (${SECTION_LABEL[d.section]}) ${d.discount ? `-${d.discount} %` : formatPrice(d.price, d.currency)}`);
@@ -296,7 +462,7 @@ function notifyDeals(deals, data, settings) {
       iconUrl: ICON,
       title: `${dealHeadline(d)} ${SECTION_LABEL[d.section]} : ${d.title}`,
       message: dealLine(d),
-      contextMessage: d.end ? `Jusqu'au ${formatDate(d.end)}` : 'FreeKeep',
+      contextMessage: d.end ? `Jusqu'au ${formatDate(d.end)}` : 'FreeKeep<3',
       priority: d.flags.priceError ? 2 : 1,
     });
   }
@@ -346,8 +512,10 @@ chrome.notifications.onButtonClicked.addListener(async (id, index) => {
 async function updateBadge() {
   const [settings, { games, states }] = await Promise.all([getSettings(), getData()]);
   const now = Date.now();
+  const w = wants(settings);
   const n = games.filter((g) => {
-    if (g.status !== 'active' || !settings.stores[g.store] || (g.end && g.end <= now)) return false;
+    // Luna (cloud) : rien à récupérer, donc pas compté dans le badge.
+    if (!w.free || g.hiddenBy || g.cloud || g.status !== 'active' || !showsGame(g, w) || (g.end && g.end <= now)) return false;
     const s = stateFor(states, g);
     return !s.claimed && !s.hidden;
   }).length;
@@ -355,7 +523,7 @@ async function updateBadge() {
   if (chrome.action.setBadgeTextColor) await chrome.action.setBadgeTextColor({ color: '#04140a' });
   await chrome.action.setBadgeText({ text: n ? String(n) : '' });
   await chrome.action.setTitle({
-    title: n ? `FreeKeep : ${n} ${plural(n, 'jeu gratuit', 'jeux gratuits')} à récupérer` : 'FreeKeep : rien à récupérer',
+    title: n ? `FreeKeep<3 : ${n} ${plural(n, 'jeu gratuit', 'jeux gratuits')} à récupérer` : 'FreeKeep<3 : rien à récupérer',
   });
 }
 
@@ -400,7 +568,7 @@ async function openAll() {
   const [settings, { games, states }] = await Promise.all([getSettings(), getData()]);
   const now = Date.now();
   const todo = games.filter((g) => {
-    if (g.status !== 'active' || !settings.stores[g.store] || (g.end && g.end <= now)) return false;
+    if (g.hiddenBy || g.cloud || g.status !== 'active' || !showsGame(g, wants(settings)) || (g.end && g.end <= now)) return false;
     const s = stateFor(states, g);
     return !s.claimed && !s.hidden;
   });
@@ -483,12 +651,34 @@ async function claimOwned(msg, sender) {
 // Messages (popup, options, content script)
 // ---------------------------------------------------------------------------
 
+function libSummary(lib = {}) {
+  return {
+    input: lib.input || '', profileName: lib.profileName || '', count: lib.count || 0, at: lib.at || null,
+    error: lib.error || null, wishlistCount: (lib.wishlist || []).length, wishlistError: lib.wishlistError || null,
+  };
+}
+
 async function publicState() {
   const [settings, data] = await Promise.all([getSettings(), getData()]);
   return {
     settings, games: data.games, states: data.states, meta: data.meta, refreshing: !!running,
-    deals: data.deals, dealStates: data.dealStates,
+    deals: data.deals, dealStates: data.dealStates, steamLib: libSummary(data.steamLib),
+    gogLib: { username: data.gogLib?.username || '', count: data.gogLib?.count || 0, at: data.gogLib?.at || null, error: data.gogLib?.error || null },
   };
+}
+
+// Vérifie un lien de profil Steam sans rien enregistrer (tutoriel / réglages).
+async function testSteamProfile(input) {
+  try {
+    const res = await fetchSteamLibrary(input);
+    let wishlistCount = null;
+    try {
+      wishlistCount = (await fetchSteamWishlist(res.steamID64)).length;
+    } catch { /* liste de souhaits privée ou indisponible */ }
+    return { ok: true, count: res.games.length, profileName: res.profileName, wishlistCount };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
 }
 
 async function handleMessage(msg, sender) {
@@ -520,9 +710,18 @@ async function handleMessage(msg, sender) {
       const { games } = await getData();
       const sample = games.find((g) => g.status === 'active');
       if (sample) notifyGame(sample);
-      else chrome.notifications.create(`test|${Date.now()}`, { type: 'basic', iconUrl: ICON, title: 'FreeKeep', message: 'Les notifications fonctionnent.' });
+      else chrome.notifications.create(`test|${Date.now()}`, { type: 'basic', iconUrl: ICON, title: 'FreeKeep<3', message: 'Les notifications fonctionnent.' });
       return { ok: true };
     }
+    case 'testSteamProfile':
+      return testSteamProfile(msg.input);
+    case 'testGogSession':
+      try {
+        const res = await fetchGogLibrary();
+        return { ok: true, count: res.games.length, username: res.username };
+      } catch (e) {
+        return { ok: false, error: gogError(e) };
+      }
     case 'resetData':
       await chrome.storage.local.clear();
       await refresh('reset');
