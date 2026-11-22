@@ -62,7 +62,7 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en trois sec
 
 - Coche « J'ai Amazon Prime » pour voir les jeux offerts aux abonnés. Sans Prime, ils restent cachés : tu ne pourrais pas les récupérer.
 - Les jeux Prime à activer sur **Epic**, **GOG** ou le **Microsoft Store** suivent tes choix de stores. Les autres vont dans **Amazon Games** (l'application d'Amazon), **Legacy Games** (codes) ou **Luna** (jeux en cloud, à jouer en streaming : pas à garder, donc ni comptés dans le badge ni ouverts par « Tout récupérer »).
-- Chaque jeu Prime porte le badge 👑 Prime.
+- Chaque jeu Prime porte le badge 👑 Prime. Sur Dealabs, il est reconnu par le titre, le magasin, le lien Amazon ou la description.
 
 ### Switch / Switch 2
 
@@ -146,7 +146,7 @@ extension/
 ├── popup/  options/  icons/
 tests/
 ├── fixtures.js                # données calquées sur le format réel des API
-├── unit.test.js               # 49 tests
+├── unit.test.js               # 50 tests
 └── background.test.js         # 17 tests : service worker dans un navigateur simulé
 ```
 

@@ -824,3 +824,40 @@ test('Fréquences : dès 5 minutes', () => {
   assert.deepEqual(minutes.slice(0, 4), [5, 10, 15, 30]);
   assert.ok(INTERVALS.some(([v]) => v === DEFAULT_SETTINGS.intervalHours));
 });
+
+test('Dealabs : jeu Prime reconnu même si Prime n’est cité que dans la description', () => {
+  const find = (description, prime, title = 'Jeu Mafia offert sur PC (Dématérialisé - GOG)', merchant = 'GOG') =>
+    dealabsFreebie({ title, merchant, description, link: 'https://www.dealabs.com/bons-plans/x-1234567', pubDate: now }, { stores: ['gog', 'epic', 'amazon'], prime }, now);
+  const reserved = [
+    'Offert aux membres Amazon Prime via Prime Gaming.',
+    'Le jeu est offert aux abonnés Prime, clé à activer sur GOG.',
+    'Avec votre abonnement Amazon Prime, récupérez le jeu.',
+    'À récupérer sur <a href="https://luna.amazon.com/claims/mafia">cette page</a>.',
+    'Lien : <a href="https://gaming.amazon.com/mafia">ici</a>',
+    'Réservé aux clients Prime',
+    'Nécessite Amazon Prime',
+  ];
+  for (const text of reserved) {
+    assert.equal(find(text, false), null, text);
+    const got = find(text, true);
+    assert.equal(got?.prime, true, text);
+    assert.equal(got.store, 'gog', 'activé sur GOG');
+    assert.equal(got.via, 'Amazon Prime');
+  }
+  // Prime cité sans que le jeu lui soit réservé : toujours visible, sans badge Prime
+  const open = [
+    '', 'Jeu offert par GOG pendant 72 h.',
+    'Offert à tous, sans abonnement Amazon Prime.',
+    'Pas besoin d’être membre Prime pour en profiter.',
+    'Aucun abonnement Prime requis.',
+    'Optimus Prime est jouable dans ce jeu.',
+    'Metroid Prime sera aussi en promo.',
+    'Déjà offert sur Prime Gaming en 2024, cette fois pour tout le monde.',
+    'La série est à voir avec Prime Video.',
+  ];
+  for (const text of open) {
+    const got = find(text, false);
+    assert.equal(got?.title, 'Mafia', text);
+    assert.equal(got.prime, false, text);
+  }
+});

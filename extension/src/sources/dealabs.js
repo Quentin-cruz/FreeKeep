@@ -144,6 +144,19 @@ const FREE_WORDS = /\b(gratuit|gratuitement|offerts?|free)\b|\b0[,.]?0{0,2}\s?�
 // Pas « à garder » : week-end gratuit, démo, free-to-play, DLC, abonnement…
 const NOT_KEEP = /week-?end|jouable gratuitement|en essai|essai gratuit|d[ée]mo\b|free[- ]to[- ]play|\bf2p\b|\bdlc\b|extension|contenu|\bskin|cosm[ée]tique|bonus in-?game|monnaie|game ?pass|ps plus|playstation plus|abonnement|jours? d'essai|pr[ée]co/i;
 const PRIME_TEXT = /prime gaming|amazon prime|\bprime\b.*\bluna\b|amazon luna|\bluna\b|avec prime|abonn[ée]s? prime|membres? prime/i;
+// Dans la description, seulement des tournures qui réservent le jeu aux abonnés (ou un lien Amazon Gaming / Luna) :
+// « Optimus Prime » ou « à voir sur Prime Video » ne comptent pas.
+const PRIME_DESC = /prime gaming|amazon (?:gaming|luna)\b|(?:gaming|luna)\.amazon\.|(?:abonn[ée]e?s?|abonnement|membres?|clients?|n[ée]cessite|requiert|r[ée]serv[ée]e?s? (?:à|aux?)|avec)\s+(?:à |aux? )?(?:amazon )?prime\b(?!\s*vid[ée]o)/i;
+// Phrases qui disent le contraire, ou qui parlent d'une offre passée : retirées avant le test.
+const PRIME_NOT = /[^.!?\n]*\b(?:sans|aucun|pas besoin|pas n[ée]cessaire|pas r[ée]serv[ée]|d[ée]j[àa]|pr[ée]c[ée]demment|auparavant|avai(?:t|ent))(?![a-zà-ÿ])[^.!?\n]*\bprime\b[^.!?\n]*/gi;
+
+function primeOnly(title, merchant, description) {
+  if (PRIME_TEXT.test(`${title} ${merchant || ''}`)) return true;
+  const raw = String(description || '');
+  if (/(?:gaming|luna)\.amazon\./i.test(raw)) return true; // lien, souvent caché derrière « cette page »
+  return PRIME_DESC.test(stripHtml(raw.replace(/<br\s*\/?>|<\/p>/gi, '. ')).replace(PRIME_NOT, ' '));
+}
+
 const CLOUD = /\bcloud\b|streaming|en ligne via luna|jouable sur luna/i;
 
 export const isFreebieTitle = (title) => FREE_WORDS.test(title) && !NOT_KEEP.test(title);
@@ -173,7 +186,7 @@ export function dealabsFreebie(it, { stores = [], prime = false, maxAgeDays = 7 
   if (!(isFreebieTitle(title) || (price === 0 && !NOT_KEEP.test(title)))) return null;
   if (consoleOnly(title) || mentionsSwitch1(title) || mentionsSwitch2(title)) return null;
   const text = `${title} ${it.merchant || ''} ${stripHtml(it.description).slice(0, 600)}`;
-  const isPrime = PRIME_TEXT.test(`${title} ${it.merchant || ''}`);
+  const isPrime = primeOnly(title, it.merchant, it.description);
   if (isPrime && !prime) return null;
   let store = pcPlatformOf(title, it.merchant);
   if (isPrime) {
