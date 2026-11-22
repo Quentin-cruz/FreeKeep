@@ -5,9 +5,10 @@
 //  - tags : tags joueurs Steam (SteamSpy), seulement les plus votés
 //  - eshop : catégories de l'eShop Nintendo
 //  - kw : mots dans le titre (dernier recours, pour Epic, GOG, Dealabs…)
+// « Plants vs. Zombies » (Plantes contre Zombies) n'est pas un jeu d'horreur : exclu du mot « zombies ».
 export const GENRES = [
   { id: 'adult', label: 'Contenu adulte', emoji: '🔞', steam: ['Sexual Content', 'Nudity'], descriptors: [3, 4], tags: ['Hentai', 'NSFW'], kw: /\b(hentai|nsfw|18\+|uncensored)\b/i },
-  { id: 'horror', label: 'Horreur', emoji: '👻', tags: ['Horror', 'Psychological Horror', 'Survival Horror'], eshop: ['horror'], kw: /\b(horror|horreur|zombies?|resident evil|silent hill|outlast|amnesia|five nights)\b/i },
+  { id: 'horror', label: 'Horreur', emoji: '👻', tags: ['Horror', 'Psychological Horror', 'Survival Horror'], eshop: ['horror'], kw: /\b(horror|horreur|(?<!plant(?:e?s) (?:vs\.?|versus|contre(?: les)?) )zombies?|resident evil|silent hill|outlast|amnesia|five nights)\b/i },
   { id: 'sport', label: 'Sport', emoji: '⚽', steam: ['Sports'], tags: ['Sports', 'Football (Soccer)', 'Soccer', 'Basketball', 'Football (American)', 'Golf', 'Tennis', 'Baseball'], eshop: ['sport'], kw: /\b(fifa|ea sports|fc ?2\d|nba ?2k|madden|nhl|pga tour|wwe ?2k|football manager|efootball|top spin)\b/i },
   { id: 'racing', label: 'Course', emoji: '🏎️', steam: ['Racing'], tags: ['Racing', 'Driving', 'Automobile Sim'], eshop: ['racing'], kw: /\b(racing|forza|need for speed|gran turismo|f1 ?2\d|nascar|motogp|wrc|rally)\b/i },
   { id: 'simulation', label: 'Simulation', emoji: '🚜', steam: ['Simulation'], tags: ['Simulation', 'Farming Sim', 'Life Sim', 'Job Simulator'], eshop: ['simulation'], kw: /\b(simulator|simulation)\b/i },

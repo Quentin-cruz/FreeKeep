@@ -141,7 +141,7 @@ extension/
 ├── popup/  options/  icons/
 tests/
 ├── fixtures.js                # données calquées sur le format réel des API
-└── unit.test.js               # 39 tests
+└── unit.test.js               # 40 tests
 ```
 
 ## Tests

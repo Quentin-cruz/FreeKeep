@@ -527,6 +527,12 @@ test('Filtre adulte : The Witcher 3 et Cyberpunk restent visibles, HuniePop est 
   assert.ok(genresOf({ title: 'HuniePop', steamAppID: '339800' }, appInfo).has('adult'));
 });
 
+test('Filtre horreur : Plants vs. Zombies reste visible, les autres jeux de zombies sont masqués', () => {
+  const horror = (title) => genresOf({ title }).has('horror');
+  for (const t of ['Plants vs. Zombies™: Replanted', 'Plants vs. Zombies™ : La Bataille de Neighborville Édition Intégrale', 'Plants vs Zombies GOTY Edition', 'Plantes contre Zombies', 'Plantes contre les zombies', 'PLANTS VS. ZOMBIES Garden Warfare 2 sur PC']) assert.ok(!horror(t), t);
+  for (const t of ['Zombie Army 4: Dead War', 'Yet Another Zombie Survivors', 'Call of Duty Zombies', 'Golf VS Zombies', 'Zombie Garden vs Plants Defence', 'Resident Evil 4', 'Plants vs. Zombies + Outlast']) assert.ok(horror(t), t);
+});
+
 test('Dealabs : la température ne reste ni dans le titre, ni dans le nom du jeu offert', () => {
   const feeds = dealabsTemperatureFeeds(now);
   const raw = Object.entries(feeds).flatMap(([feed, xml]) => parseRss(xml).map((it) => ({ ...it, feed })));
