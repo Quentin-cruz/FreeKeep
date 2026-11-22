@@ -115,7 +115,7 @@ test('Utilitaires de date', () => {
 });
 
 // ===========================================================================
-// v2 : giveaways élargis + bons plans
+// v0.1 : giveaways élargis + bons plans
 // ===========================================================================
 import { DEFAULT_SETTINGS } from '../extension/src/config.js';
 import { detectSite } from '../extension/src/sources/gamerpower.js';
@@ -284,7 +284,7 @@ test('buildDeals : fusion Dealabs ↔ eShop, prix clé, affaires exceptionnelles
 
 
 // ===========================================================================
-// v3 : personnalisation
+// v0.2 : personnalisation
 // ===========================================================================
 import { effective, wants, bannedKeyword, sameGameStrict, extractGameName, makeOwnedIndex, hiddenReason } from '../extension/src/prefs.js';
 import { genresOf, needsTags } from '../extension/src/genres.js';
@@ -405,7 +405,7 @@ test('Préférences de canaux : sans sites de clés / sans boîtes', () => {
   assert.equal(dealabsItems({ ...S, physical: false }).some((i) => i.channel === 'physical'), false);
 });
 
-// ---------- v4 : Amazon Prime, Microsoft Store, Battle.net, bibliothèque GOG ----------
+// ---------- v0.3 : Amazon Prime, Microsoft Store, Battle.net, bibliothèque GOG ----------
 import { isPrimeGiveaway } from '../extension/src/sources/gamerpower.js';
 import { dealabsFreebie, freebieName } from '../extension/src/sources/dealabs.js';
 import { showsGame } from '../extension/src/prefs.js';
@@ -488,7 +488,7 @@ test('Bibliothèque GOG : session, produits, jeux possédés masqués', () => {
 });
 
 // ===========================================================================
-// v4.0.1 : réponses relevées sur les vrais sites
+// v0.3.1 : réponses relevées sur les vrais sites
 // ===========================================================================
 import { parseSteamSession, parseProfileXml, fetchSteamLibrary } from '../extension/src/sources/steamlibrary.js';
 import { isExceptional, scoreDeal } from '../extension/src/deals.js';

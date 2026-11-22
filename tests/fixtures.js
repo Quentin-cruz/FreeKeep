@@ -362,7 +362,7 @@ export function steamAppDetailsFixture(appid) {
   return { [appid]: { success: true, data: { type: 'game', name: `App ${appid}`, genres, content_descriptors: { ids: [] } } } };
 }
 
-// ---------- v4 : Prime, Battle.net, bibliothèque GOG (utilisés par le test de bout en bout) ----------
+// ---------- v0.3 : Prime, Battle.net, bibliothèque GOG (utilisés par le test de bout en bout) ----------
 export function gamerPowerPrimeExtras(now = Date.now()) {
   const g = (id, title, platforms, instructions) => ({
     id, title, worth: '$19.99', thumbnail: `https://www.gamerpower.com/offers/1/${id}.jpg`, image: `https://www.gamerpower.com/offers/1b/${id}.jpg`,

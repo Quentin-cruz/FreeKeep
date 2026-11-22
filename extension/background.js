@@ -31,15 +31,12 @@ const storeName = (g) => STORES[g.store]?.short || g.store;
 // Cycle de vie
 // ---------------------------------------------------------------------------
 
-chrome.runtime.onInstalled.addListener(async ({ reason, previousVersion }) => {
+chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   await scheduleAlarm();
   const settings = await getSettings();
   // Tutoriel au premier lancement (et après une mise à jour si jamais fait)
   if (!settings.onboarded && (reason === 'install' || reason === 'update')) {
     chrome.tabs.create({ url: chrome.runtime.getURL('onboarding/onboarding.html') });
-  } else if (reason === 'update' && previousVersion && Number(previousVersion.split('.')[0]) < 4) {
-    // Passage en v4 : on montre les nouveaux choix (Amazon Prime, Battle.net, Microsoft Store, GOG).
-    chrome.runtime.openOptionsPage();
   }
   await refresh(reason);
 });

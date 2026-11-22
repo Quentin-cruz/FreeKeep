@@ -1,4 +1,4 @@
-# FreeKeep<3 (v4) : jeux gratuits à vie & vrais bons plans, à ta mesure
+# FreeKeep<3 : jeux gratuits à vie & vrais bons plans, à ta mesure
 
 <img src="extension/icons/logo-512.png" width="96" alt="Logo FreeKeep<3">
 
@@ -18,7 +18,7 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en trois sec
 4. Clique sur **Charger l'extension non empaquetée** et choisis le dossier **`extension/`**.
 5. Épingle l'icône ❤️ (le cœur).
 
-**Mise à jour** : remplace le contenu du dossier `extension/`, puis clique sur ↻ (Recharger) sur la carte FreeKeep<3. Ton historique est conservé. En passant de la v3 à la v4, les réglages s'ouvrent pour que tu choisisses les nouvelles options (Amazon Prime, Battle.net, Microsoft Store, GOG).
+**Mise à jour** : remplace le contenu du dossier `extension/`, puis clique sur ↻ (Recharger) sur la carte FreeKeep<3. Ton historique est conservé.
 
 ## Personnalisation
 
@@ -152,7 +152,7 @@ node --test tests/unit.test.js
 
 Une partie des tests reprend des réponses relevées sur les vrais sites en novembre 2026.
 
-La v4.0.0 a aussi été testée de bout en bout dans Chrome (36 vérifications), avec de fausses versions de toutes les API et pages des stores. Ces tests ne prouvent pas que les vrais sites répondent comme prévu. Les scénarios couverts :
+Une version précédente (0.3) a aussi été testée de bout en bout dans Chrome (36 vérifications), avec de fausses versions de toutes les API et pages des stores. Ces tests ne prouvent pas que les vrais sites répondent comme prévu. Les scénarios couverts :
 
 - installation et tutoriel complet ;
 - bibliothèque et liste de souhaits Steam, bibliothèque GOG via la session ;
