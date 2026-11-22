@@ -32,6 +32,10 @@ function parseAttrs(s) {
   return out;
 }
 
+// Le flux « hot » préfixe chaque titre par la température : « 119° - Moonlighter… ».
+const TEMPERATURE = /^\s*-?\d+\s*°\s*[-–]\s*/;
+export const stripTemperature = (title) => String(title ?? '').replace(TEMPERATURE, '').trim();
+
 export function parseRss(xml) {
   const out = [];
   for (const m of String(xml).matchAll(/<item\b[^>]*>([\s\S]*?)<\/item>/g)) {
@@ -48,7 +52,7 @@ export function parseRss(xml) {
     const link = decodeEntities(tag('link'));
     out.push({
       guid: decodeEntities(tag('guid')) || link,
-      title: decodeEntities(tag('title')),
+      title: stripTemperature(decodeEntities(tag('title'))),
       link,
       pubDate: Date.parse(tag('pubDate')) || null,
       category: decodeEntities(tag('category')),
@@ -235,7 +239,8 @@ export function mergeDealabsItems(items) {
     const hot = it.feed === 'hot' || !!it.hot || !!prev?.hot;
     // On garde la version « groupe » (catégorie fiable) quand elle existe.
     const base = prev && prev.feed !== 'hot' ? prev : it;
-    byGuid.set(it.guid, { ...base, feed: base.feed, hot });
+    // Titre nettoyé ici aussi : le cache peut contenir des annonces lues par une ancienne version.
+    byGuid.set(it.guid, { ...base, title: stripTemperature(base.title), feed: base.feed, hot });
   }
   return [...byGuid.values()];
 }

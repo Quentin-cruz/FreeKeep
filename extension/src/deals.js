@@ -1,5 +1,6 @@
 // Assemble les bons plans (PC + Switch) : dédoublonnage, chutes de prix, score, affaires exceptionnelles.
 import { titlesMatch, titleContains } from './util.js';
+import { eshopRankBonus } from './sources/eshop.js';
 
 const DAY = 24 * 3600 * 1000;
 const sameGame = (a, b) => titlesMatch(a.title, b.title) || titleContains(a.title, b.title) || titleContains(b.title, a.title);
@@ -14,7 +15,7 @@ export function isExceptional(d) {
     (f.historicLow && disc >= 75) ||
     (f.hot && (f.free || disc >= 60)) ||
     (d.section === 'switch' && f.nintendo && disc >= 40) ||
-    (d.section === 'switch' && d.channel === 'eshop' && disc >= 60 && (d.normalPrice ?? 0) >= 39.99)
+    (d.section === 'switch' && d.channel === 'eshop' && f.popular && disc >= 60 && (d.normalPrice ?? 0) >= 39.99)
   );
 }
 
@@ -28,7 +29,7 @@ export function scoreDeal(d) {
   if (f.wishlist) s += 30;
   if (f.aaa) s += 10;
   if (f.nintendo) s += 25;
-  if (f.popular) s += 10;
+  if (d.source === 'eshop') s += eshopRankBonus(d.rank);
   if ((d.rating?.metacritic ?? 0) >= 85) s += 10;
   if ((d.rating?.steam ?? 0) >= 95) s += 8;
   return s;

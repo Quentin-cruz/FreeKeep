@@ -149,10 +149,10 @@ export const DEFAULT_SETTINGS = {
   bannedKeywords: [],
 
   // Bibliothèque Steam
-  steamProfile: '',       // lien du profil public
+  steamProfile: '',       // lien du profil public (facultatif : liste de souhaits sans connexion, noms des jeux)
   hideOwned: true,        // masquer les promos sur les jeux possédés
   useWishlist: true,      // mettre en avant la liste de souhaits
-  steamOwnedSync: true,   // aussi via la session Steam du navigateur
+  steamOwnedSync: true,   // jeux possédés + liste de souhaits via la session Steam du navigateur
   gogSessionSync: true,   // jeux GOG possédés via la session gog.com du navigateur
 
   // Dealabs

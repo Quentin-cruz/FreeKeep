@@ -3,7 +3,7 @@ import { LEVELS, ALARM_NAME } from '../src/config.js';
 import { getSettings, saveSettings } from '../src/store.js';
 import { wants } from '../src/prefs.js';
 import { formatAgo } from '../src/util.js';
-import { h, toggleCard, switchRow, selectRow, storeGrid, primeBox, genreChips, tagInput, levelCards, steamProfileField, gogSessionField } from '../ui/components.js';
+import { h, toggleCard, switchRow, selectRow, storeGrid, primeBox, genreChips, tagInput, levelCards, steamProfileField, steamSessionField, gogSessionField } from '../ui/components.js';
 
 const $ = (s) => document.querySelector(s);
 let settings = null;
@@ -126,15 +126,16 @@ const PANELS = {
     if (settings.stores.gog && settings.gogSessionSync) refreshGogCard(gogCard);
     return [
       h('h1', {}, 'Mes bibliothèques'),
-      h('p', { class: 'lead' }, 'Sans mot de passe : FreeKeep<3 lit ton profil Steam public et, si tu veux, ta session gog.com déjà ouverte.'),
+      h('p', { class: 'lead' }, 'Sans mot de passe : FreeKeep<3 lit tes sessions Steam et gog.com déjà ouvertes dans ce navigateur, si tu le veux.'),
       settings.stores.steam ? box('Steam', null, card,
+        steamSessionField(settings.steamOwnedSync, (v) => { set('steamOwnedSync', true)(v); }),
+        h('p', { class: 'note' }, 'Lien de ton profil public (facultatif) :'),
         steamProfileField(settings.steamProfile, (v) => { if (v !== settings.steamProfile) set('steamProfile')(v); })) : null,
       settings.stores.gog ? box('GOG', null, gogCard,
         gogSessionField(settings.gogSessionSync, (v) => { set('gogSessionSync', true)(v); })) : null,
       box('Utilisation', null, h('div', { class: 'rows' },
         switchRow({ title: 'Masquer les promos sur les jeux que je possède', checked: settings.hideOwned, onChange: set('hideOwned') }),
         settings.stores.steam ? switchRow({ title: 'Mettre en avant ma liste de souhaits Steam', desc: 'Badge ❤️, en tête de liste, et promos dès -20 % même si le jeu n’est pas « gros ».', checked: settings.useWishlist, onChange: set('useWishlist') }) : null,
-        settings.stores.steam ? switchRow({ title: 'Utiliser aussi ma session Steam du navigateur', desc: 'Si tu es connecté à Steam dans ce navigateur, les jeux gratuits déjà possédés sont cochés automatiquement.', checked: settings.steamOwnedSync, onChange: set('steamOwnedSync') }) : null,
       )),
       box('Et les autres plateformes ?', null,
         h('ul', { class: 'other-libs' },
@@ -233,8 +234,8 @@ function renderPanel() {
 async function refreshLibCard(card) {
   const state = await chrome.runtime.sendMessage({ type: 'getState' }).catch(() => null);
   const lib = state?.steamLib || {};
-  if (!settings.steamProfile) {
-    card.replaceChildren(h('div', { class: 'lib-card' }, h('span', { class: 'big' }, '🔗'), h('div', {}, h('strong', {}, 'Aucun profil lié'), h('small', {}, 'Colle le lien de ton profil ci-dessous.'))));
+  if (!settings.steamProfile && !settings.steamOwnedSync) {
+    card.replaceChildren(h('div', { class: 'lib-card' }, h('span', { class: 'big' }, '🔗'), h('div', {}, h('strong', {}, 'Bibliothèque non liée'), h('small', {}, 'Active la lecture via ta session Steam ci-dessous.'))));
     return;
   }
   const sync = h('button', { type: 'button', class: 'btn' }, 'Synchroniser');
@@ -248,10 +249,10 @@ async function refreshLibCard(card) {
   card.replaceChildren(h('div', { class: `lib-card ${ok ? 'ok' : lib.error ? 'ko' : ''}` },
     h('span', { class: 'big' }, ok ? '✅' : lib.error ? '⚠️' : '⏳'),
     h('div', {},
-      h('strong', {}, ok ? `${lib.profileName || 'Profil'} : ${lib.count} jeux` : lib.error ? 'Synchronisation impossible' : 'Synchronisation en attente…'),
+      h('strong', {}, ok ? `${lib.profileName || 'Steam'} : ${lib.count} jeux et DLC` : lib.error ? 'Synchronisation impossible' : 'Synchronisation en attente…'),
       h('small', {}, ok
         ? `${settings.useWishlist ? (lib.wishlistError ? 'liste de souhaits non accessible' : `${lib.wishlistCount} en liste de souhaits`) + ' · ' : ''}mis à jour ${lib.at ? formatAgo(lib.at) : ''}`
-        : lib.error || 'La première synchronisation arrive dans quelques secondes.')),
+        : lib.error ? `${lib.error}${lib.wishlistCount ? ` · ${lib.wishlistCount} en liste de souhaits` : ''}` : 'La première synchronisation arrive dans quelques secondes.')),
     sync));
 }
 
@@ -279,7 +280,7 @@ const SOURCE_INFO = {
   epic: ['Epic Games Store', 'Jeux offerts de la semaine'],
   steam: ['Steam', 'Jeux à -100 %'],
   gamerpower: ['GamerPower', 'Giveaways : GOG, Ubisoft, Prime, Alienware, Fanatical, Humble…'],
-  steamlib: ['Bibliothèque Steam', 'Tes jeux (profil public)'],
+  steamlib: ['Bibliothèque Steam', 'Tes jeux et ta liste de souhaits (session Steam du navigateur)'],
   goglib: ['Bibliothèque GOG', 'Tes jeux (session gog.com du navigateur)'],
   cheapshark: ['CheapShark', 'Promos PC sur 30+ stores officiels'],
   eshop: ['eShop Nintendo', 'Promos Switch, prix et dates de fin'],
@@ -302,7 +303,7 @@ async function refreshSources() {
     let pill;
     let detail = '';
     if (!st) {
-      const why = id === 'ggdeals' && !settings.ggdealsKey ? 'Pas de clé' : id === 'steamlib' && !settings.steamProfile ? 'Non lié' : 'Désactivée';
+      const why = id === 'ggdeals' && !settings.ggdealsKey ? 'Pas de clé' : id === 'steamlib' && !settings.steamProfile && !settings.steamOwnedSync ? 'Non lié' : 'Désactivée';
       pill = h('span', { class: 'state off' }, why);
     } else if (st.ok) {
       pill = h('span', { class: 'state ok' }, `✔ ${st.count} ${st.count > 1 ? 'résultats' : 'résultat'}`);

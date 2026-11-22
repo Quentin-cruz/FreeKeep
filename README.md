@@ -22,13 +22,13 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en trois sec
 
 ## Personnalisation
 
-**Tutoriel au premier lancement**, relançable depuis Réglages → « Relancer le tutoriel ». Il a 9 étapes, certaines n'apparaissent que si elles te concernent :
+**Tutoriel au premier lancement**, relançable depuis Réglages → « Relancer le tutoriel ». Il a 9 étapes avec l'accueil, certaines n'apparaissent que si elles te concernent :
 
 1. **Plateformes** : PC, Switch, et « je veux aussi les jeux Switch 2 ».
 2. **Stores PC** où tu actives tes jeux : Steam, Epic Games, Ubisoft Connect, GOG, EA app, Battle.net, Microsoft Store, itch.io, IndieGala, Autres. Puis **« J'ai Amazon Prime »** : Amazon Games, Legacy Games, Luna (cloud).
 3. **Ce que tu veux voir** : jeux gratuits, promos PC, promos Switch, jeux en boîte (+ ton département), sites de clés, bundles.
 4. **Niveau d'exigence** : 🔥 que les affaires de fou, ⚖️ équilibré ou 🌊 large.
-5. **Tes bibliothèques** : lien de ton profil Steam public, et lecture de tes jeux GOG via ta session gog.com. Les promos sur tes jeux sont masquées et ta liste de souhaits Steam est mise en avant.
+5. **Tes bibliothèques** : lecture de tes jeux Steam et GOG via les sessions déjà ouvertes dans ton navigateur (lien de profil Steam facultatif). Les promos sur tes jeux sont masquées et ta liste de souhaits Steam est mise en avant.
 6. **Ce que tu ne veux pas voir** : 16 genres à masquer (horreur, sport, contenu adulte…) et des licences à bannir par mot-clé (FIFA, Call of Duty…).
 7. **Alertes** : notifications, fréquence, clic automatique.
 8. **Récapitulatif**.
@@ -37,15 +37,15 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en trois sec
 
 **Réglages en 6 onglets** : Mes plateformes (+ Amazon Prime) · Ce que je veux voir · Filtres · Mes bibliothèques · Alertes · Sources & données.
 
-### Bibliothèque Steam : sans connexion
+### Bibliothèque Steam : via ta session, sans mot de passe
 
-- FreeKeep lit la liste publique des jeux de ton profil (`steamcommunity.com/id/…/games?xml=1`) et ta liste de souhaits publique.
-- Prérequis : dans tes paramètres de confidentialité Steam, mets « Mon profil » et « Détails des jeux » en **Public**, et « Liste de souhaits » aussi si tu veux l'utiliser.
+- Steam ne montre plus la liste des jeux d'un profil sans connexion, même s'il est public. FreeKeep<3 lit donc tes jeux et ta liste de souhaits via ta session `store.steampowered.com`, si tu es déjà connecté dans ce navigateur. Aucun identifiant n'est demandé ni enregistré. Désactivable dans les réglages.
+- **Lien de profil (facultatif)** : sans session ouverte, il permet de lire ta liste de souhaits si elle est publique. Avec une session, FreeKeep<3 essaie aussi de lire les noms de tes jeux pour les reconnaître dans les annonces Dealabs.
 - Ce que ça change :
   - les promos sur les jeux que tu possèdes sont masquées ;
   - les jeux gratuits Steam que tu as déjà sont cochés « récupérés » ;
   - les jeux de ta liste de souhaits remontent en tête dès -20 %, et une alerte part dès -50 %.
-- La bibliothèque se resynchronise toutes les 12 h, ou avec le bouton « Synchroniser ».
+- La bibliothèque se resynchronise toutes les 12 h (toutes les heures si tu n'étais pas connecté), ou avec le bouton « Synchroniser ».
 
 ### Bibliothèque GOG : via ta session, sans mot de passe
 
@@ -69,6 +69,7 @@ Chaque bon plan Switch est classé **Switch** (jouable sur Switch 1, et donc aus
 
 - Les genres viennent des données officielles Steam (genres et avertissements de contenu) et des catégories de l'eShop Nintendo.
 - Pour l'horreur, le FPS, le puzzle, etc., les tags joueurs viennent de SteamSpy, interrogé seulement si tu masques un de ces genres.
+- **Contenu adulte** : seuls les avertissements Steam « réservé aux adultes » et « nudité ou sexe fréquents » comptent. Un jeu avec un peu de nudité (The Witcher 3, Cyberpunk 2077…) reste visible.
 - Pour les jeux sans données (Epic, Dealabs…), FreeKeep se base sur le titre.
 - La liste de souhaits ignore le filtre de genres, mais pas les mots-clés bannis.
 
@@ -87,7 +88,7 @@ Chaque bon plan Switch est classé **Switch** (jouable sur Switch 1, et donc aus
 - Sources : API officielle Epic, recherche Steam (-100 %), [GamerPower](https://www.gamerpower.com), qui recense les giveaways de jeux PC (dont Prime), et les jeux offerts postés sur [Dealabs](https://www.dealabs.com) (Prime, Microsoft Store, Battle.net…). Les week-ends gratuits, démos, free-to-play et DLC sont écartés.
 - Le site qui organise le giveaway est affiché, par exemple « via Alienware Arena ». Ces sites demandent parfois un compte.
 - Le bouton **Récupérer** ouvre la page du store et clique sur « Obtenir » pour toi. Sur Epic, la commande n'est validée que si le total est à 0 €. Les captchas restent à faire toi-même.
-- Les jeux que tu possèdes déjà sont détectés : sur Steam via ton profil public et ta session, sur GOG via ta session, sur les stores quand la page affiche « Dans la bibliothèque ».
+- Les jeux que tu possèdes déjà sont détectés : sur Steam et GOG via ta session, sur les stores quand la page affiche « Dans la bibliothèque ».
 
 ## 💻 Promos PC : que des pépites
 
@@ -107,8 +108,8 @@ Badges : ⚠️ erreur de prix · 📉 chute soudaine (-30 % depuis la vérif pr
 
 ## 🎮 Switch
 
-- **eShop** : moteur de recherche officiel de Nintendo Europe, plus l'API de prix Nintendo pour le prix exact en € et la date de fin. Ne sont gardés que les jeux populaires ou vendus 20 € et plus. Les jeux Nintendo sont gardés dès -20 %. Les petits jeux inconnus bradés à -90 % sont écartés, ainsi que les jeux réservés à la Switch 2.
-- **Physique et clés** : deals hot Dealabs (Amazon, Fnac, Leclerc, Micromania, Eneba…). Les accessoires, consoles et jeux uniquement Switch 2 sont écartés. Les promos valables dans un seul magasin ne sont gardées que pour tes départements (**80** par défaut, modifiable).
+- **eShop** : moteur de recherche officiel de Nintendo Europe, plus l'API de prix Nintendo pour le prix exact en € et la date de fin. Ne sont gardés que les jeux bien classés dans les téléchargements Nintendo : top 500, ou top 1 500 s'ils sont vendus 20 € et plus. Les jeux Nintendo sont gardés dès -20 %. Les jeux inconnus bradés à -90 % sont écartés, et les jeux réservés à la Switch 2 aussi, sauf si tu les as demandés. Si seul le pack ou l'édition Deluxe est en promo, c'est son prix qui s'affiche, avec la mention « pack ou Deluxe ».
+- **Physique et clés** : deals hot Dealabs (Amazon, Fnac, Leclerc, Micromania, Eneba…). Les accessoires et consoles sont écartés, et les jeux uniquement Switch 2 aussi, sauf si tu les as demandés. Les promos valables dans un seul magasin ne sont gardées que pour les départements que tu indiques (aucun par défaut).
 
 ## Notifications
 
@@ -140,7 +141,7 @@ extension/
 ├── popup/  options/  icons/
 tests/
 ├── fixtures.js                # données calquées sur le format réel des API
-└── unit.test.js               # 31 tests
+└── unit.test.js               # 39 tests
 ```
 
 ## Tests
@@ -149,7 +150,9 @@ tests/
 node --test tests/unit.test.js
 ```
 
-L'extension a aussi été testée de bout en bout dans Chrome (36 vérifications), avec de fausses versions de toutes les API et pages des stores. Ces tests ne prouvent pas que les vrais sites répondent comme prévu. Les scénarios couverts :
+Une partie des tests reprend des réponses relevées sur les vrais sites en novembre 2026.
+
+La v4.0.0 a aussi été testée de bout en bout dans Chrome (36 vérifications), avec de fausses versions de toutes les API et pages des stores. Ces tests ne prouvent pas que les vrais sites répondent comme prévu. Les scénarios couverts :
 
 - installation et tutoriel complet ;
 - bibliothèque et liste de souhaits Steam, bibliothèque GOG via la session ;
@@ -164,11 +167,12 @@ L'extension a aussi été testée de bout en bout dans Chrome (36 vérifications
 ## Limites connues
 
 - **CheapShark donne les prix en $ US.** La remise en % est fiable, mais le prix exact en € peut différer un peu. Avec une clé GG.deals, le prix « clé » est affiché en €.
-- **Dealabs** : le flux RSS ne donne pas la température. FreeKeep s'appuie donc sur le flux « Hot » officiel et garde un historique de 14 jours. Un deal peut avoir expiré même s'il est encore listé.
+- **Dealabs** : les flux par groupe ne donnent pas la température (le flux « Hot » la met en tête du titre, FreeKeep<3 la retire). FreeKeep s'appuie donc sur le flux « Hot » officiel et garde un historique de 14 jours. Un deal peut avoir expiré même s'il est encore listé.
 - Dealabs, CheapShark, Nintendo et GG.deals peuvent changer leurs API. Si une source tombe, un bandeau le signale, l'État des sources passe en ✘ et les dernières données connues restent affichées.
 - Navigateur fermé = pas de vérification : la suivante se fait au redémarrage.
 - Les sites de clés sont du marché gris : prix plus bas, mais pas de garantie éditeur.
 - **Amazon Prime n'a pas d'API publique** (la page des jeux Luna est générée en JavaScript). Les jeux Prime sont repérés via GamerPower et Dealabs : il peut en manquer, surtout les jeux Luna en cloud.
+- **Steam** : la session donne les numéros des jeux, pas leurs noms. Si la lecture des noms échoue, un jeu Steam possédé peut rester affiché dans les annonces Dealabs.
 - **GOG** : `getFilteredProducts` n'est pas une API documentée ; GOG peut la changer. En cas d'échec, la carte GOG passe en ⚠️ et le reste fonctionne.
 
 ---

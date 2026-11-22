@@ -1,5 +1,4 @@
-// Source officielle Steam : recherche des jeux à -100 % (gratuits à garder),
-// + lecture des jeux possédés via la session Steam du navigateur.
+// Source officielle Steam : recherche des jeux à -100 % (gratuits à garder).
 import { ENDPOINTS } from '../config.js';
 import { fetchJson, decodeEntities } from '../util.js';
 
@@ -59,10 +58,4 @@ function steamImages(appid, capsule) {
   urls.push(`https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/${appid}/header.jpg`);
   if (capsule) urls.push(capsule);
   return [...new Set(urls)];
-}
-
-// Liste des appid possédés par le compte Steam connecté dans le navigateur.
-export async function fetchSteamOwned() {
-  const data = await fetchJson(`${ENDPOINTS.steamUserData}?t=${Date.now()}`, { credentials: 'include' });
-  return new Set((data?.rgOwnedApps || []).map(String));
 }

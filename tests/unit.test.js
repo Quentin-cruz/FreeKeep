@@ -486,3 +486,177 @@ test('Bibliothèque GOG : session, produits, jeux possédés masqués', () => {
   assert.equal(hiddenReason({ title: 'Disco Elysium', section: 'pc', steamAppID: '632470' }, settings, { owned }), 'owned');
   assert.equal(hiddenReason({ title: 'Hades', section: 'pc' }, settings, { owned }), null);
 });
+
+// ===========================================================================
+// v4.0.1 : réponses relevées sur les vrais sites
+// ===========================================================================
+import { parseSteamSession, parseProfileXml, fetchSteamLibrary } from '../extension/src/sources/steamlibrary.js';
+import { isExceptional, scoreDeal } from '../extension/src/deals.js';
+import { fetchEshop } from '../extension/src/sources/eshop.js';
+import {
+  steamUserDataFixture, steamUserDataLoggedOut, steamLoginPage, steamProfileXml, steamWishlistFixture,
+  eshopRealFixture, dealabsTemperatureFeeds,
+} from './fixtures.js';
+
+// Remplace fetch le temps d'un test. `routes` : [morceau d'URL, réponse (texte ou objet)]
+async function withFetch(routes, job) {
+  const real = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, init = {}) => {
+    calls.push({ url: String(url), credentials: init.credentials });
+    const hit = routes.find(([part]) => String(url).includes(part));
+    if (!hit) return new Response('', { status: 404 });
+    const body = typeof hit[1] === 'function' ? hit[1](String(url)) : hit[1];
+    return new Response(typeof body === 'string' ? body : JSON.stringify(body));
+  };
+  try {
+    return { res: await job(), calls };
+  } finally {
+    globalThis.fetch = real;
+  }
+}
+
+test('Filtre adulte : The Witcher 3 et Cyberpunk restent visibles, HuniePop est masqué', () => {
+  const appInfo = {
+    292030: { genres: ['RPG'], descriptors: [1, 5], tags: ['Open World', 'RPG', 'Nudity'] },
+    1086940: { genres: ['RPG'], descriptors: [1, 2, 5], tags: ['RPG', 'Sexual Content'] },
+    339800: { genres: ['Indie'], descriptors: [1, 3, 5, 4], tags: ['Nudity', 'Sexual Content', 'Hentai'] },
+  };
+  assert.ok(!genresOf({ title: 'The Witcher 3', steamAppID: '292030' }, appInfo).has('adult'));
+  assert.ok(!genresOf({ title: "Baldur's Gate 3", steamAppID: '1086940' }, appInfo).has('adult'));
+  assert.ok(genresOf({ title: 'HuniePop', steamAppID: '339800' }, appInfo).has('adult'));
+});
+
+test('Dealabs : la température ne reste ni dans le titre, ni dans le nom du jeu offert', () => {
+  const feeds = dealabsTemperatureFeeds(now);
+  const raw = Object.entries(feeds).flatMap(([feed, xml]) => parseRss(xml).map((it) => ({ ...it, feed })));
+  const items = mergeDealabsItems(raw);
+  assert.equal(items.length, 2);
+  assert.ok(items.every((i) => i.hot && !/°/.test(i.title)), items.map((i) => i.title).join(' | '));
+  const free = items.find((i) => /Mafia/.test(i.title));
+  assert.equal(dealabsFreebie(free, { stores: ['gog'] }, now).title, 'Mafia');
+  // Annonce gardée en cache par une ancienne version
+  const old = mergeDealabsItems([{ guid: 'x', title: '108° - Hades sur PC', feed: 'hot', hot: true }]);
+  assert.equal(old[0].title, 'Hades sur PC');
+  // Un titre qui commence par un nombre n'est pas touché
+  assert.equal(mergeDealabsItems([{ guid: 'y', title: '7 Days to Die - PC', feed: 'jeux' }])[0].title, '7 Days to Die - PC');
+});
+
+test('eShop : les jeux connus passent, pas les inconnus bradés à -90 %', () => {
+  const titles = (settings) => parseEshop([eshopRealFixture()], { ...S, switchMinDiscount: 40, ...settings }).map((i) => i.title);
+  const got = titles();
+  for (const t of ['nPaint', 'Piano: Learn and Play', 'nOS new Operating System', 'Cat Tales', 'Cannon Fodder and Green Game Bundle']) assert.ok(!got.includes(t), t);
+  for (const t of ['The Elder Scrolls V: Skyrim®', 'DREDGE', 'Unicorn Overlord']) assert.ok(got.includes(t), t);
+  assert.deepEqual(got.slice(0, 2), ['Metroid Dread', 'Xenoblade Chronicles: Definitive Edition'], 'jeux Nintendo devant');
+  assert.ok(!got.includes('SPLIT FICTION'));
+  assert.ok(titles({ switch2: true }).includes('SPLIT FICTION'));
+});
+
+test('eShop : seuls les jeux populaires déclenchent une alerte', () => {
+  const deal = (rank, popular) => ({ source: 'eshop', section: 'switch', channel: 'eshop', discount: 90, normalPrice: 49.99, rank, flags: { popular, big: true } });
+  assert.ok(isExceptional(deal(158, true)));
+  assert.ok(!isExceptional(deal(1200, false)));
+  assert.ok(scoreDeal(deal(158, true)) > scoreDeal(deal(1200, false)));
+});
+
+test('eShop : recherche par popularité et prix demandés par lots de 50', async () => {
+  const docs = Array.from({ length: 70 }, (_, i) => ({
+    title: `Jeu ${i}`, nsuid_txt: [`7001000000${1000 + i}`], price_regular_f: 29.99, price_discount_percentage_f: 50,
+    downloads_rank_i: i + 1, publisher: 'Autre', playable_on_txt: ['HAC'],
+  }));
+  const prices = (url) => ({
+    prices: new URL(url).searchParams.get('ids').split(',').map((id) => ({ title_id: Number(id), regular_price: { raw_value: '29.99' }, discount_price: { raw_value: '9.99' } })),
+  });
+  const { res, calls } = await withFetch(
+    [['searching.nintendo', (u) => ({ response: u.includes('publisher') && u.includes('Nintendo+') ? { numFound: 0, docs: [] } : { numFound: 70, docs } })], ['/v1/price', prices]],
+    () => fetchEshop({ ...S, switchMinDiscount: 40 }),
+  );
+  assert.equal(res.length, 70);
+  assert.ok(res.every((i) => i.price === 9.99), 'prix exact pour tous, pas seulement les 50 premiers');
+  const ids = calls.filter((c) => c.url.includes('/v1/price')).map((c) => new URL(c.url).searchParams.get('ids').split(',').length);
+  assert.deepEqual(ids, [50, 20]);
+  const first = new URL(calls[0].url).searchParams;
+  assert.equal(first.get('sort'), 'downloads_rank_i asc');
+  assert.match(first.get('fq'), /downloads_rank_i:\[1 TO 1500\]/);
+});
+
+test('eShop : promo sur le pack Deluxe quand le jeu seul ne l’est pas, jamais un pack de DLC', () => {
+  const p = (id, regular, sale) => ({ title_id: Number(id), regular_price: { raw_value: String(regular) }, ...(sale ? { discount_price: { raw_value: String(sale) } } : {}) });
+  const doc = (title, nsuids) => ({ title, nsuid_txt: nsuids, price_regular_f: 59.99, price_discount_percentage_f: 60, downloads_rank_i: 40, publisher: 'Autre', playable_on_txt: ['HAC'] });
+  const items = parseEshop([{ response: { docs: [
+    doc('Hogwarts Legacy', ['70070000019472', '70010000062277']),
+    doc('Overcooked! 2', ['70010000000001', '70070000000001', '70070000000002']),
+    doc('DLC en promo', ['70010000000002', '70070000000003', '70050000000003']),
+    doc('Bundle seul', ['70070000000004']),
+    doc('Jeu avec démo', ['70010000000006', '70010000000005']),
+  ] } }], { ...S, switchMinDiscount: 40 });
+  applyEshopPrices(items, { prices: [
+    p('70070000019472', 69.99, 6.99), p('70010000062277', 59.99),
+    p('70010000000001', 24.99, 6.24), p('70070000000001', 16.99, 5.77), p('70070000000002', 42.49, 14.44),
+    p('70010000000002', 39.99), p('70070000000003', 11.99, 2.99), p('70050000000003', 9.99, 1.99),
+    p('70070000000004', 44.99, 8.99),
+    p('70010000000006', 0), p('70010000000005', 49.99, 29.99),
+  ] });
+  const get = (t) => items.find((i) => i.title === t);
+  assert.equal(get('Hogwarts Legacy').price, 6.99);
+  assert.equal(get('Hogwarts Legacy').discount, 90);
+  assert.match(get('Hogwarts Legacy').merchant, /pack ou Deluxe/);
+  assert.equal(get('Overcooked! 2').price, 6.24, 'le jeu seul, pas le pack de DLC moins cher');
+  assert.equal(get('Overcooked! 2').merchant, 'Nintendo eShop');
+  assert.equal(get('DLC en promo').onSale, false);
+  assert.equal(get('Bundle seul').price, 8.99);
+  assert.equal(get('Jeu avec démo').price, 29.99);
+});
+
+test('Steam : lecture de la session et de la fiche publique', () => {
+  assert.throws(() => parseSteamSession(steamUserDataLoggedOut), /pas connecté/);
+  assert.throws(() => parseSteamSession({}), /inattendue/);
+  assert.deepEqual(parseSteamSession({ rgOwnedApps: [10, 20], rgWishlist: [30] }), { appids: ['10', '20'], wishlist: ['30'] });
+  assert.deepEqual(parseProfileXml(steamProfileXml), { steamID64: '76561198000000001', profileName: 'TestProfile' });
+  assert.throws(() => parseProfileXml('<response><error><![CDATA[The specified profile could not be found.]]></error></response>'), /introuvable/);
+});
+
+test('Bibliothèque Steam : session seule, avec profil, sans connexion', async () => {
+  const session = { ...steamUserDataFixture, rgWishlist: [900102] };
+
+  // Session seule, sans lien de profil
+  const a = await withFetch([['dynamicstore/userdata', session]], () => fetchSteamLibrary({ useSession: true }));
+  assert.deepEqual(a.res.appids, ['555002', '10', '20']);
+  assert.deepEqual(a.res.wishlist, ['900102']);
+  assert.equal(a.res.error, null);
+  assert.equal(a.calls[0].credentials, 'include');
+
+  // Session + profil, Steam renvoie quand même sa page de connexion : les jeux restent lus
+  const b = await withFetch(
+    [['dynamicstore/userdata', session], ['/games/', steamLoginPage], ['/?xml=1', steamProfileXml]],
+    () => fetchSteamLibrary({ input: 'https://steamcommunity.com/id/test', useSession: true }),
+  );
+  assert.equal(b.res.appids.length, 3);
+  assert.equal(b.res.profileName, 'TestProfile');
+  assert.equal(b.res.error, null);
+
+  // Session + profil lisible : les noms s'ajoutent
+  const c = await withFetch(
+    [['dynamicstore/userdata', session], ['/games/', steamGamesXmlFixture()], ['/?xml=1', steamProfileXml]],
+    () => fetchSteamLibrary({ input: '76561198000000001', useSession: true }),
+  );
+  assert.ok(c.res.names.includes('Portal 2'));
+  assert.ok(c.res.appids.includes('620') && c.res.appids.includes('10'));
+
+  // Pas connecté : erreur claire, mais la liste de souhaits publique reste lue
+  const d = await withFetch(
+    [['dynamicstore/userdata', steamUserDataLoggedOut], ['/?xml=1', steamProfileXml], ['IWishlistService', steamWishlistFixture]],
+    () => fetchSteamLibrary({ input: 'https://steamcommunity.com/id/test', useSession: true }),
+  );
+  assert.match(d.res.error, /pas connecté/);
+  assert.deepEqual(d.res.wishlist, ['900102', '900203']);
+
+  // Session désactivée : jamais de cookies Steam envoyés
+  const e = await withFetch(
+    [['/?xml=1', steamProfileXml], ['IWishlistService', steamWishlistFixture]],
+    () => fetchSteamLibrary({ input: 'https://steamcommunity.com/id/test', useSession: false }),
+  );
+  assert.ok(e.calls.every((x) => x.credentials !== 'include'));
+  assert.match(e.res.error, /session Steam/);
+  assert.equal(e.res.wishlist.length, 2);
+});

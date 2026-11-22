@@ -191,13 +191,13 @@ export function steamProfileField(value, onChange, { autoTest = false } = {}) {
     }
     btn.disabled = true;
     status.className = 'status wait';
-    status.textContent = 'Lecture de ta bibliothèque Steam…';
+    status.textContent = 'Lecture de ton profil Steam…';
     const res = await chrome.runtime.sendMessage({ type: 'testSteamProfile', input: v }).catch((e) => ({ ok: false, error: e.message }));
     btn.disabled = false;
     if (res?.ok) {
       status.className = 'status ok';
       const wl = res.wishlistCount == null ? 'liste de souhaits non accessible' : `${res.wishlistCount} jeu${res.wishlistCount > 1 ? 'x' : ''} en liste de souhaits`;
-      status.textContent = `✔ ${res.profileName ? `${res.profileName} : ` : ''}${res.count} jeux trouvés · ${wl}`;
+      status.textContent = `✔ ${res.profileName ? `${res.profileName} : ` : ''}profil trouvé · ${wl}`;
     } else {
       status.className = 'status ko';
       status.textContent = `✘ ${res?.error || 'erreur inconnue'}`;
@@ -209,34 +209,33 @@ export function steamProfileField(value, onChange, { autoTest = false } = {}) {
   if (autoTest && value) setTimeout(test, 50);
 
   const help = h('details', { class: 'help' },
-    h('summary', {}, 'Où trouver mon lien ? Comment rendre mes jeux publics ?'),
+    h('summary', {}, 'À quoi sert ce lien ? Où le trouver ?'),
     h('ol', {},
       h('li', {}, 'Sur Steam, clique sur ton pseudo puis « Profil ». Copie l’adresse de la page (steamcommunity.com/id/… ou /profiles/…).'),
-      h('li', {}, 'Ouvre ', h('a', { href: 'https://steamcommunity.com/my/edit/settings', target: '_blank', rel: 'noopener' }, 'tes paramètres de confidentialité Steam'), ' et mets « Mon profil » et « Détails des jeux » sur Public.'),
-      h('li', {}, 'Pour la liste de souhaits, mets aussi « Liste de souhaits » sur Public (facultatif).'),
+      h('li', {}, 'Ouvre ', h('a', { href: 'https://steamcommunity.com/my/edit/settings', target: '_blank', rel: 'noopener' }, 'tes paramètres de confidentialité Steam'), ' et mets « Mon profil » et « Liste de souhaits » sur Public.'),
     ),
-    h('p', {}, 'FreeKeep<3 lit seulement la liste publique de tes jeux : aucun mot de passe, aucune connexion.'),
+    h('p', {}, 'Facultatif. Sans session Steam ouverte, il permet de lire ta liste de souhaits publique. Avec une session, il aide à reconnaître tes jeux dans les annonces Dealabs. Steam ne montre plus la liste des jeux possédés sans connexion.'),
   );
   return h('div', { class: 'steam-field' }, h('div', { class: 'inline' }, input, btn), status, help);
 }
 
-// Bibliothèque GOG via la session gog.com du navigateur : interrupteur + vérification.
-export function gogSessionField(checked, onChange, { autoTest = false } = {}) {
+// Bibliothèque lue via la session du navigateur : interrupteur + vérification.
+function sessionField({ name, message, url, site, title, desc, okText }, checked, onChange, { autoTest = false } = {}) {
   const status = h('div', { class: 'status' });
-  const btn = h('button', { type: 'button', class: 'btn' }, 'Vérifier ma session GOG');
+  const btn = h('button', { type: 'button', class: 'btn' }, `Vérifier ma session ${name}`);
   const test = async () => {
     btn.disabled = true;
     status.className = 'status wait';
-    status.textContent = 'Lecture de ta bibliothèque GOG…';
-    const res = await chrome.runtime.sendMessage({ type: 'testGogSession' }).catch((e) => ({ ok: false, error: e.message }));
+    status.textContent = `Lecture de ta bibliothèque ${name}…`;
+    const res = await chrome.runtime.sendMessage({ type: message }).catch((e) => ({ ok: false, error: e.message }));
     btn.disabled = false;
     if (res?.ok) {
       status.className = 'status ok';
-      status.textContent = `✔ ${res.username ? `${res.username} : ` : ''}${res.count} jeux GOG trouvés`;
+      status.textContent = `✔ ${okText(res)}`;
     } else {
       status.className = 'status ko';
       status.replaceChildren(`✘ ${res?.error || 'erreur inconnue'} · `,
-        h('a', { href: 'https://www.gog.com/', target: '_blank', rel: 'noopener' }, 'ouvrir gog.com pour te connecter'));
+        h('a', { href: url, target: '_blank', rel: 'noopener' }, `ouvrir ${site} pour te connecter`));
     }
   };
   btn.addEventListener('click', test);
@@ -244,12 +243,27 @@ export function gogSessionField(checked, onChange, { autoTest = false } = {}) {
   actions.hidden = !checked;
   if (autoTest && checked) setTimeout(test, 50);
   return h('div', { class: 'gog-field' },
-    switchRow({
-      title: 'Lire mes jeux GOG via ma session gog.com',
-      desc: 'Aucun mot de passe : il suffit d’être connecté à gog.com dans ce navigateur. Les jeux GOG que tu possèdes sont masqués des promos et cochés « récupérés ».',
-      checked,
-      onChange: (v) => { actions.hidden = !v; onChange(v); },
-    }),
+    switchRow({ title, desc, checked, onChange: (v) => { actions.hidden = !v; onChange(v); } }),
     actions,
   );
 }
+
+export const gogSessionField = (checked, onChange, opts) => sessionField({
+  name: 'GOG',
+  message: 'testGogSession',
+  url: 'https://www.gog.com/',
+  site: 'gog.com',
+  title: 'Lire mes jeux GOG via ma session gog.com',
+  desc: 'Aucun mot de passe : il suffit d’être connecté à gog.com dans ce navigateur. Les jeux GOG que tu possèdes sont masqués des promos et cochés « récupérés ».',
+  okText: (res) => `${res.username ? `${res.username} : ` : ''}${res.count} jeux GOG trouvés`,
+}, checked, onChange, opts);
+
+export const steamSessionField = (checked, onChange, opts) => sessionField({
+  name: 'Steam',
+  message: 'testSteamSession',
+  url: 'https://store.steampowered.com/login/',
+  site: 'Steam',
+  title: 'Lire mes jeux et ma liste de souhaits via ma session Steam',
+  desc: 'Aucun mot de passe : il suffit d’être connecté à store.steampowered.com dans ce navigateur. Les jeux que tu possèdes sont masqués des promos et cochés « récupérés ».',
+  okText: (res) => `${res.count} jeux et DLC trouvés · ${res.wishlistCount} en liste de souhaits`,
+}, checked, onChange, opts);

@@ -390,3 +390,48 @@ export const gogProductsFixture = {
   totalProducts: 2,
   products: [{ id: 1207658691, title: 'Shadow Tactics' }, { id: 1207658692, title: 'SHINOBI Art of Vengeance' }],
 };
+
+// ---------- Réponses relevées sur les vrais sites (novembre 2026) ----------
+
+// Steam sans connexion : les listes existent mais sont vides.
+export const steamUserDataLoggedOut = { rgWishlist: [], rgOwnedPackages: [], rgOwnedApps: [], rgFollowedApps: [] };
+
+// steamcommunity.com/id/…/games/?xml=1 sans connexion : page de connexion en HTML.
+export const steamLoginPage = '<!DOCTYPE html><html lang="en" class="responsive DesktopUI"><head><title>Sign In</title></head><body></body></html>';
+
+export const steamProfileXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><profile>
+	<steamID64>76561198000000001</steamID64>
+	<steamID><![CDATA[TestProfile]]></steamID>
+	<onlineState>offline</onlineState>
+</profile>`;
+
+// eShop : titre, prix normal, remise, rang de téléchargement, éditeur, support.
+export function eshopRealFixture() {
+  const rows = [
+    ['nPaint', 19.99, 90, 9163], ['Piano: Learn and Play', 19.99, 90, 8894], ['nOS new Operating System', 39.99, 95, 7221],
+    ['Cat Tales', 19.99, 90, 999999], ['Cannon Fodder and Green Game Bundle', 11.99, 83, undefined],
+    ['LEGO® City Undercover', 59.99, 92, 365], ['The Elder Scrolls V: Skyrim®', 59.99, 67, 158], ['DREDGE', 24.99, 60, 437],
+    ['Unicorn Overlord', 59.98, 70, 1200], ['SPLIT FICTION', 49.99, 40, 93, 'EA', 'BEE'],
+    ['Metroid Dread', 59.99, 33, 184, 'Nintendo'], ['Xenoblade Chronicles: Definitive Edition', 59.99, 33, 913, 'Nintendo'],
+  ];
+  return {
+    response: {
+      numFound: rows.length,
+      docs: rows.map(([title, regular, discount, rank, publisher = 'Autre', playable = 'HAC'], i) => ({
+        title, url: '/fr-fr/Jeux/x.html', nsuid_txt: [`700100000000${10 + i}`], price_regular_f: regular,
+        price_discount_percentage_f: discount, ...(rank === undefined ? {} : { downloads_rank_i: rank }), publisher, playable_on_txt: [playable],
+      })),
+    },
+  };
+}
+
+// Dealabs : le même deal dans « hot » (préfixé par la température) et dans un groupe (titre normal).
+export function dealabsTemperatureFeeds(now = Date.now()) {
+  const moon = { id: 3463442, slug: 'moonlighter', merchant: 'Nintendo', price: '4,34€', at: now - 2 * H };
+  const title = 'Moonlighter: Complete Edition sur Nintendo Switch (Dématérialisé)';
+  const free = { id: 3463500, slug: 'mafia', title: '412° - Jeu Mafia offert sur PC (Dématérialisé - GOG)', merchant: 'GOG', price: '0€', at: now - H };
+  return {
+    hot: rss('Dealabs : Hot', [{ ...moon, title: `119° - ${title}` }, free]),
+    switch: rss('Dealabs : Jeux Nintendo Switch', [{ ...moon, title }]),
+  };
+}

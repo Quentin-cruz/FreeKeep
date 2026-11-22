@@ -3,9 +3,9 @@
 // gère notifications, badge et réclamation assistée.
 import { STORES, ALARM_NAME } from './src/config.js';
 import { fetchEpic } from './src/sources/epic.js';
-import { fetchSteam, fetchSteamOwned } from './src/sources/steam.js';
+import { fetchSteam } from './src/sources/steam.js';
 import { fetchGamerPower } from './src/sources/gamerpower.js';
-import { fetchSteamLibrary, fetchSteamWishlist } from './src/sources/steamlibrary.js';
+import { fetchSteamLibrary, fetchSteamProfile, fetchSteamSession, fetchSteamWishlist } from './src/sources/steamlibrary.js';
 import { fetchGogLibrary } from './src/sources/goglibrary.js';
 import { enrichAppInfo } from './src/sources/steamapps.js';
 import { needsTags } from './src/genres.js';
@@ -59,7 +59,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 const CHEAP_SETTINGS = ['notifyNew', 'notifyLastDay', 'notifyDeals', 'notifyWishlist', 'autoClick', 'intervalHours', 'onboarded'];
 // Réglages qui changent ce qu'on demande aux API
 const REFETCH_SETTINGS = ['pc', 'switch', 'switch2', 'stores', 'level', 'pcMinDiscount', 'gemMinDiscount', 'gemMinRating', 'switchMinDiscount', 'ggdealsKey', 'keyshops', 'pcDeals', 'switchDeals'];
-const LIBRARY_SETTINGS = ['steamProfile', 'useWishlist'];
+const LIBRARY_SETTINGS = ['steamProfile', 'steamOwnedSync', 'useWishlist'];
 const GOG_SETTINGS = ['gogSessionSync'];
 
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -156,10 +156,10 @@ async function doRefresh(reason, { force = [] } = {}) {
   // ---- 2. Bibliothèque + liste de souhaits Steam ----
   const libChanged = await syncSteamLibrary(settings, data, now, force.includes('steamlib'));
   if (libChanged && !force.includes('cheapshark')) force = [...force, 'cheapshark'];
-  if (settings.steamProfile) {
-    sourceStatus.steamlib = data.steamLib?.error
-      ? { ok: false, error: data.steamLib.error, at: data.steamLib.at || null }
-      : { ok: true, count: data.steamLib?.count || 0, at: data.steamLib?.at || null };
+  if (data.steamLib?.at) {
+    sourceStatus.steamlib = data.steamLib.error
+      ? { ok: false, error: data.steamLib.error, at: data.steamLib.at }
+      : { ok: true, count: data.steamLib.count || 0, at: data.steamLib.at };
   }
   await syncGogLibrary(settings, data, now, force.includes('goglib'));
   if (data.gogLib?.at) {
@@ -278,42 +278,36 @@ function syncGogOwned(games, states, owned) {
   }
 }
 
-// Bibliothèque Steam depuis le lien du profil public. Renvoie true si elle a changé.
+// Bibliothèque Steam : session du navigateur et/ou profil. Renvoie true si elle a changé.
 async function syncSteamLibrary(settings, data, now, force) {
   const lib = data.steamLib || {};
-  if (!settings.steamProfile) {
-    const had = !!lib.input;
+  const input = settings.steamProfile || '';
+  const useSession = !!settings.steamOwnedSync;
+  if (!(settings.pc && settings.stores?.steam) || !(input || useSession)) {
     data.steamLib = {};
-    return had;
+    return !!lib.at;
   }
-  const sameProfile = lib.input === settings.steamProfile;
-  if (!force && sameProfile && lib.at && now - lib.at < LIBRARY_MAX_AGE) return false;
-  const before = `${lib.count}|${(lib.wishlist || []).length}`;
-  try {
-    const res = await fetchSteamLibrary(settings.steamProfile);
-    data.steamLib = {
-      input: settings.steamProfile,
-      steamid: res.steamID64,
-      profileName: res.profileName,
-      appids: res.games.map((g) => g.appid),
-      names: res.games.map((g) => g.name),
-      count: res.games.length,
-      at: now,
-      error: null,
-      wishlist: sameProfile ? lib.wishlist || [] : [],
-    };
-  } catch (e) {
-    data.steamLib = { ...(sameProfile ? lib : {}), input: settings.steamProfile, error: String(e?.message || e), at: now };
-  }
-  if (settings.useWishlist && data.steamLib.steamid) {
-    try {
-      data.steamLib.wishlist = await fetchSteamWishlist(data.steamLib.steamid);
-      data.steamLib.wishlistError = null;
-    } catch (e) {
-      data.steamLib.wishlistError = String(e?.message || e);
-    }
-  }
-  return before !== `${data.steamLib.count}|${(data.steamLib.wishlist || []).length}`;
+  const key = `${input}|${useSession}`;
+  const same = lib.key === key;
+  // Après une erreur (pas connecté), on réessaie au bout d'une heure.
+  if (!force && same && lib.at && now - lib.at < (lib.error ? 3600 * 1000 : LIBRARY_MAX_AGE)) return false;
+  const before = `${lib.count || 0}|${(lib.wishlist || []).length}`;
+  const res = await fetchSteamLibrary({ input, useSession });
+  const prev = same ? lib : {}; // en cas d'échec, on garde les derniers jeux connus
+  data.steamLib = {
+    key,
+    input,
+    steamid: res.steamID64 || prev.steamid || null,
+    profileName: res.profileName || prev.profileName || '',
+    appids: res.error ? prev.appids || [] : res.appids,
+    names: res.names.length ? res.names : prev.names || [],
+    wishlist: res.wishlist || prev.wishlist || [],
+    wishlistError: res.wishlist ? null : res.wishlistError || 'liste de souhaits non lue',
+    error: res.error,
+    at: now,
+  };
+  data.steamLib.count = data.steamLib.appids.length;
+  return before !== `${data.steamLib.count}|${data.steamLib.wishlist.length}`;
 }
 
 // Jeux gratuits Steam déjà possédés : via la bibliothèque publique et/ou la session Steam du navigateur.
@@ -324,7 +318,7 @@ async function syncSteamOwned(games, states, settings, lib) {
   let sessionIds = new Set();
   if (settings.steamOwnedSync && candidates.some((g) => g.appid || stateFor(states, g).appid)) {
     try {
-      sessionIds = await fetchSteamOwned();
+      sessionIds = new Set((await fetchSteamSession()).appids);
     } catch (e) {
       console.warn('[FreeKeep] lecture des jeux Steam possédés impossible :', e);
     }
@@ -670,12 +664,22 @@ async function publicState() {
 // Vérifie un lien de profil Steam sans rien enregistrer (tutoriel / réglages).
 async function testSteamProfile(input) {
   try {
-    const res = await fetchSteamLibrary(input);
+    const res = await fetchSteamProfile(input);
     let wishlistCount = null;
     try {
       wishlistCount = (await fetchSteamWishlist(res.steamID64)).length;
     } catch { /* liste de souhaits privée ou indisponible */ }
-    return { ok: true, count: res.games.length, profileName: res.profileName, wishlistCount };
+    return { ok: true, profileName: res.profileName, wishlistCount };
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+}
+
+// Vérifie la session Steam du navigateur sans rien enregistrer.
+async function testSteamSession() {
+  try {
+    const res = await fetchSteamSession();
+    return { ok: true, count: res.appids.length, wishlistCount: res.wishlist.length };
   } catch (e) {
     return { ok: false, error: String(e?.message || e) };
   }
@@ -715,6 +719,8 @@ async function handleMessage(msg, sender) {
     }
     case 'testSteamProfile':
       return testSteamProfile(msg.input);
+    case 'testSteamSession':
+      return testSteamSession();
     case 'testGogSession':
       try {
         const res = await fetchGogLibrary();

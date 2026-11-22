@@ -2,7 +2,7 @@
 import { STORES, STORE_ORDER, PC_STORE_ORDER, PRIME_STORES, LEVELS } from '../src/config.js';
 import { GENRE_BY_ID } from '../src/genres.js';
 import { getSettings, saveSettings } from '../src/store.js';
-import { h, toggleCard, switchRow, storeGrid, primeBox, genreChips, tagInput, levelCards, steamProfileField, gogSessionField } from '../ui/components.js';
+import { h, toggleCard, switchRow, storeGrid, primeBox, genreChips, tagInput, levelCards, steamProfileField, steamSessionField, gogSessionField } from '../ui/components.js';
 
 const $ = (s) => document.querySelector(s);
 let draft = null;
@@ -105,7 +105,8 @@ const STEPS = [
     render: (d) => [
       d.stores.steam ? [
         h('h2', {}, 'Steam'),
-        h('p', { class: 'note' }, 'Colle le lien de ton profil Steam public : tes jeux sont masqués des promos et ta liste de souhaits est mise en avant.'),
+        steamSessionField(d.steamOwnedSync, (v) => { d.steamOwnedSync = v; }),
+        h('p', { class: 'note' }, 'Facultatif : le lien de ton profil public, pour lire ta liste de souhaits même sans être connecté.'),
         steamProfileField(d.steamProfile, (v) => { d.steamProfile = v; }, { autoTest: true }),
       ] : null,
       d.stores.gog ? [
@@ -179,7 +180,7 @@ const STEPS = [
         dt('Sections'), dd(sections.join(' · ') || '—'),
         extras.length ? [dt('Inclus'), dd(extras.join(', '))] : null,
         anyDeals(d) ? [dt('Exigence'), dd(LEVELS[d.level]?.label || 'Personnalisé')] : null,
-        d.pc && d.stores.steam ? [dt('Bibliothèque Steam'), dd(d.steamProfile ? 'liée ✔' : 'non liée')] : null,
+        d.pc && d.stores.steam ? [dt('Bibliothèque Steam'), dd([d.steamOwnedSync ? 'via ta session Steam' : null, d.steamProfile ? 'profil lié' : null].filter(Boolean).join(' · ') || 'non')] : null,
         d.pc && d.stores.gog ? [dt('Bibliothèque GOG'), dd(d.gogSessionSync ? 'via ta session gog.com' : 'non')] : null,
         dt('Genres masqués'), dd(d.excludedGenres.map((g) => GENRE_BY_ID[g]?.label).filter(Boolean).join(', ') || 'aucun'),
         dt('Licences bannies'), dd(d.bannedKeywords.join(', ') || 'aucune'),
