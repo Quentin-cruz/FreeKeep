@@ -23,7 +23,7 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en quatre se
 
 ## Personnalisation
 
-**Tutoriel au premier lancement**, relançable depuis Réglages → « Relancer le tutoriel ». Il pose **une question à la fois** : elle s'ouvre seule, une flèche la montre, les réponses déjà données se replient en une ligne (un clic pour les modifier) et « Oui / Non » passe tout seul à la suite. Quand c'est bon, la flèche passe devant le bouton. Entrée continue, et les animations se coupent si ton système le demande. Il a 9 pages avec l'accueil, certaines n'apparaissent que si elles te concernent :
+**Tutoriel au premier lancement**, relançable depuis Réglages → « Relancer le tutoriel ». Une **flèche** guide tout : elle glisse d'une catégorie à la suivante (chacune s'ouvre quand elle arrive, celles d'avant restent modifiables), puis montre le bouton « Continuer ». Elle repart dès que tu as répondu, ou toute seule si tout te convient déjà, et attend tant que ta souris est dessus. Entrée continue, et les animations se coupent si ton système le demande. Il a 9 pages avec l'accueil, certaines n'apparaissent que si elles te concernent :
 
 1. **Plateformes** : PC, Switch, et « je veux aussi les jeux Switch 2 ».
 2. **Stores PC** où tu actives tes jeux : Steam, Epic Games, GOG, EA app, Ubisoft Connect, Battle.net, Microsoft Store, itch.io, IndieGala, Autres. Puis **Bundles** (oui / non, puis quels sites). Puis **Amazon Prime** (oui / non, puis où) : Amazon Games, Legacy Games, Luna (cloud).
@@ -162,7 +162,7 @@ extension/
 ├── popup/  options/  icons/
 tests/
 ├── fixtures.js                # données calquées sur le format réel des API
-├── unit.test.js               # 74 tests
+├── unit.test.js               # 75 tests
 └── background.test.js         # 19 tests : service worker dans un navigateur simulé
 ```
 

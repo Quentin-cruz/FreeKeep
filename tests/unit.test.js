@@ -1352,7 +1352,7 @@ test('Indie sans DRM : bundles IndieGala (notes réelles), adultes et packs de D
   assert.equal(parseBarter({ bundles: { 9: { meta: { storename: 'Indiegala', title: 'Lusty Lab Bundle', url: 'u', start: 1, end: Math.round(now / 1000) + 9999 }, games: { 1: { type: 1, id: 1 } } } } }, now).length, 0);
 });
 
-// ---------- Tutoriel : une question à la fois ----------
+// ---------- Tutoriel : une catégorie à la fois ----------
 
 const { STEPS } = await import('../extension/onboarding/steps.js');
 const flow = await import('../extension/onboarding/flow.js');
@@ -1370,7 +1370,7 @@ const walk = (d) => {
   throw new Error('tutoriel sans fin');
 };
 
-test('Tutoriel : plateformes, puis bundles, puis Amazon Prime, une question à la fois', () => {
+test('Tutoriel : plateformes, puis bundles, puis Amazon Prime, une catégorie à la fois', () => {
   const d = tutoDraft();
   const only = (id) => walk(d).filter((x) => x.startsWith(id));
   assert.deepEqual(only('stores'), ['stores/stores', 'stores/bundles', 'stores/bundleSites', 'stores/prime']);
@@ -1390,42 +1390,67 @@ test('Tutoriel : aller-retour complet, quelles que soient les réponses', () => 
     if (bit(2)) d.stores.steam = false;
     const go = walk(d);
     assert.equal(new Set(go).size, go.length);
-    let pos = { step: 'done', part: null };
-    const back = [];
-    while (pos) {
-      back.unshift(pos.part ? `${pos.step}/${pos.part}` : pos.step);
-      pos = flow.backward(STEPS, d, pos);
-    }
-    assert.deepEqual(back, go);
+    // Aller : la barre avance à chaque catégorie. Retour : page par page, tout déjà vu.
+    let pos = flow.start(STEPS, d);
     let last = 0;
-    for (const x of go) {
-      const [step, part = null] = x.split('/');
-      const { ratio, page, pages } = flow.progress(STEPS, d, { step, part });
+    for (;;) {
+      const { ratio, page, pages } = flow.progress(STEPS, d, pos);
       assert.ok(ratio > last && ratio <= 1 && page <= pages);
       last = ratio;
+      const res = flow.forward(STEPS, d, pos);
+      if (res.done) break;
+      pos = res.pos;
     }
     assert.equal(last, 1);
-    for (const s of STEPS) for (const p of s.parts || []) assert.equal(typeof (p.summary?.(d) ?? ''), 'string');
+    const back = [];
+    for (; pos; pos = flow.backward(STEPS, d, pos)) {
+      back.unshift(pos.step);
+      assert.ok(flow.progress(STEPS, d, pos).complete && !flow.follow(STEPS, d, pos));
+    }
+    assert.deepEqual(back, [...new Set(go.map((x) => x.split('/')[0]))]);
   }
 });
 
 test('Tutoriel : réponses impossibles refusées, avec retour à la bonne question', () => {
+  const at = ({ step, part }, expected) => assert.deepEqual({ step, part }, expected);
+  const seen = STEPS.flatMap((s) => (s.parts || []).map((p) => `${s.id}/${p.id}`));
   const none = tutoDraft({ pc: false, switch: false });
   const r1 = flow.forward(STEPS, none, { step: 'platforms', part: 'machines' });
   assert.match(r1.error, /plateforme/);
-  assert.deepEqual(r1.pos, { step: 'platforms', part: 'machines' });
+  at(r1.pos, { step: 'platforms', part: 'machines' });
 
   const noStore = tutoDraft({ bundles: false });
   for (const k of Object.keys(noStore.stores)) noStore.stores[k] = false;
-  const r2 = flow.forward(STEPS, noStore, { step: 'stores', part: 'prime' });
+  const r2 = flow.forward(STEPS, noStore, { step: 'stores', part: 'prime', seen });
   assert.match(r2.error, /plateforme/);
-  assert.deepEqual(r2.pos, { step: 'stores', part: 'stores' });
+  at(r2.pos, { step: 'stores', part: 'stores' });
 
   const nothing = tutoDraft({ switch: true, freeGames: false, pcDeals: false, bundles: false, switchDeals: false });
-  const r3 = flow.forward(STEPS, nothing, { step: 'content', part: 'keyshops' });
+  const r3 = flow.forward(STEPS, nothing, { step: 'content', part: 'keyshops', seen });
   assert.match(r3.error, /catégorie/);
-  assert.deepEqual(r3.pos, { step: 'content', part: 'pc' });
+  at(r3.pos, { step: 'content', part: 'pc' });
 
   // « Passer » saute toute la page
-  assert.deepEqual(flow.forward(STEPS, tutoDraft(), { step: 'steam', part: 'steam' }, { skipPage: true }).pos, { step: 'exclude', part: 'genres' });
+  at(flow.forward(STEPS, tutoDraft(), { step: 'steam', part: 'steam' }, { skipPage: true }).pos, { step: 'exclude', part: 'genres' });
+});
+
+test('Tutoriel : la flèche descend de catégorie en catégorie, puis montre le bouton', () => {
+  const d = tutoDraft();
+  const path = (pos) => {
+    const out = [pos.part];
+    for (let to = pos; (to = flow.follow(STEPS, d, to));) out.push(to.part);
+    return out;
+  };
+  const page = flow.select(STEPS, d, { step: 'stores' }, 'stores');
+  assert.deepEqual(path(page), ['stores', 'bundles', 'bundleSites', 'prime']);
+
+  // Catégorie sautée d'un clic : la flèche y revient. Réponse modifiée plus haut : elle ne remontre rien.
+  assert.deepEqual(path(flow.select(STEPS, d, page, 'bundleSites')), ['bundleSites', 'prime', 'bundles']);
+  let pos = page;
+  for (let to; (to = flow.follow(STEPS, d, pos));) pos = to;
+  assert.deepEqual(path(flow.select(STEPS, d, pos, 'stores')), ['stores']);
+
+  // « Oui » à Prime ouvre une catégorie de plus : la flèche y va.
+  d.prime = true;
+  assert.deepEqual(path(pos), ['prime', 'primeStores']);
 });
