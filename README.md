@@ -23,10 +23,10 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en quatre se
 
 ## Personnalisation
 
-**Tutoriel au premier lancement**, relançable depuis Réglages → « Relancer le tutoriel ». Il a 9 étapes avec l'accueil, certaines n'apparaissent que si elles te concernent :
+**Tutoriel au premier lancement**, relançable depuis Réglages → « Relancer le tutoriel ». Il pose **une question à la fois** : elle s'ouvre seule, une flèche la montre, les réponses déjà données se replient en une ligne (un clic pour les modifier) et « Oui / Non » passe tout seul à la suite. Quand c'est bon, la flèche passe devant le bouton. Entrée continue, et les animations se coupent si ton système le demande. Il a 9 pages avec l'accueil, certaines n'apparaissent que si elles te concernent :
 
 1. **Plateformes** : PC, Switch, et « je veux aussi les jeux Switch 2 ».
-2. **Stores PC** où tu actives tes jeux : Steam, Epic Games, GOG, EA app, Ubisoft Connect, Battle.net, Microsoft Store, **Bundles** (avec le choix des sites), itch.io, IndieGala, Autres. Puis **« J'ai Amazon Prime »** : Amazon Games, Legacy Games, Luna (cloud).
+2. **Stores PC** où tu actives tes jeux : Steam, Epic Games, GOG, EA app, Ubisoft Connect, Battle.net, Microsoft Store, itch.io, IndieGala, Autres. Puis **Bundles** (oui / non, puis quels sites). Puis **Amazon Prime** (oui / non, puis où) : Amazon Games, Legacy Games, Luna (cloud).
 3. **Ce que tu veux voir** : jeux gratuits, promos PC, promos Switch, jeux en boîte (+ ton département), sites de clés, bundles.
 4. **Niveau d'exigence** : 🔥 que les affaires de fou, ⚖️ équilibré ou 🌊 large, avec le nombre d'annonces que chacun donnerait et celui qui te convient le mieux.
 5. **Tes bibliothèques** : lecture de tes jeux Steam et GOG via les sessions déjà ouvertes dans ton navigateur (lien de profil Steam facultatif). Les promos sur tes jeux sont masquées et ta liste de souhaits Steam est mise en avant.
@@ -156,13 +156,13 @@ extension/
 │       └── goglibrary.js                         # jeux GOG via la session gog.com
 ├── src/prefs.js, src/genres.js            # personnalisation : sections, exclusions, jeux possédés
 ├── src/sources/steamlibrary.js, steamapps.js, steamsearch.js  # bibliothèque/souhaits, genres, recherche par nom
-├── onboarding/                # tutoriel de premier lancement
+├── onboarding/                # tutoriel : steps.js (questions), flow.js (ordre), guide.js (flèches)
 ├── ui/                        # composants partagés (tutoriel + réglages)
 ├── content/claim.js           # clic assisté + détection « possédé »
 ├── popup/  options/  icons/
 tests/
 ├── fixtures.js                # données calquées sur le format réel des API
-├── unit.test.js               # 71 tests
+├── unit.test.js               # 74 tests
 └── background.test.js         # 19 tests : service worker dans un navigateur simulé
 ```
 

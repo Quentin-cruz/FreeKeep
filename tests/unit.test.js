@@ -1351,3 +1351,81 @@ test('Indie sans DRM : bundles IndieGala (notes réelles), adultes et packs de D
   assert.deepEqual(['strict', 'balanced', 'wide'].map(at), [0, 1, 1]);
   assert.equal(parseBarter({ bundles: { 9: { meta: { storename: 'Indiegala', title: 'Lusty Lab Bundle', url: 'u', start: 1, end: Math.round(now / 1000) + 9999 }, games: { 1: { type: 1, id: 1 } } } } }, now).length, 0);
 });
+
+// ---------- Tutoriel : une question à la fois ----------
+
+const { STEPS } = await import('../extension/onboarding/steps.js');
+const flow = await import('../extension/onboarding/flow.js');
+const tutoDraft = (o = {}) => ({ ...structuredClone(DEFAULT_SETTINGS), ...o });
+const walk = (d) => {
+  const seen = [];
+  let pos = flow.start(STEPS, d);
+  for (let i = 0; i < 100; i++) {
+    seen.push(pos.part ? `${pos.step}/${pos.part}` : pos.step);
+    const res = flow.forward(STEPS, d, pos);
+    if (res.done) return seen;
+    assert.equal(res.error, undefined, `bloqué sur ${seen.at(-1)}`);
+    pos = res.pos;
+  }
+  throw new Error('tutoriel sans fin');
+};
+
+test('Tutoriel : plateformes, puis bundles, puis Amazon Prime, une question à la fois', () => {
+  const d = tutoDraft();
+  const only = (id) => walk(d).filter((x) => x.startsWith(id));
+  assert.deepEqual(only('stores'), ['stores/stores', 'stores/bundles', 'stores/bundleSites', 'stores/prime']);
+  d.bundles = false;
+  d.prime = true;
+  assert.deepEqual(only('stores'), ['stores/stores', 'stores/bundles', 'stores/prime', 'stores/primeStores']);
+  assert.deepEqual(only('platforms'), ['platforms/machines']);
+  d.switch = true;
+  assert.deepEqual(only('platforms'), ['platforms/machines', 'platforms/switch2']);
+  assert.ok(walk(tutoDraft({ pc: false, switch: true })).every((x) => !/^(stores|steam)/.test(x) && x !== 'content/pc' && x !== 'alerts/autoClick'));
+});
+
+test('Tutoriel : aller-retour complet, quelles que soient les réponses', () => {
+  for (let n = 0; n < 128; n++) {
+    const bit = (i) => !!(n & (1 << i));
+    const d = tutoDraft({ pc: bit(0) || !bit(1), switch: bit(1), switch2: bit(2), bundles: bit(3), prime: bit(4), physical: bit(5), freeGames: bit(6) || !bit(1) });
+    if (bit(2)) d.stores.steam = false;
+    const go = walk(d);
+    assert.equal(new Set(go).size, go.length);
+    let pos = { step: 'done', part: null };
+    const back = [];
+    while (pos) {
+      back.unshift(pos.part ? `${pos.step}/${pos.part}` : pos.step);
+      pos = flow.backward(STEPS, d, pos);
+    }
+    assert.deepEqual(back, go);
+    let last = 0;
+    for (const x of go) {
+      const [step, part = null] = x.split('/');
+      const { ratio, page, pages } = flow.progress(STEPS, d, { step, part });
+      assert.ok(ratio > last && ratio <= 1 && page <= pages);
+      last = ratio;
+    }
+    assert.equal(last, 1);
+    for (const s of STEPS) for (const p of s.parts || []) assert.equal(typeof (p.summary?.(d) ?? ''), 'string');
+  }
+});
+
+test('Tutoriel : réponses impossibles refusées, avec retour à la bonne question', () => {
+  const none = tutoDraft({ pc: false, switch: false });
+  const r1 = flow.forward(STEPS, none, { step: 'platforms', part: 'machines' });
+  assert.match(r1.error, /plateforme/);
+  assert.deepEqual(r1.pos, { step: 'platforms', part: 'machines' });
+
+  const noStore = tutoDraft({ bundles: false });
+  for (const k of Object.keys(noStore.stores)) noStore.stores[k] = false;
+  const r2 = flow.forward(STEPS, noStore, { step: 'stores', part: 'prime' });
+  assert.match(r2.error, /plateforme/);
+  assert.deepEqual(r2.pos, { step: 'stores', part: 'stores' });
+
+  const nothing = tutoDraft({ switch: true, freeGames: false, pcDeals: false, bundles: false, switchDeals: false });
+  const r3 = flow.forward(STEPS, nothing, { step: 'content', part: 'keyshops' });
+  assert.match(r3.error, /catégorie/);
+  assert.deepEqual(r3.pos, { step: 'content', part: 'pc' });
+
+  // « Passer » saute toute la page
+  assert.deepEqual(flow.forward(STEPS, tutoDraft(), { step: 'steam', part: 'steam' }, { skipPage: true }).pos, { step: 'exclude', part: 'genres' });
+});

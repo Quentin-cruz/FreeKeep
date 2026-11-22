@@ -54,7 +54,7 @@ export const SWITCH_PLATFORMS = {
 // Niveaux d'exigence (seuils des bons plans)
 export const LEVELS = {
   strict:   { label: 'Que les affaires de fou', emoji: '🔥', desc: 'Très peu de résultats, uniquement des remises énormes.', pcMinDiscount: 75, gemMinDiscount: 80, gemMinRating: 95, switchMinDiscount: 60 },
-  balanced: { label: 'Équilibré', emoji: '⚖️', desc: 'Grosses remises sur de bons jeux. Recommandé.', pcMinDiscount: 60, gemMinDiscount: 70, gemMinRating: 90, switchMinDiscount: 40 },
+  balanced: { label: 'Équilibré', emoji: '⚖️', desc: 'Grosses remises sur de bons jeux.', pcMinDiscount: 60, gemMinDiscount: 70, gemMinRating: 90, switchMinDiscount: 40 },
   wide:     { label: 'Large', emoji: '🌊', desc: 'Plus de choix, remises plus modestes.', pcMinDiscount: 40, gemMinDiscount: 50, gemMinRating: 85, switchMinDiscount: 30 },
 };
 

@@ -126,3 +126,10 @@ select:focus, input:focus { outline: 2px solid rgba(52, 211, 153, .4); outline-o
 
 .prime-box + .tgrid { margin-top: 12px; }
 .tgrid + .prime-box { margin-top: 12px; }
+
+/* Choix unique en puces, explications repliées */
+.chip.pick { padding: 8px 16px; font-weight: 600; }
+.chip.pick.on { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); border-color: var(--accent); color: var(--text); }
+.help.more { margin-top: 12px; font-size: 12.5px; }
+.help.more summary { color: var(--muted); font-weight: 500; width: fit-content; }
+.help.more summary:hover { color: var(--text); }

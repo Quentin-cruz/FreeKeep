@@ -31,6 +31,41 @@ export function toggleCard({ icon, title, desc, checked, onChange, accent, disab
   return el;
 }
 
+// Question à deux réponses. `onChange` est appelé à chaque clic, même sur la réponse déjà choisie.
+export function yesNo({ value, yes = {}, no = {}, onChange }) {
+  const make = (v, { icon, title, desc }) => {
+    const el = h('button', { type: 'button', class: 'tcard answer', 'data-answer': v ? 'yes' : 'no' },
+      h('span', { class: 'tcard-icon' }, icon),
+      h('span', { class: 'tcard-text' }, h('strong', {}, title), desc ? h('small', {}, desc) : null),
+      h('span', { class: 'tcard-check', 'aria-hidden': 'true' }, '✓'));
+    el.addEventListener('click', () => { select(v); onChange(v); });
+    return el;
+  };
+  const cards = new Map([[true, make(true, { icon: '👍', title: 'Oui', ...yes })], [false, make(false, { icon: '🙅', title: 'Non', ...no })]]);
+  const select = (v) => cards.forEach((el, k) => {
+    el.classList.toggle('on', k === v);
+    el.setAttribute('aria-pressed', String(k === v));
+  });
+  select(!!value);
+  return h('div', { class: 'tgrid' }, [...cards.values()]);
+}
+
+// Choix unique en puces. `options` = [[valeur, texte, conseillé ?]].
+export function choiceChips(options, value, onChange) {
+  const chips = options.map(([v, label, star]) => {
+    const el = h('button', { type: 'button', class: `chip pick${v === value ? ' on' : ''}`, 'aria-pressed': String(v === value) }, `${star ? '⭐ ' : ''}${label}`);
+    el.addEventListener('click', () => {
+      chips.forEach((c) => { c.classList.toggle('on', c === el); c.setAttribute('aria-pressed', String(c === el)); });
+      onChange(v);
+    });
+    return el;
+  });
+  return h('div', { class: 'chips' }, chips);
+}
+
+// Explication repliée : rien à lire sauf si on le demande.
+export const more = (...content) => h('details', { class: 'help more' }, h('summary', {}, 'En savoir plus'), h('p', {}, ...content));
+
 // Interrupteur compact (ligne de réglage)
 export function switchRow({ title, desc, checked, onChange }) {
   const input = h('input', { type: 'checkbox', class: 'switch' });
@@ -68,19 +103,24 @@ export function storeGrid(stores, onChange, ids = PC_STORE_ORDER) {
   );
 }
 
+// Sites de bundles
+export function bundleSites(d, onChange) {
+  return h('div', { class: 'tgrid' }, Object.values(BUNDLE_STORES).map((b) =>
+    toggleCard({
+      icon: h('span', { class: 'store-dot', style: `background:${b.bg};color:${b.color}` }, b.short.slice(0, 2)),
+      title: b.name,
+      desc: b.desc,
+      checked: d.bundleStores?.[b.id] !== false,
+      accent: b.color,
+      onChange: (on) => onChange(b.id, on),
+    })));
+}
+
 // Bloc « Bundles » : oui / non, puis les sites
 export function bundleBox(d, onChange) {
   const sub = h('div', { class: 'sub' },
     h('p', { class: 'note' }, 'Packs de jeux à petit prix. Seuls ceux qui valent le coup sont montrés (jeux bien notés, grosse remise).'),
-    h('div', { class: 'tgrid' }, Object.values(BUNDLE_STORES).map((b) =>
-      toggleCard({
-        icon: h('span', { class: 'store-dot', style: `background:${b.bg};color:${b.color}` }, b.short.slice(0, 2)),
-        title: b.name,
-        desc: b.desc,
-        checked: d.bundleStores?.[b.id] !== false,
-        accent: b.color,
-        onChange: (on) => onChange('store', b.id, on),
-      }))));
+    bundleSites(d, (id, on) => onChange('store', id, on)));
   sub.hidden = !d.bundles;
   return h('div', { class: 'prime-box' },
     switchRow({ title: '📚 Bundles', desc: 'Humble Bundle, Fanatical, Steam, GOG, itch.io…', checked: d.bundles, onChange: (v) => { sub.hidden = !v; onChange('bundles', v); } }),
@@ -197,7 +237,7 @@ export function levelCards(value, onChange) {
   const cards = Object.entries(LEVELS).map(([id, l]) => {
     const extra = h('small', { class: 'level-extra' });
     extras[id] = extra;
-    const card = h('button', { type: 'button', class: `tcard radio${value === id ? ' on' : ''}` },
+    const card = h('button', { type: 'button', 'data-level': id, class: `tcard radio${value === id ? ' on' : ''}` },
       h('span', { class: 'tcard-icon' }, l.emoji),
       h('span', { class: 'tcard-text' }, h('strong', {}, l.label), h('small', {}, l.desc), extra),
       h('span', { class: 'tcard-check' }, '✓'));
@@ -210,6 +250,7 @@ export function levelCards(value, onChange) {
   });
   wrap.append(...cards);
   wrap.setCounts = (counts, recommended) => {
+    cards.forEach((c) => c.classList.toggle('reco', c.dataset.level === recommended));
     for (const [id, el] of Object.entries(extras)) el.textContent = counts?.[id] != null ? `≈ ${counts[id]} annonces${id === recommended ? ' · ⭐ conseillé pour toi' : ''}` : '';
   };
   return wrap;
@@ -267,7 +308,8 @@ export function steamProfileField(value, onChange, { autoTest = false, useSessio
 }
 
 // Bibliothèque lue via la session du navigateur : interrupteur + vérification.
-function sessionField({ name, message, url, site, title, desc, okText }, checked, onChange, { autoTest = false } = {}) {
+// `brief` : sans l'explication (tutoriel, où elle est repliée).
+function sessionField({ name, message, url, site, title, desc, okText }, checked, onChange, { autoTest = false, brief = false } = {}) {
   const status = h('div', { class: 'status' });
   const btn = h('button', { type: 'button', class: 'btn' }, `Vérifier ma session ${name}`);
   const test = async () => {
@@ -290,7 +332,7 @@ function sessionField({ name, message, url, site, title, desc, okText }, checked
   actions.hidden = !checked;
   if (autoTest && checked) setTimeout(test, 50);
   return h('div', { class: 'gog-field' },
-    switchRow({ title, desc, checked, onChange: (v) => { actions.hidden = !v; onChange(v); } }),
+    switchRow({ title, desc: brief ? null : desc, checked, onChange: (v) => { actions.hidden = !v; onChange(v); } }),
     actions,
   );
 }

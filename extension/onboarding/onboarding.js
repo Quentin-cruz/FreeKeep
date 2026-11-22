@@ -1,322 +1,103 @@
 // FreeKeep — tutoriel de premier lancement (relançable depuis les réglages)
-import { STORES, STORE_ORDER, PC_STORE_ORDER, PRIME_STORES, LEVELS, INTERVALS, DEAL_SOURCES } from '../src/config.js';
-import { GENRE_BY_ID } from '../src/genres.js';
+import { LEVELS, DEAL_SOURCES } from '../src/config.js';
 import { getSettings, saveSettings } from '../src/store.js';
-import { h, toggleCard, switchRow, storeGrid, primeBox, genreChips, tagInput, levelCards, bundleBox, steamProfileField, steamSessionField, gogSessionField } from '../ui/components.js';
+import { h } from '../ui/components.js';
+import { STEPS } from './steps.js';
+import { start, forward, backward, progress } from './flow.js';
+import { arrow, buildParts, createPointer } from './guide.js';
 
 const $ = (s) => document.querySelector(s);
+const AUTO_DELAY = 280;    // laisse voir la réponse cochée avant de passer à la suite
+const NUDGE_DELAY = 4500;  // sans action (tout est déjà bien coché), la flèche montre le bouton
+
 let draft = null;
-let index = 0;
+let pos = null;
+let view = null;      // page affichée : { step, guide }
 let finished = false;
+let autoTimer = null;
+let nudgeTimer = null;
+const pointer = createPointer($('.ob-card'));
+$('#btn-next').before(arrow('foot-arrow'));
 
-// Estimation du nombre d'annonces avec les réglages en cours (rien n'est enregistré).
-let estimateSeq = 0;
-async function estimate(d, fetchMissing = false) {
-  const seq = ++estimateSeq;
-  const res = await chrome.runtime.sendMessage({ type: 'estimate', settings: d, fetch: fetchMissing }).catch(() => null);
-  return seq === estimateSeq && !res?.error ? res : null; // une estimation plus récente est partie
+const stepOf = (id) => STEPS.find((s) => s.id === id);
+
+// La flèche est soit devant la question, soit devant le bouton : jamais les deux.
+function nudge(on) {
+  clearTimeout(nudgeTimer);
+  $('.ob-foot').classList.toggle('ready', on);
+  const part = view.guide?.el(pos.part);
+  pointer.at(on || !part ? null : part);
+  if (!on && part) nudgeTimer = setTimeout(() => nudge(true), NUDGE_DELAY);
 }
 
-const anyDeals = (d) => (d.pc && (d.pcDeals || d.bundles)) || (d.switch && d.switchDeals);
-const anyStore = (d) => PC_STORE_ORDER.some((s) => d.stores[s]) || (d.prime && PRIME_STORES.some((s) => d.stores[s]));
-
-const LAST_STORES = ['itch', 'indiegala', 'other'];
-
-// ---------------------------------------------------------------------------
-// Étapes (certaines n'apparaissent que selon les choix précédents)
-// ---------------------------------------------------------------------------
-const STEPS = [
-  {
-    id: 'welcome',
-    next: 'C’est parti →',
-    render: () => h('div', { class: 'hero' },
-      h('img', { class: 'hero-logo', src: '../icons/logo-512.png', alt: '', width: 120, height: 120 }),
-      h('h1', {}, 'Bienvenue dans FreeKeep<3'),
-      h('p', { class: 'lead' }, 'Réponds à quelques questions (1 minute) : FreeKeep<3 ne te montrera que ce qui te concerne vraiment.'),
-      h('div', { class: 'features' },
-        feature('🎁', 'Jeux gratuits à vie', 'Epic, Steam, GOG, Alienware, Fanatical… récupérés en un clic.'),
-        feature('💸', 'Vraies grosses promos', 'Que des bons jeux à grosse remise, et les erreurs de prix.'),
-        feature('🔔', 'Alertes', 'Notification quand ça vaut vraiment le coup.'),
-      ),
-    ),
-  },
-  {
-    id: 'platforms',
-    title: 'Sur quoi tu joues ?',
-    lead: 'Les menus de FreeKeep<3 s’adaptent à tes plateformes.',
-    valid: (d) => d.pc || d.switch,
-    invalidMsg: 'Choisis au moins une plateforme.',
-    render: (d) => {
-      const sub = h('div', { class: 'sub' },
-        switchRow({ title: 'Je veux aussi les jeux Switch 2', desc: 'Sinon, seuls les jeux jouables sur la Switch 1 sont montrés.', checked: d.switch2, onChange: (v) => { d.switch2 = v; } }));
-      sub.hidden = !d.switch;
-      return [
-        h('div', { class: 'tgrid' },
-          toggleCard({ icon: '💻', title: 'PC', desc: 'Jeux gratuits et promos sur Steam, Epic, GOG…', checked: d.pc, onChange: (v) => { d.pc = v; } }),
-          toggleCard({ icon: '🎮', title: 'Nintendo Switch', desc: 'Promos eShop, jeux en boîte et clés.', checked: d.switch, accent: '#f87171', onChange: (v) => { d.switch = v; sub.hidden = !v; } }),
-        ),
-        sub,
-      ];
-    },
-  },
-  {
-    id: 'stores',
-    show: (d) => d.pc,
-    title: 'Où actives-tu tes jeux PC ?',
-    lead: 'Coche les plateformes où tu as un compte. Les jeux et promos des autres seront masqués.',
-    valid: anyStore,
-    invalidMsg: 'Choisis au moins une plateforme.',
-    render: (d) => [
-      storeGrid(d.stores, (id, on) => { d.stores[id] = on; }, PC_STORE_ORDER.filter((id) => !LAST_STORES.includes(id))),
-      bundleBox(d, (key, a, b) => { if (key === 'bundles') d.bundles = a; else d.bundleStores = { ...d.bundleStores, [a]: b }; }),
-      storeGrid(d.stores, (id, on) => { d.stores[id] = on; }, LAST_STORES),
-      h('p', { class: 'note' }, 'Les clés vendues par Humble, Fanatical ou Green Man Gaming s’activent presque toujours sur Steam.'),
-      primeBox(d, (key, a, b) => { if (key === 'prime') d.prime = a; else d.stores[a] = b; }),
-    ],
-  },
-  {
-    id: 'content',
-    title: 'Qu’est-ce que tu veux voir ?',
-    lead: 'Tu pourras changer ça à tout moment dans les réglages.',
-    render: (d) => {
-      const dept = h('div', { class: 'field' },
-        h('span', {}, '📍 Ton département, pour les promos valables dans un seul magasin (les offres nationales s’affichent toujours) :'),
-        deptInput(d));
-      dept.hidden = !(d.switch && d.physical);
-      const cards = [];
-      if (d.pc) {
-        cards.push(toggleCard({ icon: '🎁', title: 'Jeux PC gratuits à garder', desc: 'Offerts à vie : Epic chaque semaine, Steam, GOG, Prime, Alienware Arena…', checked: d.freeGames, onChange: (v) => { d.freeGames = v; } }));
-        cards.push(toggleCard({ icon: '💻', title: 'Promos PC', desc: 'Gros jeux bien notés et pépites, à grosse remise.', checked: d.pcDeals, onChange: (v) => { d.pcDeals = v; } }));
-      }
-      if (d.switch) {
-        cards.push(toggleCard({ icon: '🎮', title: 'Promos Switch', desc: 'eShop officiel, jeux en boîte et clés.', checked: d.switchDeals, accent: '#f87171', onChange: (v) => { d.switchDeals = v; } }));
-        cards.push(toggleCard({ icon: '📦', title: 'Jeux en boîte (magasins)', desc: 'Amazon, Fnac, Leclerc, Micromania… repérés par Dealabs.', checked: d.physical, onChange: (v) => { d.physical = v; dept.hidden = !(d.switch && v); } }));
-      }
-      cards.push(toggleCard({ icon: '🔑', title: 'Sites de clés', desc: 'Eneba, Instant Gaming, G2A… Moins cher, mais pas des boutiques officielles.', checked: d.keyshops, onChange: (v) => { d.keyshops = v; } }));
-      return [h('div', { class: 'tgrid' }, cards), dept];
-    },
-    valid: (d) => (d.pc && (d.freeGames || d.pcDeals || d.bundles)) || (d.switch && d.switchDeals),
-    invalidMsg: 'Active au moins une catégorie.',
-  },
-  {
-    id: 'level',
-    show: anyDeals,
-    title: 'Quel niveau d’exigence pour les promos ?',
-    lead: 'FreeKeep<3 écarte déjà les jeux mal notés et les petits jeux bradés. Choisis à quel point il doit être sélectif.',
-    render: (d) => {
-      const warn = h('div', { class: 'callout', hidden: true });
-      let est = null;
-      const refreshWarn = () => {
-        const level = LEVELS[d.level] ? d.level : 'balanced';
-        const n = est?.counts?.[level];
-        warn.hidden = level === 'strict';
-        warn.replaceChildren('⚠️ ', h('strong', {}, n ? `Environ ${n} annonces avec ce niveau. ` : level === 'wide' ? 'Ce niveau affiche énormément d’annonces. ' : 'Ce niveau affiche beaucoup d’annonces. '),
-          'Les filtres comptent vraiment : à l’étape « Ce que tu ne veux pas voir », masque les genres et les licences qui ne t’intéressent pas.');
-      };
-      const cards = levelCards(LEVELS[d.level] ? d.level : 'balanced', (v) => { d.level = v; refreshWarn(); });
-      refreshWarn();
-      const wait = h('p', { class: 'note' }, '⏳ Estimation du nombre d’annonces avec tes choix…');
-      estimate(d, true).then((res) => {
-        wait.hidden = true;
-        if (!res) return;
-        est = res;
-        cards.setCounts(res.counts, res.recommended);
-        refreshWarn();
-      });
-      return [
-        cards, wait, warn,
-        h('p', { class: 'note' }, 'Les erreurs de prix et les jeux de ta liste de souhaits sont toujours signalés, quel que soit le niveau.'),
-      ];
-    },
-  },
-  {
-    id: 'steam',
-    show: (d) => d.pc && (d.stores.steam || d.stores.gog),
-    title: 'Tes bibliothèques',
-    lead: 'FreeKeep<3 masque les promos sur les jeux que tu as déjà, sans jamais te demander de mot de passe.',
-    render: (d) => [
-      d.stores.steam ? [
-        h('h2', {}, 'Steam'),
-        steamSessionField(d.steamOwnedSync, (v) => { d.steamOwnedSync = v; }, { autoTest: true }),
-        h('p', { class: 'note' }, 'Lien de ton profil (facultatif) : jeux possédés et liste de souhaits.'),
-        steamProfileField(d.steamProfile, (v) => { d.steamProfile = v; }, { autoTest: true, useSession: () => d.steamOwnedSync }),
-      ] : null,
-      d.stores.gog ? [
-        h('h2', { style: 'margin-top:18px' }, 'GOG'),
-        gogSessionField(d.gogSessionSync, (v) => { d.gogSessionSync = v; }),
-      ] : null,
-      h('div', { class: 'panel-lite', style: 'margin-top:14px' },
-        switchRow({ title: 'Masquer les promos sur les jeux que je possède', checked: d.hideOwned, onChange: (v) => { d.hideOwned = v; } }),
-        d.stores.steam ? switchRow({ title: 'Mettre en avant ma liste de souhaits Steam', desc: 'Alerte dès qu’un jeu de ta liste passe à -50 % ou plus.', checked: d.useWishlist, onChange: (v) => { d.useWishlist = v; d.notifyWishlist = v; } }) : null,
-      ),
-    ],
-    skippable: true,
-  },
-  {
-    id: 'exclude',
-    title: 'Ce que tu ne veux pas voir',
-    lead: 'Clique sur les genres à masquer, et ajoute des licences que tu veux bannir.',
-    render: (d) => {
-      const total = h('div', { class: 'callout' }, '⏳ Calcul du nombre d’annonces…');
-      const tips = h('div', { hidden: true });
-      let timer = null;
-      const recount = () => {
-        clearTimeout(timer);
-        timer = setTimeout(async () => {
-          const res = await estimate(d);
-          if (res) showTotal(res);
-        }, 350);
-      };
-      const showTotal = (res) => {
-        const many = res.many;
-        total.className = many ? 'callout' : 'callout tip';
-        total.replaceChildren(many ? '⚠️ ' : '✅ ', h('strong', {}, `Environ ${res.current} annonces avec tes filtres. `),
-          many ? 'C’est beaucoup : masque ce qui ne t’intéresse pas, les nombres indiquent combien d’annonces chaque filtre retirerait.' : 'Une liste facile à parcourir.');
-      };
-      const genres = genreChips(d.excludedGenres, (v) => { d.excludedGenres = v; recount(); });
-      const tagsBox = tagInput(d.bannedKeywords, (v) => { d.bannedKeywords = v; recount(); });
-      (async () => {
-        const res = await estimate(d, true);
-        if (res) {
-          showTotal(res);
-          genres.setHits(res.hits.genres);
-        } else total.hidden = true;
-        const rec = await chrome.runtime.sendMessage({ type: 'recommend', settings: d, hits: res?.hits }).catch(() => null);
-        if (!rec?.franchises) return;
-        tagsBox.setSuggestions(rec.franchises);
-        if (!rec.genres?.length) return;
-        const names = rec.genres.map((id) => `${GENRE_BY_ID[id].emoji} ${GENRE_BY_ID[id].label}`).join(', ');
-        const btn = h('button', { type: 'button', class: 'btn' }, 'Masquer ces genres');
-        btn.addEventListener('click', () => { genres.exclude(rec.genres); tips.hidden = true; });
-        tips.className = 'callout tip';
-        tips.replaceChildren('💡 ', h('strong', {}, `D’après tes ${rec.total} jeux Steam, `), `tu n’en as presque aucun dans : ${names}.`, h('br'), btn);
-        tips.hidden = false;
-      })();
-      return [
-        total, tips,
-        h('h2', {}, 'Genres à masquer'),
-        genres,
-        h('p', { class: 'note' }, 'Les genres sont détectés via Steam et l’eShop Nintendo. Pour les autres jeux, FreeKeep<3 se base sur le titre.'),
-        h('h2', {}, 'Licences / mots-clés bannis'),
-        tagsBox,
-        h('p', { class: 'note' }, '⭐ conseillé : tu n’as aucun jeu de cette licence sur Steam, et elle masquerait des annonces du moment.'),
-      ];
-    },
-    skippable: true,
-  },
-  {
-    id: 'alerts',
-    title: 'Tes alertes',
-    lead: 'FreeKeep<3 vérifie tout seul en arrière-plan, même popup fermé, tant que ton navigateur est ouvert.',
-    render: (d) => {
-      const wants = [];
-      if (d.pc && d.freeGames) {
-        wants.push(switchRow({ title: '🎁 Nouveau jeu gratuit', checked: d.notifyNew, onChange: (v) => { d.notifyNew = v; } }));
-        wants.push(switchRow({ title: '⏳ Rappel le dernier jour', desc: 'Si un jeu gratuit non récupéré expire dans moins de 24 h.', checked: d.notifyLastDay, onChange: (v) => { d.notifyLastDay = v; } }));
-      }
-      if (anyDeals(d)) wants.push(switchRow({ title: '🔥 Affaires exceptionnelles', desc: 'Erreurs de prix, chutes soudaines, plus bas historiques.', checked: d.notifyDeals, onChange: (v) => { d.notifyDeals = v; } }));
-      if (d.pc && d.stores.steam && d.useWishlist) wants.push(switchRow({ title: '❤️ Liste de souhaits en promo', checked: d.notifyWishlist, onChange: (v) => { d.notifyWishlist = v; } }));
-      const freq = h('select', {},
-        INTERVALS.map(([v, l]) => h('option', { value: String(v) }, l)));
-      freq.value = String(d.intervalHours);
-      freq.addEventListener('change', () => { d.intervalHours = Number(freq.value); });
-      const extra = [];
-      if (d.pc && d.freeGames) {
-        extra.push(switchRow({ title: '🖱️ Clic automatique sur « Obtenir » (expérimental)', desc: 'Quand tu cliques « Récupérer », FreeKeep<3 ouvre la page et clique pour toi (jamais d’achat payant).', checked: d.autoClick, onChange: (v) => { d.autoClick = v; } }));
-      }
-      return [
-        h('div', { class: 'panel-lite' }, wants),
-        h('div', { class: 'field' }, h('span', {}, '⏱ Fréquence des vérifications :'), freq),
-        h('p', { class: 'note' }, 'Les erreurs de prix partent vite : 5 à 15 minutes pour ne pas les rater. Les autres sources sont relues au plus toutes les 15 minutes.'),
-        extra.length ? h('div', { class: 'panel-lite', style: 'margin-top:14px' }, extra) : null,
-      ];
-    },
-  },
-  {
-    id: 'done',
-    title: 'Tout est prêt 🎉',
-    lead: 'Voici ta configuration :',
-    next: 'Terminer',
-    render: (d) => {
-      const stores = STORE_ORDER.filter((s) => d.stores[s] && (!PRIME_STORES.includes(s) || d.prime)).map((s) => STORES[s].short);
-      const sections = [
-        d.pc && d.freeGames ? 'Jeux gratuits' : null,
-        d.pc && d.pcDeals ? 'Promos PC' : null,
-        d.pc && d.bundles ? 'Bundles' : null,
-        d.switch && d.switchDeals ? `Promos ${d.switch2 ? 'Switch + Switch 2' : 'Switch'}` : null,
-      ].filter(Boolean);
-      const extras = [d.physical && d.switch ? 'boîtes' : null, d.keyshops ? 'sites de clés' : null].filter(Boolean);
-      const recap = h('dl', { class: 'recap' },
-        dt('Plateformes'), dd([d.pc ? 'PC' : null, d.switch ? (d.switch2 ? 'Switch + Switch 2' : 'Switch') : null].filter(Boolean).join(' · ')),
-        d.pc ? [dt('Stores PC'), dd(stores.join(', ') || '—')] : null,
-        d.pc ? [dt('Amazon Prime'), dd(d.prime ? 'oui 👑' : 'non')] : null,
-        dt('Sections'), dd(sections.join(' · ') || '—'),
-        extras.length ? [dt('Inclus'), dd(extras.join(', '))] : null,
-        anyDeals(d) ? [dt('Exigence'), dd(LEVELS[d.level]?.label || 'Personnalisé')] : null,
-        d.pc && d.stores.steam ? [dt('Bibliothèque Steam'), dd([d.steamOwnedSync ? 'via ta session Steam' : null, d.steamProfile ? 'profil lié' : null].filter(Boolean).join(' · ') || 'non')] : null,
-        d.pc && d.stores.gog ? [dt('Bibliothèque GOG'), dd(d.gogSessionSync ? 'via ta session gog.com' : 'non')] : null,
-        dt('Genres masqués'), dd(d.excludedGenres.map((g) => GENRE_BY_ID[g]?.label).filter(Boolean).join(', ') || 'aucun'),
-        dt('Licences bannies'), dd(d.bannedKeywords.join(', ') || 'aucune'),
-      );
-      return [
-        recap,
-        h('div', { class: 'done-box' },
-          h('p', {}, '👉 Clique sur l’icône FreeKeep<3 (le cœur) en haut à droite de ton navigateur.', h('br'), 'Épingle-la via l’icône 🧩 ou l’icône des extensions.'),
-          h('p', {}, 'Tout se modifie à tout moment dans ⚙ Réglages. Tu peux aussi relancer ce tutoriel depuis les réglages.'),
-        ),
-      ];
-    },
-  },
-];
-
-function feature(ico, title, text) {
-  return h('div', { class: 'feature' }, h('span', { class: 'ico' }, ico), h('strong', {}, title), h('small', {}, text));
-}
-const dt = (t) => h('dt', {}, t);
-const dd = (t) => h('dd', {}, t);
-
-function deptInput(d) {
-  const input = h('input', { type: 'text', class: 'short', placeholder: 'ex. 80, 60', value: d.departments || '' });
-  input.addEventListener('input', () => { d.departments = input.value.trim(); });
-  return input;
+function showError(msg) {
+  const warn = $('#invalid');
+  warn.hidden = !msg;
+  warn.textContent = msg ? `⚠ ${msg}` : '';
 }
 
-// ---------------------------------------------------------------------------
-// Navigation
-// ---------------------------------------------------------------------------
-const visibleSteps = () => STEPS.filter((s) => !s.show || s.show(draft));
+function updateChrome() {
+  const p = progress(STEPS, draft, pos);
+  $('#bar').style.width = `${Math.round(p.ratio * 100)}%`;
+  $('#step-count').textContent = `${p.page} / ${p.pages}`;
+  $('#btn-back').style.visibility = backward(STEPS, draft, pos) ? 'visible' : 'hidden';
+  $('#btn-skip').hidden = !view.step.skippable;
+  $('#btn-next').textContent = p.lastPart ? view.step.next || 'Suivant →' : 'Continuer ↓';
+}
 
-function render() {
-  const steps = visibleSteps();
-  index = Math.min(index, steps.length - 1);
-  const step = steps[index];
+function touched() {
+  if (finished) return;
+  showError('');
+  view.guide.update(pos.part);
+  updateChrome();
+  const part = view.step.parts.find((p) => p.id === pos.part);
+  nudge(!part?.valid || part.valid(draft));
+}
+
+function drawPage() {
+  const step = stepOf(pos.step);
+  const ctx = {
+    advance: () => {
+      clearTimeout(autoTimer);
+      const from = pos;
+      autoTimer = setTimeout(() => { if (pos === from) next(); }, AUTO_DELAY);
+    },
+  };
+  const guide = step.parts ? buildParts(step, draft, ctx, { onGo: (part) => go({ step: step.id, part }), onTouch: () => { if (pos.step === step.id) touched(); } }) : null;
+  view = { step, guide };
   const box = $('#step');
   box.replaceChildren(...[
     step.title ? h('h1', {}, step.title) : null,
-    step.lead ? h('p', { class: 'lead' }, step.lead) : null,
-    step.render(draft),
-    h('p', { class: 'note warn', id: 'invalid', hidden: true }),
+    guide ? [guide.before, guide.root] : step.render(draft),
   ].flat(Infinity).filter(Boolean));
-  $('#bar').style.width = `${Math.round(((index + 1) / steps.length) * 100)}%`;
-  $('#step-count').textContent = `${index + 1} / ${steps.length}`;
-  $('#btn-back').style.visibility = index === 0 ? 'hidden' : 'visible';
-  $('#btn-skip').hidden = !step.skippable;
-  $('#btn-next').textContent = step.next || 'Suivant →';
+  document.body.dataset.step = step.id;
+  box.classList.remove('enter');
+  void box.offsetWidth; // relance l'animation d'entrée
+  box.classList.add('enter');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-async function next() {
-  const steps = visibleSteps();
-  const step = steps[index];
-  if (step.valid && !step.valid(draft)) {
-    const warn = $('#invalid');
-    warn.textContent = `⚠ ${step.invalidMsg}`;
-    warn.hidden = false;
-    return;
-  }
-  if (step.id === 'done') return finish();
-  index += 1;
-  render();
+function go(to, { error = '' } = {}) {
+  clearTimeout(autoTimer);
+  const newPage = view?.step.id !== to.step;
+  pos = to;
+  if (newPage) drawPage();
+  view.guide?.update(pos.part);
+  updateChrome();
+  showError(error);
+  nudge(!!view.step.nudge);
+  const el = view.guide?.el(pos.part);
+  if (!el) return;
+  // Le focus suit la question : Entrée continue, et un lecteur d'écran lit la question.
+  (el.querySelector('[data-autofocus]') || view.guide.head(pos.part)).focus({ preventScroll: true });
+  // Les réponses repliées changent la hauteur : on attend la fin du mouvement pour cadrer.
+  if (!newPage) setTimeout(() => { if (el.classList.contains('active')) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 330);
+}
+
+function next(opts) {
+  const res = forward(STEPS, draft, pos, opts);
+  if (res.done) return finish();
+  go(res.pos, { error: res.error });
 }
 
 async function finish() {
@@ -324,6 +105,7 @@ async function finish() {
   btn.disabled = true;
   btn.textContent = 'Enregistrement…';
   finished = true;
+  nudge(false);
   draft.onboarded = true;
   await saveSettings(draft);
   chrome.runtime.sendMessage({ type: 'refresh', force: ['steamlib', 'wishlist', ...DEAL_SOURCES] }).catch(() => {});
@@ -338,15 +120,22 @@ async function finish() {
     if (tab) chrome.tabs.remove(tab.id);
   };
   $('#btn-back').style.visibility = 'hidden';
+  document.body.classList.add('saved');
   const box = document.querySelector('.done-box');
   if (box) box.prepend(h('p', { style: 'font-weight:700;color:var(--accent);margin-bottom:6px' }, '✔ Configuration enregistrée. FreeKeep<3 lance sa première vérification.'));
 }
 
 $('#btn-next').addEventListener('click', () => { if (!finished) next(); });
-$('#btn-skip').addEventListener('click', () => { index += 1; render(); });
-$('#btn-back').addEventListener('click', () => { index = Math.max(0, index - 1); render(); });
+$('#btn-skip').addEventListener('click', () => next({ skipPage: true }));
+$('#btn-back').addEventListener('click', () => { const to = backward(STEPS, draft, pos); if (to) go(to); });
 document.addEventListener('keydown', (e) => {
-  if (!finished && e.key === 'Enter' && !['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(document.activeElement?.tagName)) next();
+  if (finished || e.key !== 'Enter') return;
+  const el = document.activeElement;
+  // Sur le titre de la question ouverte, Entrée continue ; ailleurs, les boutons gardent leur rôle.
+  if (el?.matches('.part.active > .part-head')) {
+    e.preventDefault();
+    next();
+  } else if (!['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A', 'SUMMARY'].includes(el?.tagName)) next();
 });
 
 (async () => {
@@ -354,5 +143,5 @@ document.addEventListener('keydown', (e) => {
   if (!LEVELS[draft.level]) draft.level = 'balanced';
   draft.excludedGenres = [...(draft.excludedGenres || [])];
   draft.bannedKeywords = [...(draft.bannedKeywords || [])];
-  render();
+  go(start(STEPS, draft));
 })();
