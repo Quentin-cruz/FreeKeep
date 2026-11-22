@@ -131,6 +131,9 @@ a { color: inherit; }
   padding: 10px 14px 4px;
   flex-wrap: wrap;
 }
+.filter-row { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+.filter-row + .filter-row { padding-top: 6px; border-top: 1px solid var(--border); }
+.chip.zero:not(.active) { opacity: .45; }
 .chip {
   border: 1px solid var(--border);
   background: transparent;

@@ -279,3 +279,51 @@ test('Jeu banni pendant une vérification : pas de notification pour lui, mais p
   assert.ok(!text.includes(banned.title), text);
   assert.ok(text.includes(other.title), text);
 });
+
+// ---------- Fréquences courtes, profil Steam ----------
+
+test('Vérification toutes les 5 minutes : alarme réglée, Epic pas relu à chaque fois', async () => {
+  await setup();
+  let period = null;
+  chrome.alarms.create = async (name, o) => { period = o.periodInMinutes; };
+  await changeSettings({ intervalHours: 5 / 60 });
+  await sleep(30);
+  chrome.alarms.create = noop;
+  assert.equal(period, 5);
+  epicCalls = 0;
+  chrome.alarms.onAlarm.listeners[0]({ name: 'freekeep-refresh' });
+  await idle();
+  assert.equal(epicCalls, 0, 'données de moins de 15 min : réutilisées');
+  const { games } = await send({ type: 'getState' });
+  assert.ok(games.some((g) => g.store === 'epic'), 'les jeux restent affichés');
+  await send({ type: 'refresh' });
+  assert.equal(epicCalls, 1, 'demandé à la main : relu');
+});
+
+test('Tutoriel : le lien de profil annonce les jeux possédés', async () => {
+  await setup();
+  const real = globalThis.fetch;
+  let owned = [10, 20, 30];
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes('dynamicstore/userdata')) return new Response(JSON.stringify({ rgOwnedApps: owned, rgOwnedPackages: [], rgWishlist: owned.length ? [7] : [] }));
+    if (u.includes('/games/')) return new Response('<html>login</html>');
+    if (u.includes('xml=1')) return new Response('<profile><steamID64>76561198000000001</steamID64><steamID><![CDATA[Test]]></steamID></profile>');
+    if (u.includes('IWishlistService')) return new Response(JSON.stringify({ response: { items: [{ appid: 7 }, { appid: 8 }] } }));
+    return real(url);
+  };
+  try {
+    const ok = await send({ type: 'testSteamProfile', input: 'https://steamcommunity.com/id/test', useSession: true });
+    assert.equal(ok.count, 3);
+    assert.equal(ok.ownedError, null);
+    owned = [];
+    const out = await send({ type: 'testSteamProfile', input: 'https://steamcommunity.com/id/test', useSession: true });
+    assert.equal(out.count, 0);
+    assert.match(out.ownedError, /pas connecté/);
+    assert.equal(out.wishlistCount, 2);
+    const bad = await send({ type: 'testSteamProfile', input: 'https://example.com/x' });
+    assert.match(bad.error, /non reconnu/);
+  } finally {
+    globalThis.fetch = real;
+  }
+});

@@ -29,9 +29,11 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en trois sec
 3. **Ce que tu veux voir** : jeux gratuits, promos PC, promos Switch, jeux en boîte (+ ton département), sites de clés, bundles.
 4. **Niveau d'exigence** : 🔥 que les affaires de fou, ⚖️ équilibré ou 🌊 large.
 5. **Tes bibliothèques** : lecture de tes jeux Steam et GOG via les sessions déjà ouvertes dans ton navigateur (lien de profil Steam facultatif). Les promos sur tes jeux sont masquées et ta liste de souhaits Steam est mise en avant.
-6. **Ce que tu ne veux pas voir** : 16 genres à masquer (horreur, sport, contenu adulte…) et des licences à bannir par mot-clé (FIFA, Call of Duty…).
+6. **Ce que tu ne veux pas voir** : 16 genres à masquer (horreur, sport, hentai…) et des licences à bannir par mot-clé (LEGO, Mortal Kombat, Call of Duty…).
 7. **Alertes** : notifications, fréquence, clic automatique.
 8. **Récapitulatif**.
+
+**Filtres du popup** : deux lignes qui se combinent. Promos PC : **tes launchers** (Steam, Epic, GOG, Ubisoft…), puis Top, Souhaits, Clés, Bundles. Switch : Switch / Switch 2, puis eShop, Physique, Clés. Un jeu vendu sur plusieurs launchers affiche le prix de celui que tu as choisi. Tes launchers restent affichés même à 0.
 
 **Menus adaptatifs** : le popup n'affiche que tes sections. Il n'y a pas de barre de sections s'il n'y en a qu'une, pas de filtre Switch 2 si tu ne l'as pas choisi, et pas d'onglet « Bientôt » sans Epic. Les éléments masqués par tes filtres restent consultables (« 🚫 N masqués par tes filtres »), avec la raison du masquage.
 
@@ -40,7 +42,8 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en trois sec
 ### Bibliothèque Steam : via ta session, sans mot de passe
 
 - Steam ne montre plus la liste des jeux d'un profil sans connexion, même s'il est public. FreeKeep<3 lit donc tes jeux et ta liste de souhaits via ta session `store.steampowered.com`, si tu es déjà connecté dans ce navigateur. Aucun identifiant n'est demandé ni enregistré. Désactivable dans les réglages.
-- **Lien de profil (facultatif)** : sans session ouverte, il permet de lire ta liste de souhaits si elle est publique. Avec une session, FreeKeep<3 essaie aussi de lire les noms de tes jeux pour les reconnaître dans les annonces Dealabs.
+- **Lien de profil (facultatif)** : sans session ouverte, il permet de lire ta liste de souhaits si elle est publique. Avec une session, « Vérifier » affiche le nombre de jeux possédés reconnus.
+- **Annonces Dealabs** : elles n'ont pas d'identifiant Steam. FreeKeep<3 le retrouve par le nom du jeu (10 recherches par vérification), pour masquer aussi ceux que tu possèdes.
 - Ce que ça change :
   - les promos sur les jeux que tu possèdes sont masquées ;
   - les jeux gratuits Steam que tu as déjà sont cochés « récupérés » ;
@@ -69,19 +72,19 @@ Chaque bon plan Switch est classé **Switch** (jouable sur Switch 1, et donc aus
 
 - Les genres viennent des données officielles Steam (genres et avertissements de contenu) et des catégories de l'eShop Nintendo.
 - Pour l'horreur, le FPS, le puzzle, etc., les tags joueurs viennent de SteamSpy, interrogé seulement si tu masques un de ces genres.
-- **Contenu adulte** : seuls les avertissements Steam « réservé aux adultes » et « nudité ou sexe fréquents » comptent. Un jeu avec un peu de nudité (The Witcher 3, Cyberpunk 2077…) reste visible.
+- **Hentai / sexe explicite** : seul l'avertissement Steam « contenu sexuel réservé aux adultes » compte, plus les tags Hentai et NSFW. Les jeux violents ou PEGI 18 (GTA, Red Dead, Call of Duty…) et ceux avec de la nudité (The Witcher 3, Cyberpunk 2077…) restent visibles.
 - Pour les jeux sans données (Epic, Dealabs…), FreeKeep se base sur le titre.
 - La liste de souhaits ignore le filtre de genres, mais pas les mots-clés bannis.
 
 ## Vérifications automatiques
 
 - Les vérifications interrogent les vrais sites. Elles tournent en arrière-plan, même popup fermé, tant que le navigateur est ouvert.
-- **Fréquence** : toutes les heures par défaut, réglable de 30 min à 24 h. Aucune notification n'est envoyée tant que le tutoriel n'est pas terminé. Une vérification se lance aussi :
+- **Fréquence** : toutes les heures par défaut, réglable de 5 min à 24 h (5 à 15 min conseillé pour les erreurs de prix). Aucune notification n'est envoyée tant que le tutoriel n'est pas terminé. Une vérification se lance aussi :
   - à l'installation ;
   - au démarrage du navigateur ;
   - à l'ouverture du popup si la dernière date de plus de 30 min.
 - **Réglages → État des sources** : chaque source y est affichée en direct (✔ nombre de résultats ou ✘ erreur), avec l'heure de la prochaine vérification et un bouton « Vérifier maintenant ».
-- Pour ne pas se faire bloquer par les API, chaque source garde ses résultats un minimum de temps : 15 min pour CheapShark et l'eShop, 10 min pour Dealabs, 50 min pour GG.deals.
+- Pour ne pas se faire bloquer par les API, chaque source garde ses résultats un minimum de temps : environ 15 min pour CheapShark, l'eShop et (lors des vérifications automatiques) Epic, Steam et GamerPower, 4 min pour Dealabs, 50 min pour GG.deals.
 
 ## 🎁 Gratuits
 
@@ -95,7 +98,7 @@ Chaque bon plan Switch est classé **Switch** (jouable sur Switch 1, et donc aus
 | Source | Ce qu'elle apporte |
 |---|---|
 | [CheapShark](https://www.cheapshark.com) | Promos sur 30+ stores officiels (Steam, GOG, Humble, Fanatical, GMG, Gamesplanet, Battle.net…), avec la note Metacritic et les avis Steam |
-| [Dealabs](https://www.dealabs.com) | Deals **hot** validés par la communauté, y compris sur les sites de clés (Eneba, Instant Gaming, G2A…), et **erreurs de prix** |
+| [Dealabs](https://www.dealabs.com) | Deals **hot** validés par la communauté, y compris sur les sites de clés (Eneba, Instant Gaming, G2A…), et **erreurs de prix** (avec le groupe « erreur de prix ») |
 | [GG.deals](https://gg.deals) *(facultatif)* | Prix des **sites de clés** en euros, plus bas historiques, surveillance des gros jeux |
 
 Ce qui est gardé (seuils réglables) :
@@ -109,7 +112,9 @@ Badges : ⚠️ erreur de prix · 📉 chute soudaine (-30 % depuis la vérif pr
 ## 🎮 Switch
 
 - **eShop** : moteur de recherche officiel de Nintendo Europe, plus l'API de prix Nintendo pour le prix exact en € et la date de fin. Ne sont gardés que les jeux bien classés dans les téléchargements Nintendo : top 500, ou top 1 500 s'ils sont vendus 20 € et plus. Les jeux Nintendo sont gardés dès -20 %. Les jeux inconnus bradés à -90 % sont écartés, et les jeux réservés à la Switch 2 aussi, sauf si tu les as demandés. Si seul le pack ou l'édition Deluxe est en promo, c'est son prix qui s'affiche, avec la mention « pack ou Deluxe ».
-- **Physique et clés** : deals hot Dealabs (Amazon, Fnac, Leclerc, Micromania, Eneba…). Les accessoires et consoles sont écartés, et les jeux uniquement Switch 2 aussi, sauf si tu les as demandés. Les promos valables dans un seul magasin ne sont gardées que pour les départements que tu indiques (aucun par défaut).
+- **Physique** : jeux en boîte postés sur Dealabs (Amazon, Fnac, Leclerc, Micromania…), nationaux et locaux à égalité. Pas besoin d'être « hot », sauf au niveau « Que les affaires de fou ».
+- **Clés** : deals hot Dealabs (Eneba, Driffle…).
+- **Tri** : Les accessoires et consoles sont écartés, et les jeux uniquement Switch 2 aussi, sauf si tu les as demandés. Les promos valables dans un seul magasin ne sont gardées que pour les départements que tu indiques (aucun par défaut ; numéros ou code postal).
 
 ## Notifications
 
@@ -134,15 +139,15 @@ extension/
 │       ├── dealabs.js                            # boîtes, clés, erreurs de prix, jeux offerts (RSS)
 │       └── goglibrary.js                         # jeux GOG via la session gog.com
 ├── src/prefs.js, src/genres.js            # personnalisation : sections, exclusions, jeux possédés
-├── src/sources/steamlibrary.js, steamapps.js  # bibliothèque/souhaits Steam, genres Steam/SteamSpy
+├── src/sources/steamlibrary.js, steamapps.js, steamsearch.js  # bibliothèque/souhaits, genres, recherche par nom
 ├── onboarding/                # tutoriel de premier lancement
 ├── ui/                        # composants partagés (tutoriel + réglages)
 ├── content/claim.js           # clic assisté + détection « possédé »
 ├── popup/  options/  icons/
 tests/
 ├── fixtures.js                # données calquées sur le format réel des API
-├── unit.test.js               # 40 tests
-└── background.test.js         # 15 tests : clics et réglages changés pendant une vérification
+├── unit.test.js               # 49 tests
+└── background.test.js         # 17 tests : service worker dans un navigateur simulé
 ```
 
 ## Tests
@@ -173,7 +178,8 @@ Une version précédente (0.3) a aussi été testée de bout en bout dans Chrome
 - Navigateur fermé = pas de vérification : la suivante se fait au redémarrage.
 - Les sites de clés sont du marché gris : prix plus bas, mais pas de garantie éditeur.
 - **Amazon Prime n'a pas d'API publique** (la page des jeux Luna est générée en JavaScript). Les jeux Prime sont repérés via GamerPower et Dealabs : il peut en manquer, surtout les jeux Luna en cloud.
-- **Steam** : la session donne les numéros des jeux, pas leurs noms. Si la lecture des noms échoue, un jeu Steam possédé peut rester affiché dans les annonces Dealabs.
+- **Steam** : une annonce Dealabs au titre ambigu (édition inconnue, lot de jeux) n'est pas reconnue, donc pas masquée si tu possèdes le jeu.
+- **Launchers** : CheapShark ne couvre plus EA, Battle.net ni le Microsoft Store. Pour eux, seules les annonces Dealabs comptent, donc souvent 0 promo.
 - **GOG** : `getFilteredProducts` n'est pas une API documentée ; GOG peut la changer. En cas d'échec, la carte GOG passe en ⚠️ et le reste fonctionne.
 
 ---

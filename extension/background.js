@@ -5,9 +5,10 @@ import { STORES, ALARM_NAME } from './src/config.js';
 import { fetchEpic } from './src/sources/epic.js';
 import { fetchSteam } from './src/sources/steam.js';
 import { fetchGamerPower } from './src/sources/gamerpower.js';
-import { fetchSteamLibrary, fetchSteamProfile, fetchSteamSession, fetchSteamWishlist } from './src/sources/steamlibrary.js';
+import { fetchSteamLibrary, fetchSteamProfile, fetchSteamSession } from './src/sources/steamlibrary.js';
 import { fetchGogLibrary } from './src/sources/goglibrary.js';
 import { enrichAppInfo } from './src/sources/steamapps.js';
+import { resolveSteamIds } from './src/sources/steamsearch.js';
 import { needsTags } from './src/genres.js';
 import { mergeGames } from './src/merge.js';
 import { refreshDeals } from './src/refresh-deals.js';
@@ -23,6 +24,7 @@ const CACHE_MAX_AGE = 3 * 24 * 3600 * 1000;
 const DAY = 24 * 3600 * 1000;
 const ICON = 'icons/icon128.png';
 const LIBRARY_MAX_AGE = 12 * 3600 * 1000;
+const FREE_GAP = 14 * 60 * 1000; // vérifications rapprochées : Epic, Steam et GamerPower ne sont relus que toutes les 15 min
 
 const plural = (n, one, many) => (n > 1 ? many : one);
 const storeName = (g) => STORES[g.store]?.short || g.store;
@@ -102,7 +104,7 @@ chrome.tabs.onRemoved.addListener(async (tabId) => {
 
 async function scheduleAlarm() {
   const { intervalHours } = await getSettings();
-  const period = Math.max(0.5, Number(intervalHours) || 1) * 60;
+  const period = Math.max(5, Math.round((Number(intervalHours) || 1) * 60));
   const existing = await chrome.alarms.get(ALARM_NAME);
   if (!existing || existing.periodInMinutes !== period) {
     await chrome.alarms.create(ALARM_NAME, { delayInMinutes: period, periodInMinutes: period });
@@ -162,6 +164,7 @@ async function doRefresh(reason, force) {
   await Promise.all(
     SOURCES.map(async (name) => {
       if (!jobs[name]) return;
+      if (reason === 'alarm' && data.cache[name] && now - data.cache[name].at < FREE_GAP) return;
       try {
         data.cache[name] = { items: await jobs[name](), at: Date.now() };
       } catch (e) {
@@ -217,11 +220,14 @@ async function doRefresh(reason, force) {
   lists.push((freebies || []).filter(keep));
   const games = mergeGames(lists, now);
 
+  // Annonces Dealabs sans identifiant Steam : on le retrouve par le nom (jeux possédés, souhaits, genres).
+  if (settings.stores?.steam) await resolveSteamIds(deals, data.nameIds, now);
+
   // ---- 4. Genres (seulement si l'utilisateur en exclut) ----
   if ((settings.excludedGenres || []).length) {
     const appids = [...games.map((g) => g.appid), ...deals.map((d) => d.steamAppID)].filter(Boolean);
     try {
-      await enrichAppInfo(appids, data.appInfo, { withTags: needsTags(settings.excludedGenres), now });
+      await enrichAppInfo(appids, data.appInfo, { withTags: needsTags(settings.excludedGenres), adult: settings.excludedGenres.includes('adult'), now });
     } catch (e) {
       console.warn('[FreeKeep] genres Steam :', e);
     }
@@ -292,7 +298,7 @@ async function finishRefresh({ data, games, deals, settings, now, reason, errors
   await saveData({
     games, states: data.states, meta: data.meta, cache: data.cache, seen: data.seen,
     deals, dealCache: data.dealCache, dealHistory: data.dealHistory, dealStates: data.dealStates, seenDeals: data.seenDeals,
-    steamLib: data.steamLib, gogLib: data.gogLib, appInfo: data.appInfo,
+    steamLib: data.steamLib, gogLib: data.gogLib, appInfo: data.appInfo, nameIds: data.nameIds,
   });
 }
 
@@ -717,14 +723,11 @@ async function publicState() {
 }
 
 // Vérifie un lien de profil Steam sans rien enregistrer (tutoriel / réglages).
-async function testSteamProfile(input) {
+async function testSteamProfile(input, useSession) {
   try {
-    const res = await fetchSteamProfile(input);
-    let wishlistCount = null;
-    try {
-      wishlistCount = (await fetchSteamWishlist(res.steamID64)).length;
-    } catch { /* liste de souhaits privée ou indisponible */ }
-    return { ok: true, profileName: res.profileName, wishlistCount };
+    await fetchSteamProfile(input); // lien invalide : erreur claire
+    const lib = await fetchSteamLibrary({ input, useSession });
+    return { ok: true, profileName: lib.profileName, count: lib.appids.length, ownedError: lib.error, wishlistCount: lib.wishlist ? lib.wishlist.length : null };
   } catch (e) {
     return { ok: false, error: String(e?.message || e) };
   }
@@ -773,7 +776,7 @@ async function handleMessage(msg, sender) {
       return { ok: true };
     }
     case 'testSteamProfile':
-      return testSteamProfile(msg.input);
+      return testSteamProfile(msg.input, msg.useSession !== false);
     case 'testSteamSession':
       return testSteamSession();
     case 'testGogSession':

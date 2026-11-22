@@ -20,7 +20,7 @@ export async function saveSettings(settings) {
 export async function getData() {
   const d = await chrome.storage.local.get([
     'games', 'states', 'meta', 'cache', 'seen',
-    'deals', 'dealCache', 'dealHistory', 'dealStates', 'seenDeals', 'steamLib', 'gogLib', 'appInfo',
+    'deals', 'dealCache', 'dealHistory', 'dealStates', 'seenDeals', 'steamLib', 'gogLib', 'appInfo', 'nameIds',
   ]);
   return {
     games: d.games || [],
@@ -36,6 +36,7 @@ export async function getData() {
     steamLib: d.steamLib || {},
     gogLib: d.gogLib || {},
     appInfo: d.appInfo || {},
+    nameIds: d.nameIds || {},
   };
 }
 

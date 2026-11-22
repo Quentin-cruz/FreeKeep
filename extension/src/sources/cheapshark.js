@@ -14,6 +14,10 @@ export const CHEAPSHARK_STORES = {
 const STORE_PLATFORM = { 7: 'gog', 25: 'epic', 13: 'ubisoft', 8: 'ea', 31: 'battlenet' };
 export const platformOf = (d) => STORE_PLATFORM[d.storeID] || (d.steamAppID ? 'steam' : d.storeID === '30' || d.storeID === 30 ? 'indiegala' : 'other');
 
+// Stores à interroger un par un : le classement général est presque entièrement composé de clés Steam.
+const LAUNCHER_STORES = { gog: 7, epic: 25, ubisoft: 13 };
+const pause = () => new Promise((r) => setTimeout(r, 250)); // ménage l'API
+
 const dealLink = (dealID) =>
   `${ENDPOINTS.cheapsharkRedirect}?dealID=${/%[0-9a-f]{2}/i.test(dealID) ? dealID : encodeURIComponent(dealID)}`;
 
@@ -30,6 +34,17 @@ export async function fetchCheapShark(settings, wishlist = []) {
   const aaa = await fetchJson(`${ENDPOINTS.cheapsharkDeals}?${new URLSearchParams({ ...base, AAA: '1', steamRating: '70' })}`);
   const gems = await fetchJson(`${ENDPOINTS.cheapsharkDeals}?${new URLSearchParams({ ...base, steamRating: String(settings.gemMinRating) })}`);
   if (!Array.isArray(aaa) && !Array.isArray(gems)) throw new Error('réponse CheapShark inattendue');
+  const perStore = [];
+  for (const [platform, storeID] of Object.entries(LAUNCHER_STORES)) {
+    if (!settings.stores?.[platform]) continue;
+    try {
+      await pause();
+      const res = await fetchJson(`${ENDPOINTS.cheapsharkDeals}?${new URLSearchParams({ ...base, storeID: String(storeID) })}`);
+      if (Array.isArray(res)) perStore.push(...res);
+    } catch (e) {
+      console.warn(`[FreeKeep] CheapShark ${platform} :`, e);
+    }
+  }
   // Jeux de la liste de souhaits Steam en promo (quelle que soit leur note)
   let wished = [];
   if (wishlist.length) {
@@ -42,15 +57,16 @@ export async function fetchCheapShark(settings, wishlist = []) {
     }
   }
   const deals = parseCheapShark(
-    [...(Array.isArray(aaa) ? aaa : []), ...(Array.isArray(gems) ? gems : [])],
+    [...(Array.isArray(aaa) ? aaa : []), ...(Array.isArray(gems) ? gems : []), ...perStore],
     settings,
     { wished, wishlist },
   );
 
-  // Plus bas prix historique (1 requête pour 25 jeux max)
-  if (deals.length) {
+  // Plus bas prix historique (25 jeux max par requête)
+  for (let i = 0; i < Math.min(deals.length, 75); i += 25) {
     try {
-      const ids = deals.slice(0, 25).map((d) => d.gameID).join(',');
+      if (i) await pause();
+      const ids = deals.slice(i, i + 25).map((d) => d.gameID).join(',');
       applyHistoricLows(deals, await fetchJson(`${ENDPOINTS.cheapsharkGames}?ids=${ids}`));
     } catch (e) {
       console.warn('[FreeKeep] CheapShark historique :', e);
@@ -108,8 +124,13 @@ export function parseCheapShark(raw, settings, { wished = [], wishlist = [] } = 
       end: null,
       flags: { aaa, gem, wishlist: wish, historicLow: false },
     };
+    // Meilleure offre par launcher : le filtre « GOG » montre le prix GOG même si Steam est moins cher.
     const prev = byGame.get(d.gameID);
-    if (!prev || item.price < prev.price) byGame.set(d.gameID, item);
+    const offers = prev?.offers || {};
+    if (!offers[item.platform] || item.price < offers[item.platform].price) {
+      offers[item.platform] = { price: item.price, normalPrice: item.normalPrice, discount: item.discount, merchant: item.merchant, url: item.url };
+    }
+    byGame.set(d.gameID, { ...(!prev || item.price < prev.price ? item : prev), offers });
   }
   return [...byGame.values()];
 }

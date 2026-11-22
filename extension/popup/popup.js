@@ -1,5 +1,5 @@
 // FreeKeep — popup : 3 sections (Gratuits, Promos PC, Switch)
-import { STORES, CHANNELS, SWITCH_PLATFORMS, STALE_AFTER_MS } from '../src/config.js';
+import { STORES, PC_STORE_ORDER, CHANNELS, SWITCH_PLATFORMS, STALE_AFTER_MS } from '../src/config.js';
 import { stateFor } from '../src/store.js';
 import { wants, showsGame } from '../src/prefs.js';
 import { GENRE_BY_ID } from '../src/genres.js';
@@ -9,7 +9,7 @@ const $ = (sel) => document.querySelector(sel);
 const send = (msg) => chrome.runtime.sendMessage(msg);
 
 let S = null; // état renvoyé par le service worker
-const ui = { section: 'free', tab: 'active', filter: 'all', showHidden: false, showFiltered: false, refreshing: false };
+const ui = { section: 'free', tab: 'active', filter: 'all', platform: 'all', kind: 'all', showHidden: false, showFiltered: false, refreshing: false };
 
 const params = new URLSearchParams(location.search);
 if (params.has('tab')) document.body.classList.add('in-tab');
@@ -210,29 +210,73 @@ function renderAvailable(list, rows, hidden) {
 }
 
 // ---------- Sections « Promos PC » et « Switch » ----------
-const DEAL_FILTERS = {
-  pc: [
-    { id: 'top', label: '🔥 Top', test: (d) => d.exceptional },
+// Deux filtres qui se combinent : où je joue (mes launchers, ma Switch) et quel type d'offre.
+// `always` : affiché même à 0, pour que les choix de l'utilisateur ne disparaissent pas.
+const onPlatform = (d, id) => d.platform === id || !!d.offers?.[id];
+
+function platformFilters(section) {
+  if (section === 'switch') {
+    if (!S.settings.switch2) return [];
+    return [
+      { id: 'switch1', label: 'Switch', color: SWITCH_PLATFORMS.switch1.color, always: true, test: (d) => d.platform !== 'switch2' },
+      { id: 'switch2', label: 'Switch 2', color: SWITCH_PLATFORMS.switch2.color, always: true, test: (d) => d.platform === 'switch2' },
+    ];
+  }
+  const mine = PC_STORE_ORDER.filter((id) => S.settings.stores?.[id]);
+  return [
+    ...mine.map((id) => ({ id, label: STORES[id].short, color: STORES[id].color, always: true, test: (d) => onPlatform(d, id) })),
+    { id: 'unknown', label: 'Non précisé', test: (d) => !mine.some((id) => onPlatform(d, id)) },
+  ];
+}
+
+function kindFilters(section) {
+  const s = S.settings;
+  const top = { id: 'top', label: '🔥 Top', test: (d) => d.exceptional };
+  if (section === 'switch') {
+    return [
+      top,
+      { id: 'eshop', label: 'eShop', color: CHANNELS.eshop.color, always: true, test: (d) => d.channel === 'eshop' },
+      { id: 'physical', label: '📦 Physique', color: CHANNELS.physical.color, always: s.physical !== false, test: (d) => d.channel === 'physical' },
+      { id: 'keyshop', label: '🔑 Clés', color: CHANNELS.keyshop.color, always: s.keyshops !== false, test: (d) => d.channel === 'keyshop' },
+    ];
+  }
+  return [
+    top,
     { id: 'wishlist', label: '❤️ Souhaits', test: (d) => !!d.flags?.wishlist },
-    { id: 'official', label: 'Officiel', color: CHANNELS.official.color, test: (d) => d.channel === 'official' },
-    { id: 'keyshop', label: 'Clés', color: CHANNELS.keyshop.color, test: (d) => d.channel === 'keyshop' || !!d.keyshop },
+    { id: 'keyshop', label: '🔑 Clés', color: CHANNELS.keyshop.color, test: (d) => d.channel === 'keyshop' || !!d.keyshop },
     { id: 'bundle', label: 'Bundles', color: CHANNELS.bundle.color, test: (d) => d.channel === 'bundle' },
-  ],
-  switch: [
-    { id: 'top', label: '🔥 Top', test: (d) => d.exceptional },
-    { id: 'switch1', label: 'Switch', color: SWITCH_PLATFORMS.switch1.color, test: (d) => d.platform !== 'switch2', onlyIf: () => S.settings.switch2 },
-    { id: 'switch2', label: 'Switch 2', color: SWITCH_PLATFORMS.switch2.color, test: (d) => d.platform === 'switch2', onlyIf: () => S.settings.switch2 },
-    { id: 'eshop', label: 'eShop', color: CHANNELS.eshop.color, test: (d) => d.channel === 'eshop' },
-    { id: 'physical', label: 'Physique', color: CHANNELS.physical.color, test: (d) => d.channel === 'physical' },
-    { id: 'keyshop', label: 'Clés', color: CHANNELS.keyshop.color, test: (d) => d.channel === 'keyshop' },
-  ],
-};
+  ];
+}
+
+// Filtre « GOG » : on montre le prix et le lien GOG, même si le jeu est moins cher ailleurs.
+function forPlatform(d, id) {
+  const offer = d.platform !== id && d.offers?.[id];
+  return offer ? { ...d, ...offer, platform: id, flags: { ...d.flags, historicLow: false }, exceptional: false } : d;
+}
+
+function chipRow(defs, key, rows) {
+  const chip = (id, label, color, n) =>
+    h('button', { class: `chip${ui[key] === id ? ' active' : ''}${n ? '' : ' zero'}`, onclick: () => { ui[key] = id; render(); $('#list').scrollTop = 0; } },
+      color ? h('span', { class: 'dot', style: `background:${color}` }) : null, label, h('span', { class: 'n' }, n));
+  const counted = defs.map((f) => ({ f, n: rows.filter(f.test).length })).filter(({ f, n }) => n > 0 || f.always || ui[key] === f.id);
+  return h('div', { class: 'filter-row' }, chip('all', 'Tous', null, rows.length), ...counted.map(({ f, n }) => chip(f.id, f.label, f.color, n)));
+}
 
 function renderDeals(list, { visible, hidden, filtered }, section) {
-  const filters = DEAL_FILTERS[section].filter((f) => !f.onlyIf || f.onlyIf());
-  renderChips(visible, filters, (d, id) => filters.find((f) => f.id === id).test(d), true);
-  const active = filters.find((f) => f.id === ui.filter);
-  const rows = active ? visible.filter(active.test) : visible;
+  const platforms = platformFilters(section);
+  const kinds = kindFilters(section);
+  const platform = platforms.find((f) => f.id === ui.platform);
+  const kind = kinds.find((f) => f.id === ui.kind);
+  if (!platform) ui.platform = 'all';
+  if (!kind) ui.kind = 'all';
+  const byPlatform = platform ? visible.filter(platform.test).map((d) => forPlatform(d, platform.id)) : visible;
+  const byKind = kind ? visible.filter(kind.test) : visible;
+  const rows = kind ? byPlatform.filter(kind.test) : byPlatform;
+  // Chaque ligne compte selon le choix fait dans l'autre.
+  $('#filters').replaceChildren(
+    ...(platforms.length >= 2 ? [chipRow(platforms, 'platform', byKind)] : []),
+    chipRow(kinds, 'kind', byPlatform),
+  );
 
   const enabled = section === 'pc' ? S.settings.pcDeals : S.settings.switchDeals;
   if (!enabled) {
@@ -243,7 +287,9 @@ function renderDeals(list, { visible, hidden, filtered }, section) {
     list.append(...[0, 1, 2].map(() => h('div', { class: 'skeleton' })));
     return;
   }
-  if (!rows.length) {
+  if (!rows.length && (platform || kind)) {
+    list.append(empty('🔎', 'Rien avec ces filtres pour l’instant', h('button', { class: 'link-btn', onclick: () => { ui.platform = 'all'; ui.kind = 'all'; render(); } }, 'Tout afficher')));
+  } else if (!rows.length) {
     list.append(
       section === 'pc'
         ? empty('🔎', 'Aucune pépite pour l’instant', 'Seuls les gros jeux et les jeux très bien notés à grosse remise sont gardés. Les seuils se règlent dans les réglages.')
@@ -542,6 +588,8 @@ async function refresh() {
 function setSection(section) {
   ui.section = section;
   ui.filter = 'all';
+  ui.platform = 'all';
+  ui.kind = 'all';
   ui.showHidden = false;
   ui.showFiltered = false;
   try {

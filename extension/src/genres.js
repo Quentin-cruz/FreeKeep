@@ -1,13 +1,14 @@
 // Genres que l'utilisateur peut exclure, et comment les reconnaître selon la source :
 //  - steam : genres officiels Steam (appdetails)
-//  - descriptors : avertissements de contenu Steam (3 = contenu sexuel adulte, 4 = nudité/sexe fréquents)
+//  - descriptors : avertissements de contenu Steam (3 = contenu sexuel réservé aux adultes)
 //    (pas 1 = « un peu de nudité », ni les tags joueurs « Nudity » / « Sexual Content » : ils visent aussi The Witcher 3, Cyberpunk 2077…)
 //  - tags : tags joueurs Steam (SteamSpy), seulement les plus votés
 //  - eshop : catégories de l'eShop Nintendo
 //  - kw : mots dans le titre (dernier recours, pour Epic, GOG, Dealabs…)
 // « Plants vs. Zombies » (Plantes contre Zombies) n'est pas un jeu d'horreur : exclu du mot « zombies ».
 export const GENRES = [
-  { id: 'adult', label: 'Contenu adulte', emoji: '🔞', steam: ['Sexual Content', 'Nudity'], descriptors: [3, 4], tags: ['Hentai', 'NSFW'], kw: /\b(hentai|nsfw|18\+|uncensored)\b/i },
+  // Uniquement le hentai et les jeux explicitement sexuels : jamais la violence, ni les jeux PEGI 18 (GTA, Red Dead, Call of Duty…)
+  { id: 'adult', label: 'Hentai / sexe explicite', emoji: '🔞', descriptors: [3], tags: ['Hentai', 'NSFW'], kw: /\b(hentai|nsfw|eroge|futanari)\b/i },
   { id: 'horror', label: 'Horreur', emoji: '👻', tags: ['Horror', 'Psychological Horror', 'Survival Horror'], eshop: ['horror'], kw: /\b(horror|horreur|(?<!plant(?:e?s) (?:vs\.?|versus|contre(?: les)?) )zombies?|resident evil|silent hill|outlast|amnesia|five nights)\b/i },
   { id: 'sport', label: 'Sport', emoji: '⚽', steam: ['Sports'], tags: ['Sports', 'Football (Soccer)', 'Soccer', 'Basketball', 'Football (American)', 'Golf', 'Tennis', 'Baseball'], eshop: ['sport'], kw: /\b(fifa|ea sports|fc ?2\d|nba ?2k|madden|nhl|pga tour|wwe ?2k|football manager|efootball|top spin)\b/i },
   { id: 'racing', label: 'Course', emoji: '🏎️', steam: ['Racing'], tags: ['Racing', 'Driving', 'Automobile Sim'], eshop: ['racing'], kw: /\b(racing|forza|need for speed|gran turismo|f1 ?2\d|nascar|motogp|wrc|rally)\b/i },

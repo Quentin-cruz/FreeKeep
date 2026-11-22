@@ -107,13 +107,13 @@ export function genreChips(excluded, onChange) {
   );
 }
 
-export const KEYWORD_SUGGESTIONS = ['FIFA', 'EA Sports FC', 'Call of Duty', "Assassin's Creed", 'Battlefield', 'Les Sims', 'Farming Simulator', 'NBA 2K', 'Football Manager', 'Five Nights at Freddy'];
+export const KEYWORD_SUGGESTIONS = ['EA Sports FC', 'Call of Duty', 'LEGO', 'Mortal Kombat', "Assassin's Creed", 'Battlefield', 'Les Sims', 'Farming Simulator', 'NBA 2K', 'Football Manager'];
 
 // Saisie de mots-clés (licences à bannir)
 export function tagInput(values, onChange, suggestions = KEYWORD_SUGGESTIONS) {
   let list = [...values];
   const tags = h('div', { class: 'tags' });
-  const input = h('input', { type: 'text', placeholder: 'Tape un nom de licence puis Entrée (ex. FIFA)', class: 'tag-input', autocomplete: 'off' });
+  const input = h('input', { type: 'text', placeholder: 'Tape un nom de licence puis Entrée (ex. Call of Duty)', class: 'tag-input', autocomplete: 'off' });
   const sugg = h('div', { class: 'sugg' });
 
   const commit = () => {
@@ -176,7 +176,7 @@ export function levelCards(value, onChange) {
 }
 
 // Champ « lien de profil Steam » + bouton de vérification
-export function steamProfileField(value, onChange, { autoTest = false } = {}) {
+export function steamProfileField(value, onChange, { autoTest = false, useSession = () => true } = {}) {
   const input = h('input', { type: 'text', class: 'wide', placeholder: 'https://steamcommunity.com/id/ton-pseudo/', value: value || '', autocomplete: 'off', spellcheck: 'false' });
   const status = h('div', { class: 'status' });
   const btn = h('button', { type: 'button', class: 'btn' }, 'Vérifier');
@@ -191,13 +191,20 @@ export function steamProfileField(value, onChange, { autoTest = false } = {}) {
     }
     btn.disabled = true;
     status.className = 'status wait';
-    status.textContent = 'Lecture de ton profil Steam…';
-    const res = await chrome.runtime.sendMessage({ type: 'testSteamProfile', input: v }).catch((e) => ({ ok: false, error: e.message }));
+    status.textContent = 'Lecture de tes jeux et de ta liste de souhaits…';
+    const res = await chrome.runtime.sendMessage({ type: 'testSteamProfile', input: v, useSession: useSession() }).catch((e) => ({ ok: false, error: e.message }));
     btn.disabled = false;
     if (res?.ok) {
-      status.className = 'status ok';
+      const who = res.profileName ? `${res.profileName} : ` : '';
       const wl = res.wishlistCount == null ? 'liste de souhaits non accessible' : `${res.wishlistCount} jeu${res.wishlistCount > 1 ? 'x' : ''} en liste de souhaits`;
-      status.textContent = `✔ ${res.profileName ? `${res.profileName} : ` : ''}profil trouvé · ${wl}`;
+      if (res.count) {
+        status.className = 'status ok';
+        status.textContent = `✔ ${who}${res.count} jeux et DLC possédés reconnus, leurs promos seront masquées · ${wl}`;
+      } else {
+        status.className = 'status ko';
+        status.replaceChildren(`⚠ ${who}${wl}, mais tes jeux possédés n’ont pas pu être lus (${res.ownedError || 'aucun jeu'}). Steam ne les montre qu’une fois connecté : `,
+          h('a', { href: 'https://store.steampowered.com/login/', target: '_blank', rel: 'noopener' }, 'connecte-toi à Steam'), ', puis clique Vérifier.');
+      }
     } else {
       status.className = 'status ko';
       status.textContent = `✘ ${res?.error || 'erreur inconnue'}`;
@@ -214,7 +221,7 @@ export function steamProfileField(value, onChange, { autoTest = false } = {}) {
       h('li', {}, 'Sur Steam, clique sur ton pseudo puis « Profil ». Copie l’adresse de la page (steamcommunity.com/id/… ou /profiles/…).'),
       h('li', {}, 'Ouvre ', h('a', { href: 'https://steamcommunity.com/my/edit/settings', target: '_blank', rel: 'noopener' }, 'tes paramètres de confidentialité Steam'), ' et mets « Mon profil » et « Liste de souhaits » sur Public.'),
     ),
-    h('p', {}, 'Facultatif. Sans session Steam ouverte, il permet de lire ta liste de souhaits publique. Avec une session, il aide à reconnaître tes jeux dans les annonces Dealabs. Steam ne montre plus la liste des jeux possédés sans connexion.'),
+    h('p', {}, 'Reste connecté à Steam dans ce navigateur : même pour un profil public, Steam ne montre plus la liste des jeux possédés sans connexion. Sans session, le lien permet seulement de lire ta liste de souhaits.'),
   );
   return h('div', { class: 'steam-field' }, h('div', { class: 'inline' }, input, btn), status, help);
 }

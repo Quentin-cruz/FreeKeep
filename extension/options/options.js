@@ -1,5 +1,5 @@
 // FreeKeep — réglages (onglets, enregistrement automatique)
-import { LEVELS, ALARM_NAME } from '../src/config.js';
+import { LEVELS, ALARM_NAME, INTERVALS } from '../src/config.js';
 import { getSettings, saveSettings } from '../src/store.js';
 import { wants } from '../src/prefs.js';
 import { formatAgo } from '../src/util.js';
@@ -114,7 +114,7 @@ const PANELS = {
     h('p', { class: 'lead' }, 'Ce que tu ne veux jamais voir, ni dans les jeux gratuits, ni dans les promos.'),
     box('Genres masqués', 'Clique pour masquer / réafficher. Détection via Steam et l’eShop Nintendo ; pour les autres jeux, via le titre.',
       genreChips(settings.excludedGenres, set('excludedGenres'))),
-    box('Licences et mots-clés bannis', 'Tout titre contenant un de ces mots est masqué. Ex. « FIFA » masque FIFA 23 ; pour les épisodes récents, ajoute aussi « EA Sports FC ».',
+    box('Licences et mots-clés bannis', 'Tout titre contenant un de ces mots est masqué. Ex. « LEGO » masque tous les jeux LEGO.',
       tagInput(settings.bannedKeywords, set('bannedKeywords'))),
     h('p', { class: 'note' }, 'Les jeux de ta liste de souhaits Steam ignorent le filtre de genres (mais pas les mots-clés bannis).'),
   ],
@@ -130,7 +130,7 @@ const PANELS = {
       settings.stores.steam ? box('Steam', null, card,
         steamSessionField(settings.steamOwnedSync, (v) => { set('steamOwnedSync', true)(v); }),
         h('p', { class: 'note' }, 'Lien de ton profil public (facultatif) :'),
-        steamProfileField(settings.steamProfile, (v) => { if (v !== settings.steamProfile) set('steamProfile')(v); })) : null,
+        steamProfileField(settings.steamProfile, (v) => { if (v !== settings.steamProfile) set('steamProfile')(v); }, { useSession: () => settings.steamOwnedSync })) : null,
       settings.stores.gog ? box('GOG', null, gogCard,
         gogSessionField(settings.gogSessionSync, (v) => { set('gogSessionSync', true)(v); })) : null,
       box('Utilisation', null, h('div', { class: 'rows' },
@@ -161,7 +161,7 @@ const PANELS = {
       box('Notifications', null, h('div', { class: 'rows' }, rows.length ? rows : h('p', { class: 'note' }, 'Aucune section active.')),
         h('div', { class: 'inline', style: 'margin-top:10px' }, h('button', { type: 'button', class: 'btn', onclick: () => chrome.runtime.sendMessage({ type: 'testNotification' }) }, 'Envoyer une notification de test'))),
       box('Fréquence', null, h('div', { class: 'rows' },
-        selectRow({ title: 'Vérifier', desc: 'Les erreurs de prix partent vite : 30 min ou 1 h conseillé', value: settings.intervalHours, options: [[0.5, 'Toutes les 30 minutes'], [1, 'Toutes les heures'], [3, 'Toutes les 3 heures'], [6, 'Toutes les 6 heures'], [12, 'Toutes les 12 heures'], [24, 'Une fois par jour']], onChange: (v) => set('intervalHours')(Number(v)) }))),
+        selectRow({ title: 'Vérifier', desc: 'Erreurs de prix : 5 à 15 min conseillé. Les autres sources sont relues au plus toutes les 15 min', value: settings.intervalHours, options: INTERVALS, onChange: (v) => set('intervalHours')(Number(v)) }))),
       w.free ? box('Récupération', null, h('div', { class: 'rows' },
         switchRow({ title: '🖱️ Clic automatique sur « Obtenir »', desc: 'Quand tu cliques « Récupérer ». Captchas et confirmations restent manuels ; sur Epic, la commande n’est validée que si le total est à 0.', checked: settings.autoClick, onChange: set('autoClick') }))) : null,
     ];
@@ -210,7 +210,7 @@ const PANELS = {
       box('État des sources', null, h('div', { class: 'status-head' }, next, btn), list),
       box('Dealabs', 'Communauté de bons plans : jeux en boîte, sites de clés, erreurs de prix.', h('div', { class: 'rows' },
         switchRow({ title: 'Utiliser Dealabs', checked: settings.dealabs, onChange: set('dealabs') }),
-        switchRow({ title: 'Seulement les deals « hot »', desc: 'Validés par la communauté (les erreurs de prix passent toujours)', checked: settings.dealabsOnlyHot, onChange: set('dealabsOnlyHot') }),
+        switchRow({ title: 'Seulement les deals « hot »', desc: 'Validés par la communauté. Les erreurs de prix passent toujours, et les jeux en boîte aussi (sauf au niveau 🔥)', checked: settings.dealabsOnlyHot, onChange: set('dealabsOnlyHot') }),
         h('label', { class: 'row' }, h('span', { class: 'row-text' }, h('strong', {}, 'Départements pour les deals en magasin'), h('small', {}, 'Les promos valables dans un seul magasin ne sont gardées que pour ces départements')), dept),
         selectRow({ title: 'Garder les deals pendant', value: settings.dealMaxAgeDays, options: [[3, '3 jours'], [7, '7 jours'], [14, '14 jours']], onChange: (v) => set('dealMaxAgeDays')(Number(v)) }),
       )),

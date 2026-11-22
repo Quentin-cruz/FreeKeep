@@ -21,7 +21,8 @@ export function isExceptional(d) {
 
 export function scoreDeal(d) {
   const f = d.flags || {};
-  let s = d.discount ?? 50;
+  // Un jeu en boîte n'a presque jamais de remise affichée : sans ça, il finirait toujours en bas de liste.
+  let s = d.discount ?? (d.channel === 'physical' ? 80 : 50);
   if (f.priceError) s += 80;
   if (f.drop) s += 35;
   if (f.historicLow) s += 15;

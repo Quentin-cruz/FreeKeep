@@ -1,5 +1,5 @@
 // FreeKeep — tutoriel de premier lancement (relançable depuis les réglages)
-import { STORES, STORE_ORDER, PC_STORE_ORDER, PRIME_STORES, LEVELS } from '../src/config.js';
+import { STORES, STORE_ORDER, PC_STORE_ORDER, PRIME_STORES, LEVELS, INTERVALS } from '../src/config.js';
 import { GENRE_BY_ID } from '../src/genres.js';
 import { getSettings, saveSettings } from '../src/store.js';
 import { h, toggleCard, switchRow, storeGrid, primeBox, genreChips, tagInput, levelCards, steamProfileField, steamSessionField, gogSessionField } from '../ui/components.js';
@@ -68,7 +68,7 @@ const STEPS = [
     lead: 'Tu pourras changer ça à tout moment dans les réglages.',
     render: (d) => {
       const dept = h('div', { class: 'field' },
-        h('span', {}, '📍 Ton département, pour les promos valables dans un seul magasin :'),
+        h('span', {}, '📍 Ton département, pour les promos valables dans un seul magasin (les offres nationales s’affichent toujours) :'),
         deptInput(d));
       dept.hidden = !(d.switch && d.physical);
       const cards = [];
@@ -105,9 +105,9 @@ const STEPS = [
     render: (d) => [
       d.stores.steam ? [
         h('h2', {}, 'Steam'),
-        steamSessionField(d.steamOwnedSync, (v) => { d.steamOwnedSync = v; }),
-        h('p', { class: 'note' }, 'Facultatif : le lien de ton profil public, pour lire ta liste de souhaits même sans être connecté.'),
-        steamProfileField(d.steamProfile, (v) => { d.steamProfile = v; }, { autoTest: true }),
+        steamSessionField(d.steamOwnedSync, (v) => { d.steamOwnedSync = v; }, { autoTest: true }),
+        h('p', { class: 'note' }, 'Lien de ton profil (facultatif) : jeux possédés et liste de souhaits.'),
+        steamProfileField(d.steamProfile, (v) => { d.steamProfile = v; }, { autoTest: true, useSession: () => d.steamOwnedSync }),
       ] : null,
       d.stores.gog ? [
         h('h2', { style: 'margin-top:18px' }, 'GOG'),
@@ -146,7 +146,7 @@ const STEPS = [
       if (anyDeals(d)) wants.push(switchRow({ title: '🔥 Affaires exceptionnelles', desc: 'Erreurs de prix, chutes soudaines, plus bas historiques.', checked: d.notifyDeals, onChange: (v) => { d.notifyDeals = v; } }));
       if (d.pc && d.stores.steam && d.useWishlist) wants.push(switchRow({ title: '❤️ Liste de souhaits en promo', checked: d.notifyWishlist, onChange: (v) => { d.notifyWishlist = v; } }));
       const freq = h('select', {},
-        [[0.5, 'Toutes les 30 minutes'], [1, 'Toutes les heures'], [3, 'Toutes les 3 heures'], [6, 'Toutes les 6 heures']].map(([v, l]) => h('option', { value: String(v) }, l)));
+        INTERVALS.map(([v, l]) => h('option', { value: String(v) }, l)));
       freq.value = String(d.intervalHours);
       freq.addEventListener('change', () => { d.intervalHours = Number(freq.value); });
       const extra = [];
@@ -156,6 +156,7 @@ const STEPS = [
       return [
         h('div', { class: 'panel-lite' }, wants),
         h('div', { class: 'field' }, h('span', {}, '⏱ Fréquence des vérifications :'), freq),
+        h('p', { class: 'note' }, 'Les erreurs de prix partent vite : 5 à 15 minutes pour ne pas les rater. Les autres sources sont relues au plus toutes les 15 minutes.'),
         extra.length ? h('div', { class: 'panel-lite', style: 'margin-top:14px' }, extra) : null,
       ];
     },
@@ -188,7 +189,7 @@ const STEPS = [
       return [
         recap,
         h('div', { class: 'done-box' },
-          h('p', {}, '👉 Clique sur l’icône FreeKeep<3 (le cœur) en haut à droite de ton navigateur. Épingle-la via l’icône 🧩 ou l’icône des extensions.'),
+          h('p', {}, '👉 Clique sur l’icône FreeKeep<3 (le cœur) en haut à droite de ton navigateur.', h('br'), 'Épingle-la via l’icône 🧩 ou l’icône des extensions.'),
           h('p', {}, 'Tout se modifie à tout moment dans ⚙ Réglages. Tu peux aussi relancer ce tutoriel depuis les réglages.'),
         ),
       ];
@@ -203,7 +204,7 @@ const dt = (t) => h('dt', {}, t);
 const dd = (t) => h('dd', {}, t);
 
 function deptInput(d) {
-  const input = h('input', { type: 'text', class: 'short', placeholder: 'ex. 80', value: d.departments || '' });
+  const input = h('input', { type: 'text', class: 'short', placeholder: 'ex. 80, 60', value: d.departments || '' });
   input.addEventListener('input', () => { d.departments = input.value.trim(); });
   return input;
 }

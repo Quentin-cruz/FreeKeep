@@ -666,3 +666,161 @@ test('Bibliothèque Steam : session seule, avec profil, sans connexion', async (
   assert.match(e.res.error, /session Steam/);
   assert.equal(e.res.wishlist.length, 2);
 });
+
+// ===========================================================================
+// v1.1 : launchers, jeux en boîte, départements, filtre adulte
+// ===========================================================================
+import { localDepartments, parseDepartments } from '../extension/src/sources/dealabs.js';
+import { pickSteamApp, resolveSteamIds } from '../extension/src/sources/steamsearch.js';
+import { enrichAppInfo } from '../extension/src/sources/steamapps.js';
+import { fetchCheapShark } from '../extension/src/sources/cheapshark.js';
+import { INTERVALS, LEVELS } from '../extension/src/config.js';
+import { KEYWORD_SUGGESTIONS } from '../extension/ui/components.js';
+
+test('Départements : titres réels Dealabs', () => {
+  const cases = [
+    ['Saros sur PS5 - Auchan Villenave-d’Ornon (33)', ['33']],
+    ['Console Nintendo Switch 2 Zelda (batterie amovible) - Cultura Toulouse Gramont (31) (console uniquement)', ['31']],
+    ['Console Nintendo Switch 2 (Via 89.80€ sur la carte de fidélité) - Dainville (62) / Templeuve (59) en BA / Rouffiac (31)', ['62', '59', '31']],
+    ['Jeu X sur Nintendo Switch - Carrefour (59/62)', ['59', '62']],
+    ['Jeu X sur Nintendo Switch - Leclerc Ajaccio (2A)', ['2A']],
+    ['Jeu X sur Nintendo Switch - Saint-Denis (974)', ['974']],
+    ['Zelda sur Nintendo Switch 2 (via 12,87€ en bon d’achat sur l’app) - Sézanne (51)', ['51']],
+    ['The Last Ninja Collection - Édition Limitée (7 jeux rétro sur cartouche) - Amazon / E.Leclerc', []],
+    ['Cyberpunk 2077: Ultimate Edition sur Nintendo Switch 2', []],
+    ['Jeu EA FC 27 sur Nintendo Switch 2 (+ 10€ fidélité pour les adhérents)', []],
+    ['FIFA 23 sur Nintendo Switch (2022)', []],
+    ['Console (Via 46,90€ sur carte de fidélité - sélection de magasins)', []],
+  ];
+  for (const [title, want] of cases) assert.deepEqual(localDepartments(title), want, title);
+  assert.deepEqual(parseDepartments('80, 60'), ['80', '60']);
+  assert.deepEqual(parseDepartments('1 ; 2a/974'), ['01', '2A', '974']);
+  assert.deepEqual(parseDepartments('80000'), ['80']);
+  assert.deepEqual(parseDepartments('97410'), ['974']);
+  assert.deepEqual(parseDepartments('20'), ['2A', '2B']);
+  assert.deepEqual(parseDepartments('Somme, 99'), []);
+});
+
+test('Jeux en boîte : nationaux et locaux à égalité, sans exiger « hot »', () => {
+  const st = { ...DEFAULT_SETTINGS, switch: true, switch2: true, departments: '80' };
+  const deal = (title, merchant, extra = {}, settings = st) => classifyDealabs({ title, merchant, link: 'https://www.dealabs.com/bons-plans/x-1234567', guid: title, pubDate: now, category: 'Consoles & Jeux vidéo', priceText: '24,99€', feed: 'switch', ...extra }, settings, now);
+  const national = deal('Hollow Knight sur Nintendo Switch', 'Amazon');
+  const local = deal('Kirby sur Nintendo Switch - Leclerc Amiens (80)', 'E.Leclerc');
+  assert.equal(national.channel, 'physical');
+  assert.equal(national.merchant, 'Amazon');
+  assert.equal(local.channel, 'physical');
+  assert.equal(scoreDeal(national), scoreDeal(local));
+  assert.equal(deal('High on Life 2 sur Nintendo Switch 2', 'Amazon').platform, 'switch2');
+  assert.equal(deal('Jeu Nintendo Switch The Last Ninja Collection - Amazon / E.Leclerc', '').merchant, 'Amazon');
+  // Ailleurs : écarté, même si le département n'est pas à la fin du titre
+  assert.equal(deal('Kirby sur Nintendo Switch - Cultura Toulouse (31) (retrait uniquement)', 'Cultura'), null);
+  // Plusieurs magasins dont un chez toi : gardé
+  assert.ok(deal('Kirby sur Nintendo Switch - Lille (59) / Amiens (80)', 'Auchan').flags.local);
+  // Sites de clés et eShop : « hot » toujours exigé
+  assert.equal(deal('Persona 5 Royal sur Nintendo Switch (Dématérialisé)', 'Driffle'), null);
+  assert.equal(deal('Moonlighter sur Nintendo Switch (Dématérialisé)', 'Nintendo'), null);
+  // Niveau « Que les affaires de fou » : « hot » exigé partout
+  const strict = { ...st, level: 'strict', ...LEVELS.strict };
+  assert.equal(deal('Hollow Knight sur Nintendo Switch', 'Amazon', {}, strict), null);
+  assert.ok(deal('Hollow Knight sur Nintendo Switch', 'Amazon', { hot: true }, strict));
+  // Jeux en boîte désactivés
+  assert.equal(deal('Hollow Knight sur Nintendo Switch', 'Amazon', {}, { ...st, physical: false }), null);
+  // Accessoires et consoles toujours écartés
+  assert.equal(deal('Console Nintendo Switch 2 + Mario Kart World', 'Amazon'), null);
+});
+
+test('Dealabs : groupe « erreur de prix », jeux vidéo seulement', () => {
+  const st = { ...DEFAULT_SETTINGS };
+  const it = (title, category, feed) => ({ guid: title, title, category, feed, merchant: 'Fanatical', priceText: '10,79€', link: 'https://www.dealabs.com/bons-plans/x-1234567', pubDate: now });
+  const [game] = mergeDealabsItems([it('Helldivers 2 sur PC (Dématérialisé - Steam)', 'Consoles & Jeux vidéo', 'erreur')]);
+  assert.ok(classifyDealabs(game, st, now).flags.priceError);
+  const [tv] = mergeDealabsItems([it('TV LG OLED sur PC', 'High-Tech', 'erreur')]);
+  assert.equal(classifyDealabs(tv, st, now), null);
+  // Vu dans le groupe « erreur » ET dans « jeux » : le signalement est gardé
+  const [both] = mergeDealabsItems([it('Helldivers 2 sur PC (Dématérialisé - Steam)', 'Consoles & Jeux vidéo', 'erreur'), it('Helldivers 2 sur PC (Dématérialisé - Steam)', 'Consoles & Jeux vidéo', 'jeux')]);
+  assert.ok(both.priceError && both.feed === 'jeux');
+});
+
+test('Dealabs : launcher d’après le magasin', () => {
+  assert.equal(pcPlatformOf('Road 96 sur Xbox One & PC (Dématérialisé)', 'Xbox Store'), 'microsoft');
+  assert.equal(pcPlatformOf('Sélection de jeux EA sur PC', 'EA'), 'ea');
+  assert.equal(pcPlatformOf('Metro Exodus sur PC (Dématérialisé)', 'Steam'), 'steam');
+  assert.equal(pcPlatformOf('Jeu sur PC (Dématérialisé - Steam)', 'Xbox Store'), 'steam');
+});
+
+test('CheapShark : une offre par launcher choisi', async () => {
+  const d = (storeID, salePrice, dealID) => ({ gameID: '1', title: 'Control', storeID, salePrice, normalPrice: '39.99', savings: String(100 - (salePrice / 39.99) * 100), metacriticScore: '85', steamRatingPercent: '90', steamRatingCount: '9000', steamAppID: '870780', dealID });
+  const raw = [d('1', '5.99', 'a'), d('7', '6.99', 'b'), d('25', '7.99', 'c'), d('7', '6.49', 'e')];
+  const [item] = parseCheapShark(raw, { ...S, stores: { steam: true, gog: true, epic: true } });
+  assert.equal(item.platform, 'steam');
+  assert.equal(item.price, 5.99);
+  assert.deepEqual(Object.keys(item.offers).sort(), ['epic', 'gog', 'steam']);
+  assert.equal(item.offers.gog.price, 6.49);
+  assert.match(item.offers.epic.merchant, /Epic/);
+  // Launcher non choisi : pas d'offre
+  const [only] = parseCheapShark(raw, { ...S, stores: { gog: true } });
+  assert.equal(only.platform, 'gog');
+  assert.deepEqual(Object.keys(only.offers), ['gog']);
+  // Seuls les stores choisis sont interrogés
+  const asked = async (stores) => {
+    const { calls } = await withFetch([['/deals', []], ['/games', {}]], () => fetchCheapShark({ ...S, stores }));
+    return calls.map((c) => new URL(c.url).searchParams.get('storeID')).filter(Boolean).sort();
+  };
+  assert.deepEqual(await asked({ steam: true, gog: true, epic: true }), ['25', '7']);
+  assert.deepEqual(await asked({ steam: true }), []);
+});
+
+test('Filtre adulte : hentai et sexe explicite, jamais les PEGI 18', async () => {
+  const info = (descriptors, tags = [], genres = ['Action']) => ({ 1: { genres, descriptors, tags } });
+  const adult = (descriptors, tags, genres) => genresOf({ title: 'X', steamAppID: '1' }, info(descriptors, tags, genres)).has('adult');
+  // Avertissements relevés sur Steam : GTA V, Red Dead 2, Call of Duty, Cyberpunk, KCD2, Outlast, Mortal Kombat 11, DOA6
+  for (const d of [[1, 2, 5], [5], [2, 5], [1, 5], []]) assert.ok(!adult(d, ['Nudity', 'Sexual Content', 'Mature', 'Violent']), d.join());
+  assert.ok(!adult([1, 2, 4, 5], ['Nudity', 'Mature']), 'nudité fréquente sans sexe explicite');
+  assert.ok(!adult([], [], ['Nudity', 'Sexual Content']));
+  assert.ok(adult([1, 3, 4, 5]), 'HuniePop, Being a DIK, Subverse');
+  assert.ok(adult([1, 5], ['Hentai', 'Anime']), 'Miss Neko');
+  for (const t of ['Grand Theft Auto V', 'Red Dead Redemption 2', 'Call of Duty: Black Ops (PEGI 18+)', 'Uncensored War']) assert.ok(!genresOf({ title: t }).has('adult'), t);
+  assert.ok(genresOf({ title: 'Hentai Puzzle' }).has('adult'));
+  // Les tags ne sont demandés que pour les jeux signalés « nudité ou sexe »
+  const details = (id, ids) => ({ [id]: { success: true, data: { type: 'game', genres: [], content_descriptors: { ids } } } });
+  const cache = {};
+  const { calls } = await withFetch(
+    [['appids=1', details(1, [1, 5])], ['appids=2', details(2, [2, 5])], ['steamspy', { tags: { Hentai: 50 } }]],
+    () => enrichAppInfo(['1', '2'], cache, { adult: true, now }),
+  );
+  assert.deepEqual(calls.filter((c) => c.url.includes('steamspy')).map((c) => new URL(c.url).searchParams.get('appid')), ['1']);
+  assert.ok(genresOf({ title: 'X', steamAppID: '1' }, cache).has('adult'));
+  assert.ok(!genresOf({ title: 'X', steamAppID: '2' }, cache).has('adult'));
+});
+
+test('Annonces Dealabs : jeu possédé reconnu par son nom sur Steam', async () => {
+  const found = { items: [{ type: 'app', name: 'Battlefield™ 2042', id: 1517290 }, { type: 'app', name: 'Battlefield™ 6', id: 2807960 }] };
+  assert.equal(pickSteamApp(found, 'Battlefield 2042 Élite'), null, 'édition inconnue : on ne devine pas');
+  assert.equal(pickSteamApp(found, 'Battlefield 2042'), '1517290');
+  const deal = () => ({ section: 'pc', source: 'dealabs', title: 'Battlefield 2042 sur PC (Dématérialisé - Steam)' });
+  const cache = {};
+  const first = deal();
+  const a = await withFetch([['storesearch', found]], () => resolveSteamIds([first, { section: 'switch', title: 'Zelda' }, { section: 'pc', steamAppID: '5', title: 'Y' }], cache, now));
+  assert.equal(a.calls.length, 1);
+  assert.equal(first.steamAppID, '1517290');
+  const owned = makeOwnedIndex({ appids: ['1517290'] });
+  assert.equal(hiddenReason(first, { ...DEFAULT_SETTINGS }, { owned }), 'owned');
+  // En cache : aucune nouvelle requête
+  const again = deal();
+  const b = await withFetch([], () => resolveSteamIds([again], cache, now));
+  assert.equal(b.calls.length, 0);
+  assert.equal(again.steamAppID, '1517290');
+});
+
+test('Licences à bannir : LEGO masque tous les jeux LEGO, suggestions à jour', () => {
+  for (const t of ['LEGO® City Undercover', 'LEGO® Star Wars™ : La Saga Skywalker', 'The LEGO Games Bundle', 'La Grande Aventure LEGO 2 : Le Jeu Vidéo']) assert.equal(bannedKeyword(t, ['LEGO']), 'LEGO', t);
+  assert.equal(bannedKeyword('Legolas Adventure', ['LEGO']), null);
+  assert.ok(KEYWORD_SUGGESTIONS.includes('LEGO') && KEYWORD_SUGGESTIONS.includes('Mortal Kombat'));
+  assert.ok(!KEYWORD_SUGGESTIONS.some((k) => /fifa|hogwarts|five nights/i.test(k)));
+});
+
+test('Fréquences : dès 5 minutes', () => {
+  const minutes = INTERVALS.map(([v]) => Math.round(v * 60));
+  assert.deepEqual(minutes.slice(0, 4), [5, 10, 15, 30]);
+  assert.ok(INTERVALS.some(([v]) => v === DEFAULT_SETTINGS.intervalHours));
+});

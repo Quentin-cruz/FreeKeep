@@ -1,14 +1,45 @@
 // Dealabs (dealabs.com) : bons plans postés et votés par la communauté française.
 // Sert pour les jeux en boîte (Amazon, Fnac, Leclerc…), les sites de clés (Eneba, Instant Gaming, G2A…)
 // et les erreurs de prix. Lu via les flux RSS publics.
-import { ENDPOINTS, KEYSHOPS, NOT_A_GAME } from '../config.js';
+import { ENDPOINTS, KEYSHOPS, PHYSICAL_STORES, NOT_A_GAME } from '../config.js';
 import { fetchText, decodeEntities, normText, parsePrice, stripHtml } from '../util.js';
 
 export const FEEDS = {
   hot: `${ENDPOINTS.dealabs}/hot`,
   jeux: `${ENDPOINTS.dealabs}/groupe/consoles-jeux-video`,
   switch: `${ENDPOINTS.dealabs}/groupe/jeux-nintendo-switch`,
+  pc: `${ENDPOINTS.dealabs}/groupe/jeux-pc`,
+  erreur: `${ENDPOINTS.dealabs}/groupe/erreur-de-prix`,
 };
+
+// Flux qui mélangent toutes les catégories (pas seulement les jeux vidéo).
+const MIXED_FEEDS = ['hot', 'erreur'];
+
+// ---------- Départements ----------
+
+const DEPT = /^(0[1-9]|[1-8]\d|9[0-5]|97[1-6]|2[AB])$/i;
+
+// « Dainville (62) / Templeuve (59) », « Toulouse (31) (console uniquement) », « (59/62) » → départements cités.
+export function localDepartments(title) {
+  const out = new Set();
+  for (const m of String(title || '').matchAll(/\(([^()]*)\)/g)) {
+    const parts = m[1].trim().split(/\s*(?:[,/&+]|\bet\b)\s*/i);
+    if (parts.every((p) => DEPT.test(p))) parts.forEach((p) => out.add(p.toUpperCase()));
+  }
+  return [...out];
+}
+
+// Saisie de l'utilisateur : « 80, 60 », « 1 », un code postal (« 80000 »), « 2a ».
+export function parseDepartments(text) {
+  const out = new Set();
+  for (const raw of String(text || '').toUpperCase().split(/[\s,;/]+/).filter(Boolean)) {
+    const postal = /^(\d{2})(\d)\d{2}$/.exec(raw);
+    const d = postal ? (postal[1] === '97' ? postal[1] + postal[2] : postal[1]) : raw.padStart(2, '0');
+    if (d === '20') ['2A', '2B'].forEach((x) => out.add(x));
+    else if (DEPT.test(d)) out.add(d);
+  }
+  return [...out];
+}
 
 const DAY = 24 * 3600 * 1000;
 
@@ -80,6 +111,8 @@ export const mentionsSwitch2 = (title) => /switch\s*2\b/i.test(String(title));
 // Plateforme d'activation d'un jeu PC d'après le titre Dealabs.
 export function pcPlatformOf(title, merchant = '') {
   const t = `${title} ${merchant}`;
+  if (/^\s*(xbox|microsoft)\b/i.test(merchant) && !/\bsteam\b/i.test(title)) return 'microsoft';
+  if (/^\s*(ea|electronic arts)\s*$/i.test(merchant) && !/\bsteam\b/i.test(title)) return 'ea';
   if (/\bsteam\b/i.test(t)) return 'steam';
   if (/\bepic\b/i.test(t)) return 'epic';
   if (/\bgog\b/i.test(t)) return 'gog';
@@ -171,16 +204,15 @@ export function classifyDealabs(it, settings, now = Date.now()) {
   const title = it.title || '';
   // Les jeux PC offerts à garder vont dans « Jeux gratuits », pas dans les promos.
   if (isFreebieTitle(title) && !consoleOnly(title) && !mentionsSwitch1(title) && !mentionsSwitch2(title)) return null;
-  // Le flux « hot » mélange toutes les catégories : on ne garde que les jeux vidéo.
-  if (it.feed === 'hot' && !/consoles|jeux vid/i.test(it.category)) return null;
+  if (MIXED_FEEDS.includes(it.feed) && !/consoles|jeux vid/i.test(it.category)) return null;
   if (!title || NOT_A_GAME.test(title)) return null;
   if (it.pubDate && now - it.pubDate > (settings.dealMaxAgeDays || 7) * DAY) return null;
   if (/frontalier/i.test(title)) return null;
 
   // Deals en magasin : seulement dans tes départements.
-  const dept = /\((\d{2,3}|2A|2B)\)\s*$/i.exec(title)?.[1]?.toUpperCase();
-  const depts = String(settings.departments || '').split(/[\s,;]+/).map((d) => d.trim().toUpperCase()).filter(Boolean);
-  if (dept && !depts.includes(dept)) return null;
+  const local = localDepartments(title);
+  const depts = parseDepartments(settings.departments);
+  if (local.length && !local.some((d) => depts.includes(d))) return null;
 
   const switch1 = mentionsSwitch1(title);
   const switch2Only = !switch1 && mentionsSwitch2(title);
@@ -193,10 +225,8 @@ export function classifyDealabs(it, settings, now = Date.now()) {
   if (pcPlatform && settings.stores && !settings.stores[pcPlatform]) return null;
 
   const text = `${title} ${stripHtml(it.description).slice(0, 800)}`;
-  const priceError = PRICE_ERROR.test(text);
+  const priceError = !!it.priceError || PRICE_ERROR.test(text);
   const hot = !!it.hot;
-  if (settings.dealabsOnlyHot && !hot && !priceError) return null;
-
   const section = isSwitch ? 'switch' : 'pc';
   const bundle = /\bbundle\b|pack de \d+ jeux|lot de \d+ jeux/i.test(title);
   let channel;
@@ -204,6 +234,10 @@ export function classifyDealabs(it, settings, now = Date.now()) {
   else if (bundle) channel = 'bundle';
   else if (section === 'switch') channel = /nintendo/i.test(it.merchant) || /d[ée]mat[ée]rialis[ée]/i.test(title) ? 'eshop' : 'physical';
   else channel = 'official';
+  // Le flux « hot » ne couvre que quelques heures : l'exiger ferait disparaître presque tous les jeux en boîte,
+  // locaux comme nationaux (Amazon, Fnac…). Ils passent donc sans, sauf au niveau « Que les affaires de fou ».
+  const needsHot = settings.dealabsOnlyHot && !(channel === 'physical' && settings.level !== 'strict');
+  if (needsHot && !hot && !priceError) return null;
   if ((channel === 'keyshop' && settings.keyshops === false) || (channel === 'physical' && settings.physical === false) || (channel === 'bundle' && settings.bundles === false)) return null;
 
   const price = parsePrice(it.priceText);
@@ -223,24 +257,32 @@ export function classifyDealabs(it, settings, now = Date.now()) {
     normalPrice: null,
     currency: 'EUR',
     discount,
-    merchant: it.merchant || 'Dealabs',
+    merchant: it.merchant || merchantInTitle(title) || 'Dealabs',
     platform: section === 'switch' ? (switch2Only ? 'switch2' : 'switch1') : pcPlatform,
     posted: it.pubDate,
     end: null,
-    flags: { hot, priceError, free: price === 0, local: !!dept, bundle },
+    flags: { hot, priceError, free: price === 0, local: local.length > 0, bundle },
   };
 }
 
-// Fusionne les items des 3 flux (un même deal peut être dans « hot » et dans un groupe).
+// Magasin cité dans le titre quand Dealabs ne le donne pas (« … - Amazon / E.Leclerc »).
+function merchantInTitle(title) {
+  const t = ` ${normText(title)} `;
+  const found = PHYSICAL_STORES.find((s) => t.includes(` ${normText(s)} `));
+  return found ? found.replace(/(^|\s)\S/g, (c) => c.toUpperCase()) : '';
+}
+
+// Fusionne les items des flux (un même deal peut être dans « hot » et dans un groupe).
 export function mergeDealabsItems(items) {
   const byGuid = new Map();
   for (const it of items) {
     const prev = byGuid.get(it.guid);
     const hot = it.feed === 'hot' || !!it.hot || !!prev?.hot;
+    const priceError = it.feed === 'erreur' || !!it.priceError || !!prev?.priceError;
     // On garde la version « groupe » (catégorie fiable) quand elle existe.
-    const base = prev && prev.feed !== 'hot' ? prev : it;
+    const base = prev && !MIXED_FEEDS.includes(prev.feed) ? prev : it;
     // Titre nettoyé ici aussi : le cache peut contenir des annonces lues par une ancienne version.
-    byGuid.set(it.guid, { ...base, title: stripTemperature(base.title), feed: base.feed, hot });
+    byGuid.set(it.guid, { ...base, title: stripTemperature(base.title), feed: base.feed, hot, priceError });
   }
   return [...byGuid.values()];
 }

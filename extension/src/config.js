@@ -111,6 +111,7 @@ export const ENDPOINTS = {
   steamCommunity: 'https://steamcommunity.com',
   steamWishlist: 'https://api.steampowered.com/IWishlistService/GetWishlist/v1/',
   steamAppDetails: 'https://store.steampowered.com/api/appdetails',
+  steamStoreSearch: 'https://store.steampowered.com/api/storesearch/',
   steamSpy: 'https://steamspy.com/api.php',
   gogUser: 'https://www.gog.com/userData.json',
   gogOwned: 'https://www.gog.com/account/getFilteredProducts',
@@ -149,7 +150,7 @@ export const DEFAULT_SETTINGS = {
   bannedKeywords: [],
 
   // Bibliothèque Steam
-  steamProfile: '',       // lien du profil public (facultatif : liste de souhaits sans connexion, noms des jeux)
+  steamProfile: '',       // lien du profil public
   hideOwned: true,        // masquer les promos sur les jeux possédés
   useWishlist: true,      // mettre en avant la liste de souhaits
   steamOwnedSync: true,   // jeux possédés + liste de souhaits via la session Steam du navigateur
@@ -171,6 +172,12 @@ export const DEFAULT_SETTINGS = {
   // Récupération
   autoClick: true,
 };
+
+// Fréquence des vérifications, en heures.
+export const INTERVALS = [
+  [5 / 60, 'Toutes les 5 minutes'], [10 / 60, 'Toutes les 10 minutes'], [15 / 60, 'Toutes les 15 minutes'], [0.5, 'Toutes les 30 minutes'],
+  [1, 'Toutes les heures'], [3, 'Toutes les 3 heures'], [6, 'Toutes les 6 heures'], [12, 'Toutes les 12 heures'], [24, 'Une fois par jour'],
+];
 
 export const ALARM_NAME = 'freekeep-refresh';
 export const STALE_AFTER_MS = 30 * 60 * 1000; // le popup relance une vérif si la dernière date de +30 min

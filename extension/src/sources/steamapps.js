@@ -25,12 +25,14 @@ export function parseSteamSpy(data) {
 }
 
 /** Complète le cache `appInfo` (modifié en place) pour les appids manquants. */
-export async function enrichAppInfo(appids, appInfo, { withTags = false, now = Date.now() } = {}) {
+export async function enrichAppInfo(appids, appInfo, { withTags = false, adult = false, now = Date.now() } = {}) {
+  // Filtre adulte : les tags joueurs ne servent qu'aux jeux signalés « nudité ou sexe » (avertissement 1).
+  const wantsTags = (e) => withTags || (adult && !!e.descriptors?.includes(1));
   const todo = [...new Set(appids.filter(Boolean).map(String))].filter((id) => {
     const c = appInfo[id];
     if (!c) return true;
     if (c.failed && now - c.at > RETRY_FAILED_AFTER) return true;
-    return withTags && !c.tagsAt && !c.failed;
+    return !c.failed && !c.tagsAt && wantsTags(c);
   }).slice(0, MAX_PER_RUN);
 
   for (const id of todo) {
@@ -44,7 +46,7 @@ export async function enrichAppInfo(appids, appInfo, { withTags = false, now = D
       entry.at = now;
       await sleep(250);
     }
-    if (withTags && !entry.failed) {
+    if (!entry.failed && !entry.tagsAt && wantsTags(entry)) {
       try {
         entry.tags = parseSteamSpy(await fetchJson(`${ENDPOINTS.steamSpy}?request=appdetails&appid=${id}`));
       } catch {

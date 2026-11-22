@@ -9,9 +9,9 @@ import { wants } from './prefs.js';
 const MIN = 60 * 1000;
 const DAY = 24 * 60 * MIN;
 const GAPS = {
-  cheapshark: 15 * MIN, // CheapShark bannit temporairement les clients trop pressés
-  eshop: 15 * MIN,
-  dealabs: 10 * MIN,
+  cheapshark: 14 * MIN, // CheapShark bannit temporairement les clients trop pressés
+  eshop: 14 * MIN,
+  dealabs: 4 * MIN,     // les erreurs de prix partent en quelques minutes
   watchlist: 7 * DAY,   // liste des gros jeux surveillés sur les sites de clés
   ggdeals: 50 * MIN,    // GG.deals : 1 000 prix/heure max
 };
