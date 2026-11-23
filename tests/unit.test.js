@@ -287,9 +287,8 @@ test('buildDeals : fusion Dealabs ↔ eShop, prix clé, affaires exceptionnelles
 // v0.2 : personnalisation
 // ===========================================================================
 import { effective, wants, bannedKeyword, sameGameStrict, extractGameName, makeOwnedIndex, hiddenReason } from '../extension/src/prefs.js';
-import { genresOf, needsTags } from '../extension/src/genres.js';
+import { genresOf } from '../extension/src/genres.js';
 import { parseSteamProfile, parseGamesXml } from '../extension/src/sources/steamlibrary.js';
-import { parseAppDetails, parseSteamSpy } from '../extension/src/sources/steamapps.js';
 import { platformOf } from '../extension/src/sources/cheapshark.js';
 import { pcPlatformOf } from '../extension/src/sources/dealabs.js';
 import { steamGamesXmlFixture } from './fixtures.js';
@@ -319,11 +318,13 @@ test('Mots-clés bannis et jeux possédés (correspondance stricte)', () => {
   assert.ok(!owned.hasName('DOOM Eternal sur PC (Steam)'));
 });
 
-test('Genres : Steam, SteamSpy, eShop et titre', () => {
+test('Genres : tags et avertissements Steam, eShop et titre', () => {
   const appInfo = {
-    1: { genres: ['Action', 'Sports'], descriptors: [], tags: [] },
-    2: { genres: ['Indie'], descriptors: [3], tags: [] },
-    3: { genres: ['Action'], descriptors: [], tags: ['Horror', 'Survival'] },
+    1: { descriptors: [], tags: [19, 701] },
+    2: { descriptors: [3], tags: [492] },
+    3: { descriptors: [], tags: [1667, 1662] },
+    // GTA V : « Racing » n'est que son 12e tag
+    4: { descriptors: [5], tags: [1695, 19, 3859, 6378, 1100687, 1697, 3839, 1774, 21, 4182, 3814, 699] },
   };
   assert.ok(genresOf({ title: 'X', steamAppID: '1' }, appInfo).has('sport'));
   assert.ok(genresOf({ title: 'X', steamAppID: '2' }, appInfo).has('adult'));
@@ -331,14 +332,13 @@ test('Genres : Steam, SteamSpy, eShop et titre', () => {
   assert.ok(genresOf({ title: 'Kart', categories: ['racing', 'action'] }).has('racing'));
   assert.ok(genresOf({ title: 'Resident Evil 4 (Steam)' }).has('horror'));
   assert.ok(!genresOf({ title: 'Celeste' }).size);
-  assert.equal(needsTags(['adult', 'sport']), false);
-  assert.equal(needsTags(['horror']), true);
+  assert.ok(!genresOf({ title: 'GTA V', steamAppID: '4' }, appInfo).has('shooter'));
 });
 
 test('hiddenReason : mot-clé > genre > possédé ; la liste de souhaits ignore les genres', () => {
   const settings = { ...DEFAULT_SETTINGS, excludedGenres: ['horror'], bannedKeywords: ['FIFA'] };
   const owned = makeOwnedIndex({ appids: ['10'], names: [] });
-  const appInfo = { 20: { genres: [], descriptors: [], tags: ['Horror'] } };
+  const appInfo = { 20: { descriptors: [], tags: [1667] } };
   assert.equal(hiddenReason({ title: 'FIFA 23', section: 'pc', flags: {} }, settings, { owned }), 'keyword:FIFA');
   assert.equal(hiddenReason({ title: 'Scary', steamAppID: '20', section: 'pc', flags: {} }, settings, { appInfo, owned }), 'genre:horror');
   assert.equal(hiddenReason({ title: 'Scary', steamAppID: '20', section: 'pc', flags: { wishlist: true } }, settings, { appInfo, owned }), null);
@@ -357,14 +357,6 @@ test('Profil Steam : liens acceptés + lecture de la bibliothèque', () => {
   assert.deepEqual(lib.games[0], { appid: '900101', name: 'Mega Shooter 4' });
   assert.throws(() => parseGamesXml('<?xml version="1.0"?><gamesList><error><![CDATA[This profile is private.]]></error></gamesList>'), /privé/);
   assert.throws(() => parseGamesXml('<html>login</html>'), /inattendue/);
-});
-
-test('Genres Steam : appdetails + SteamSpy', () => {
-  const info = parseAppDetails('7', { 7: { success: true, data: { type: 'game', genres: [{ id: '1', description: 'Action' }], content_descriptors: { ids: [1, 5] } } } });
-  assert.deepEqual(info, { type: 'game', genres: ['Action'], descriptors: [1, 5] });
-  assert.ok(parseAppDetails('8', { 8: { success: false } }).failed);
-  assert.deepEqual(parseSteamSpy({ tags: { Horror: 10, Indie: 500, Puzzle: 3 } }).slice(0, 2), ['Indie', 'Horror']);
-  assert.deepEqual(parseSteamSpy({ tags: [] }), []);
 });
 
 test('Plateformes PC : CheapShark, Dealabs, filtre des stores', () => {
@@ -518,9 +510,9 @@ async function withFetch(routes, job) {
 
 test('Filtre adulte : The Witcher 3 et Cyberpunk restent visibles, HuniePop est masqué', () => {
   const appInfo = {
-    292030: { genres: ['RPG'], descriptors: [1, 5], tags: ['Open World', 'RPG', 'Nudity'] },
-    1086940: { genres: ['RPG'], descriptors: [1, 2, 5], tags: ['RPG', 'Sexual Content'] },
-    339800: { genres: ['Indie'], descriptors: [1, 3, 5, 4], tags: ['Nudity', 'Sexual Content', 'Hentai'] },
+    292030: { descriptors: [1, 5], tags: [1695, 122, 6650] },
+    1086940: { descriptors: [1, 2, 5], tags: [122, 12095] },
+    339800: { descriptors: [1, 3, 5, 4], tags: [6650, 12095, 9130] },
   };
   assert.ok(!genresOf({ title: 'The Witcher 3', steamAppID: '292030' }, appInfo).has('adult'));
   assert.ok(!genresOf({ title: "Baldur's Gate 3", steamAppID: '1086940' }, appInfo).has('adult'));
@@ -771,26 +763,28 @@ test('CheapShark : une offre par launcher choisi', async () => {
 });
 
 test('Filtre adulte : hentai et sexe explicite, jamais les PEGI 18', async () => {
-  const info = (descriptors, tags = [], genres = ['Action']) => ({ 1: { genres, descriptors, tags } });
-  const adult = (descriptors, tags, genres) => genresOf({ title: 'X', steamAppID: '1' }, info(descriptors, tags, genres)).has('adult');
+  const [NUDITY, SEXUAL, MATURE, VIOLENT, HENTAI, ANIME] = [6650, 12095, 5611, 4667, 9130, 4085];
+  const adult = (descriptors, tags = []) => genresOf({ title: 'X', steamAppID: '1' }, { 1: { descriptors, tags } }).has('adult');
   // Avertissements relevés sur Steam : GTA V, Red Dead 2, Call of Duty, Cyberpunk, KCD2, Outlast, Mortal Kombat 11, DOA6
-  for (const d of [[1, 2, 5], [5], [2, 5], [1, 5], []]) assert.ok(!adult(d, ['Nudity', 'Sexual Content', 'Mature', 'Violent']), d.join());
-  assert.ok(!adult([1, 2, 4, 5], ['Nudity', 'Mature']), 'nudité fréquente sans sexe explicite');
-  assert.ok(!adult([], [], ['Nudity', 'Sexual Content']));
+  for (const d of [[1, 2, 5], [5], [2, 5], [1, 5], []]) assert.ok(!adult(d, [NUDITY, SEXUAL, MATURE, VIOLENT]), d.join());
+  assert.ok(!adult([1, 2, 4, 5], [NUDITY, MATURE]), 'nudité fréquente sans sexe explicite');
   assert.ok(adult([1, 3, 4, 5]), 'HuniePop, Being a DIK, Subverse');
-  assert.ok(adult([1, 5], ['Hentai', 'Anime']), 'Miss Neko');
+  assert.ok(adult([1, 5], [HENTAI, ANIME]), 'Miss Neko');
   for (const t of ['Grand Theft Auto V', 'Red Dead Redemption 2', 'Call of Duty: Black Ops (PEGI 18+)', 'Uncensored War']) assert.ok(!genresOf({ title: t }).has('adult'), t);
   assert.ok(genresOf({ title: 'Hentai Puzzle' }).has('adult'));
-  // Les tags ne sont demandés que pour les jeux signalés « nudité ou sexe »
-  const details = (id, ids) => ({ [id]: { success: true, data: { type: 'game', genres: [], content_descriptors: { ids } } } });
-  const cache = {};
-  const { calls } = await withFetch(
-    [['appids=1', details(1, [1, 5])], ['appids=2', details(2, [2, 5])], ['steamspy', { tags: { Hentai: 50 } }]],
-    () => enrichAppInfo(['1', '2'], cache, { adult: true, now }),
-  );
-  assert.deepEqual(calls.filter((c) => c.url.includes('steamspy')).map((c) => new URL(c.url).searchParams.get('appid')), ['1']);
-  assert.ok(genresOf({ title: 'X', steamAppID: '1' }, cache).has('adult'));
-  assert.ok(!genresOf({ title: 'X', steamAppID: '2' }, cache).has('adult'));
+  // Lecture par lots : 120 jeux en 3 requêtes, aucun n'attend son tour ; l'ancien cache est relu.
+  const ids = Array.from({ length: 120 }, (_, i) => String(1000 + i));
+  const cache = { 1000: { at: now, genres: ['Action'], tags: ['Hentai'] } };
+  const reply = (url) => {
+    const asked = JSON.parse(new URL(url).searchParams.get('input_json')).ids.map((x) => x.appid);
+    return { response: { store_items: asked.filter((id) => id !== 1119).map((id) => ({ appid: id, success: 1, name: `Jeu ${id}`, type: 0, content_descriptorids: id === 1001 ? [1, 3] : [], tags: id === 1002 ? [{ tagid: HENTAI }] : [] })) } };
+  };
+  const { calls } = await withFetch([['GetItems', reply]], () => enrichAppInfo(ids, cache, { now }));
+  assert.equal(calls.length, 3);
+  assert.deepEqual(ids.filter((id) => genresOf({ title: 'X', steamAppID: id }, cache).has('adult')), ['1001', '1002']);
+  assert.ok(cache[1119].failed && ids.every((id) => cache[id]));
+  const again = await withFetch([['GetItems', reply]], () => enrichAppInfo(ids, cache, { now: now + 1000 }));
+  assert.equal(again.calls.length, 0);
 });
 
 test('Annonces Dealabs : jeu possédé reconnu par son nom sur Steam', async () => {
@@ -1453,4 +1447,161 @@ test('Tutoriel : la flèche descend de catégorie en catégorie, puis montre le 
   // « Oui » à Prime ouvre une catégorie de plus : la flèche y va.
   d.prime = true;
   assert.deepEqual(path(pos), ['prime', 'primeStores']);
+});
+
+// ---------- Santé des sources ----------
+
+const { retryDelay, checkDrop, MAX_AGE } = await import('../extension/src/health.js');
+const { fetchDealSources: fetchSources, assembleDeals: assemble } = await import('../extension/src/refresh-deals.js');
+
+test('Source en panne : rappelée de moins en moins souvent, sauf demande explicite', async () => {
+  const MIN = 60000;
+  assert.deepEqual([1, 2, 3, 4, 10].map((n) => retryDelay(n) / MIN), [10, 20, 40, 80, 360]);
+  const cache = {};
+  const settings = { ...structuredClone(DEFAULT_SETTINGS), dealabs: false, bundles: false, stores: { steam: true } };
+  const at = async (min, force = []) => {
+    let shark = 0;
+    const { res } = await withFetch([['cheapshark', () => { shark += 1; return 'panne'; }]], () => fetchSources(settings, cache, now + min * MIN, force));
+    return { shark, error: res.cheapshark };
+  };
+  assert.ok((await at(0)).shark > 0);
+  const paused = await at(5);
+  assert.equal(paused.shark, 0);
+  assert.ok(paused.error, 'la panne reste signalée');
+  assert.ok((await at(11)).shark > 0);
+  assert.equal((await at(25)).shark, 0); // 2e échec : 20 min
+  assert.ok((await at(26, ['cheapshark'])).shark > 0);
+});
+
+test('Source tombée à zéro d’un coup : ancien résultat gardé et signalé', () => {
+  const before = { items: Array(12).fill(1), at: now };
+  assert.throws(() => checkDrop(before, { items: [] }, now + 1000), /plus aucun/);
+  assert.throws(() => checkDrop({ raw: Array(9), at: now }, { raw: [] }, now), /plus aucun/);
+  checkDrop(before, { items: [1] }, now);
+  checkDrop({ items: [1, 2], at: now }, { items: [] }, now); // peu de résultats : zéro est plausible
+  checkDrop(before, { items: [] }, now + MAX_AGE + 1);       // ça dure : le zéro est accepté
+  checkDrop(undefined, { items: [] }, now);
+});
+
+test('Vieux prix : une source en panne depuis plus de 24 h n’est plus affichée', () => {
+  const deal = { id: 'gog:1', source: 'gog', section: 'pc', channel: 'official', title: 'Vieux Prix', url: 'x', price: 2, normalPrice: 20, currency: 'EUR', discount: 90, merchant: 'GOG', platform: 'gog', rating: { steam: 95, steamCount: 50000 }, flags: {}, images: [], end: null };
+  const titles = (age) => assemble({ ...structuredClone(DEFAULT_SETTINGS), level: 'wide' }, { gog: { items: [deal], at: now - age } }, {}, now, { gog: 'HTTP 500' });
+  assert.deepEqual(titles(3600e3).deals.map((d) => d.title), ['Vieux Prix']);
+  assert.equal(titles(3600e3).status.gog.stale, false);
+  assert.deepEqual(titles(MAX_AGE + 1).deals, []);
+  assert.equal(titles(MAX_AGE + 1).status.gog.stale, true);
+});
+
+// ---------- Récupération ----------
+
+const { isGamePage, matchByUrl, gameInPageTitle, isNextStep, storeOfUrl } = await import('../extension/src/claim.js');
+
+test('Récupération : seulement sur la page du jeu demandé', () => {
+  const steam = { store: 'steam', appid: '111', title: 'Jeu A', url: 'https://store.steampowered.com/app/111/' };
+  assert.ok(isGamePage(steam, {}, 'https://store.steampowered.com/app/111/Jeu_A/'));
+  assert.ok(!isGamePage(steam, {}, 'https://store.steampowered.com/app/999/Autre/', 'Jeu A sur Steam'));
+  assert.ok(!isGamePage(steam, {}, 'https://store.epicgames.com/fr/p/jeu-a', 'Jeu A'));
+  const epic = { store: 'epic', slug: 'hades', title: 'Hades' };
+  assert.ok(isGamePage(epic, {}, 'https://store.epicgames.com/fr/p/hades?lang=fr'));
+  assert.ok(!isGamePage(epic, {}, 'https://store.epicgames.com/fr/p/fortnite'));
+  // Lien GamerPower : adresse inconnue, le titre de la page doit correspondre
+  const gp = { store: 'steam', title: 'Hades', url: 'https://www.gamerpower.com/open/hades' };
+  assert.ok(isGamePage(gp, {}, 'https://store.steampowered.com/app/1145360/', 'Save 100% on Hades on Steam'));
+  assert.ok(!isGamePage(gp, {}, 'https://store.steampowered.com/app/1/', 'Hades Star on Steam'));
+  assert.ok(!isGamePage(gp, {}, 'https://store.steampowered.com/app/1/', 'Hades II on Steam'));
+  assert.ok(!isGamePage(gp, {}, 'https://store.steampowered.com/', 'Hades'));
+  assert.ok(!isGamePage(gp, { appid: '1145360' }, 'https://store.steampowered.com/app/2/', 'Hades on Steam'));
+  const itch = { store: 'itch', title: 'Dual Chroma: Academy Carols', url: 'https://www.gamerpower.com/open/x' };
+  assert.ok(isGamePage(itch, {}, 'https://galengames.itch.io/academy-carols', 'Dual Chroma: Academy Carols by Galen Games'));
+  assert.ok(!isGamePage(itch, {}, 'https://autre.itch.io/jeu', 'Autre jeu by X'));
+  assert.equal(gameInPageTitle('Control Standard Edition | Téléchargez et achetez dès aujourd’hui - Epic Games Store'), 'Control Standard Edition');
+  const gala = { store: 'indiegala', title: 'ANCIENT EVIL', url: 'https://www.gamerpower.com/open/y' };
+  assert.ok(isGamePage(gala, {}, 'https://freebies.indiegala.com/ancient-evil', 'ANCIENT EVIL - galaFreebies | Indiegala Showcase'));
+  assert.ok(!isGamePage(gala, {}, 'https://freebies.indiegala.com/last-room', 'Last Room - galaFreebies | Indiegala Showcase'));
+  assert.ok(isGamePage({ store: 'epic', title: 'Mark of the Deep', slug: 'mark-f7' }, {}, 'https://store.epicgames.com/p/mark-f7'));
+  assert.equal(gameInPageTitle('-75% Cyberpunk 2077 on GOG.com'), 'Cyberpunk 2077');
+  assert.ok(isNextStep('https://store.epicgames.com/purchase?offers=1') && isNextStep('https://a.itch.io/jeu/purchase') && !isNextStep('https://a.itch.io/purchase'));
+  assert.equal(storeOfUrl('https://epicgames.com.evil.test/fr/p/hades'), null);
+  // Visite normale : uniquement par l'adresse
+  assert.equal(matchByUrl([steam, gp], () => ({}), 'https://store.steampowered.com/app/111/'), steam);
+  assert.equal(matchByUrl([gp], () => ({}), 'https://store.steampowered.com/app/5/'), null);
+});
+
+test('Tutoriel : reprise là où on l’a quitté', () => {
+  const d = tutoDraft();
+  let pos = flow.start(STEPS, d);
+  for (let i = 0; i < 4; i++) pos = flow.forward(STEPS, d, pos).pos;
+  assert.deepEqual(flow.resumeAt(STEPS, d, pos), pos);
+  // Réponse qui fait disparaître la page ou la question : on repart d'un endroit qui existe
+  assert.equal(flow.resumeAt(STEPS, tutoDraft({ pc: false, switch: true }), pos).step, 'welcome');
+  assert.equal(flow.resumeAt(STEPS, tutoDraft({ bundles: false }), { step: 'stores', part: 'bundleSites', seen: ['stores/stores'] }).part, 'bundles');
+  assert.equal(flow.resumeAt(STEPS, d, null).step, 'welcome');
+});
+
+// ---------- Sauvegarde et mise à jour ----------
+
+const { makeBackup, readBackup } = await import('../extension/src/backup.js');
+const { isNewer } = await import('../extension/src/update.js');
+
+test('Sauvegarde : aller-retour, sans la clé ; contenu douteux écarté', () => {
+  const settings = { ...structuredClone(DEFAULT_SETTINGS), ggdealsKey: 'secret', prime: true, bannedKeywords: ['LEGO'], onboarded: true };
+  const states = { 'epic:a': { claimed: true, claimedAt: 5, snapshot: { title: 'A', store: 'epic', url: 'https://a.test/', images: ['https://i.test/1.jpg'], worth: '10 €' } } };
+  const file = JSON.stringify(makeBackup(settings, { states, dealStates: { d: { hidden: true, at: 1 } } }));
+  assert.ok(!file.includes('secret'));
+  const back = readBackup(file);
+  assert.equal(back.settings.prime, true);
+  assert.deepEqual(back.settings.bannedKeywords, ['LEGO']);
+  assert.ok(!('onboarded' in back.settings) && !('ggdealsKey' in back.settings));
+  assert.deepEqual(back.states, states);
+  assert.deepEqual(back.dealStates, { d: { hidden: true, at: 1 } });
+
+  const bad = JSON.parse(file);
+  Object.assign(bad.settings, { pc: 'oui', level: 'x', intervalHours: 0.0001, inconnu: 1, ggdealsKey: 'volée', bannedKeywords: [1, 'ok'], stores: { steam: 'x', gog: false, pirate: true } });
+  bad.states = { 'epic:a': { claimed: 'oui', resolvedUrl: 'javascript:alert(1)', snapshot: { title: 'A', url: 'javascript:alert(1)', images: ['data:x', 'https://ok.test/'] } }, b: null };
+  const clean = readBackup(JSON.stringify(bad).replace('"b":null', '"__proto__":{"claimed":true}'));
+  assert.ok(!('pc' in clean.settings) && !('level' in clean.settings) && !('intervalHours' in clean.settings) && !('inconnu' in clean.settings) && !('ggdealsKey' in clean.settings));
+  assert.deepEqual(clean.settings.bannedKeywords, ['ok']);
+  assert.ok(clean.settings.stores.steam === true && clean.settings.stores.gog === false && !('pirate' in clean.settings.stores));
+  assert.deepEqual(clean.states, { 'epic:a': { snapshot: { title: 'A', images: ['https://ok.test/'] } } });
+  assert.equal({}.claimed, undefined);
+  for (const x of ['', '[]', 'null', '{"app":"Autre"}']) assert.throws(() => readBackup(x), /sauvegarde/);
+});
+
+test('Nouvelle version : comparaison des numéros', () => {
+  assert.ok(isNewer('1.10.0', '1.9.2') && isNewer('2.0', '1.99.99') && isNewer('1.6.1', '1.6'));
+  assert.ok(!isNewer('1.6.0', '1.6') && !isNewer('1.5.1', '1.6.0') && !isNewer('', '1.0'));
+});
+
+// ---------- Accès aux sites ----------
+
+const { originsFor } = await import('../extension/src/access.js');
+const { readFileSync } = await import('node:fs');
+
+test('Accès : seulement les sites utiles aux choix, tous déclarés dans le manifest', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../extension/manifest.json', import.meta.url), 'utf8'));
+  const has = (s, site) => originsFor(s).some((o) => o.includes(site));
+  const sw = tutoDraft({ pc: false, switch: true });
+  assert.ok(has(sw, 'nintendo') && has(sw, 'eneba') && has(sw, 'dealabs'));
+  for (const x of ['gog', 'ea.com', 'humble', 'itch', 'cheapshark', 'ubisoft', 'gg.deals']) assert.ok(!has(sw, x), x);
+  assert.ok(!has(tutoDraft(), 'nintendo') && !has(tutoDraft(), 'gg.deals'));
+  assert.ok(has(tutoDraft({ ggdealsKey: 'k' }), 'gg.deals'));
+  assert.ok(!has(tutoDraft({ bundles: false }), 'humble'));
+  const noGog = tutoDraft();
+  noGog.stores.gog = false;
+  assert.ok(!has(noGog, 'gog.com'));
+  assert.deepEqual(originsFor(tutoDraft({ pc: false, switch: false })), []);
+  const all = tutoDraft({ switch: true, prime: true, ggdealsKey: 'k' });
+  for (const k of Object.keys(all.stores)) all.stores[k] = true;
+  const used = originsFor(all);
+  for (const o of used) assert.ok(manifest.optional_host_permissions.includes(o), o);
+  assert.deepEqual(manifest.optional_host_permissions.filter((o) => !used.includes(o)), [], 'aucun site demandable en trop');
+});
+
+test('Accès refusé : la source n’est pas appelée, sans compter comme une panne', async () => {
+  const cache = {};
+  const settings = { ...structuredClone(DEFAULT_SETTINGS), dealabs: false, bundles: false, stores: { steam: true } };
+  const { res, calls } = await withFetch([], () => fetchSources(settings, cache, now, [], { denied: new Set(['cheapshark', 'rate']) }));
+  assert.equal(calls.length, 0);
+  assert.match(res.cheapshark, /accès/);
+  assert.equal(cache.health, undefined);
 });

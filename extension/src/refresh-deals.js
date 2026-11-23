@@ -14,6 +14,8 @@ import { fetchUsdToEur, DEFAULT_USD_EUR } from './sources/rates.js';
 import { buildDeals, applyEuros } from './deals.js';
 import { WIDEST, keepAtLevel } from './levels.js';
 import { wants } from './prefs.js';
+import { DENIED } from './access.js';
+import { pausedError, noteFailure, noteSuccess, checkDrop, isStale } from './health.js';
 
 const MIN = 60 * 1000;
 const DAY = 24 * 60 * MIN;
@@ -61,7 +63,7 @@ const enabledSources = (settings, w) => {
 };
 
 /** Lit les sources (au plus large) et remplit `cache`. Renvoie les erreurs par source. */
-export async function fetchDealSources(rawSettings, cache, now = Date.now(), force = [], { wishlist = [] } = {}) {
+export async function fetchDealSources(rawSettings, cache, now = Date.now(), force = [], { wishlist = [], denied = new Set() } = {}) {
   const w = wants(rawSettings);
   const on = enabledSources(rawSettings, w);
   const settings = { ...rawSettings, pcDeals: w.pcDeals, switchDeals: w.switchDeals };
@@ -70,13 +72,29 @@ export async function fetchDealSources(rawSettings, cache, now = Date.now(), for
   const run = async (name, enabled, job) => {
     if (!enabled) {
       delete cache[name];
+      noteSuccess(cache, name);
       return;
     }
-    if (cache[name] && now - cache[name].at < GAPS[name] && !force.includes(name)) return;
+    if (denied.has(name)) {
+      errors[name] = DENIED;
+      return;
+    }
+    if (!force.includes(name)) {
+      const paused = pausedError(cache, name, now);
+      if (paused) {
+        errors[name] = paused;
+        return;
+      }
+      if (cache[name] && now - cache[name].at < GAPS[name]) return;
+    }
     try {
-      cache[name] = { ...(await job(cache[name])), at: now };
+      const got = { ...(await job(cache[name])), at: now };
+      if (name !== 'wishlist') checkDrop(cache[name], got, now); // la liste de souhaits peut vraiment se vider
+      cache[name] = got;
+      noteSuccess(cache, name);
     } catch (e) {
       errors[name] = String(e?.message || e);
+      noteFailure(cache, name, errors[name], now);
       console.warn(`[FreeKeep] source ${name} :`, e);
     }
   };
@@ -115,7 +133,9 @@ export async function fetchDealSources(rawSettings, cache, now = Date.now(), for
     // Dealabs sert aussi aux jeux offerts sans API (Prime, Microsoft Store, Battle.net).
     run('dealabs', on.dealabs, async (prev) => {
       // Les flux RSS ne montrent que les derniers deals : on les accumule sur 14 jours.
-      const raw = mergeDealabsItems([...(prev?.raw || []), ...(await fetchDealabs())])
+      const fresh = await fetchDealabs();
+      if (prev?.raw?.length && !fresh.length) throw new Error('plus aucun résultat, le site a peut-être changé');
+      const raw = mergeDealabsItems([...(prev?.raw || []), ...fresh])
         .filter((it) => !it.pubDate || now - it.pubDate < 14 * DAY)
         .slice(-600);
       return { raw };
@@ -147,17 +167,19 @@ export function assembleDeals(rawSettings, cache, history, now = Date.now(), err
   const w = wants(rawSettings);
   const settings = { ...rawSettings, pcDeals: w.pcDeals, switchDeals: w.switchDeals };
   const on = enabledSources(rawSettings, w);
-  const items = (name) => (on[name] ? keepAtLevel(structuredClone(cache[name]?.items || []), settings) : []);
+  // Une source en panne depuis plus d'un jour n'est plus montrée : ses prix ont sans doute changé.
+  const read = (name) => (isStale(cache[name], now) ? null : cache[name]);
+  const items = (name) => (on[name] ? keepAtLevel(structuredClone(read(name)?.items || []), settings) : []);
   const withKey = settings.pcDeals && !!settings.ggdealsKey && settings.keyshops !== false && !!settings.stores?.steam;
   // « Stores sélectionnés au-dessus » : seulement les bundles des stores cochés
   const bundleWanted = (d) => !!d.store && settings.bundleStores?.[d.store] !== false && (d.store !== 'stores' || !d.platform || !!settings.stores?.[d.platform]);
 
   const rate = cache.rate?.usdEur || DEFAULT_USD_EUR;
-  const dealabsRaw = mergeDealabsItems([...(cache.dealabs?.raw || []), ...(settings.dealabs ? cache.dealabsPages?.raw || [] : [])]);
+  const dealabsRaw = mergeDealabsItems([...(read('dealabs')?.raw || []), ...(settings.dealabs ? read('dealabsPages')?.raw || [] : [])]);
   const dealabs = dealabsRaw
     .map((it) => classifyDealabs(it, settings, now))
     .filter((d) => d && (d.section === 'bundle' ? w.bundles : d.section === 'pc' ? settings.pcDeals : settings.switchDeals));
-  const gg = cache.ggdeals?.prices || {};
+  const gg = read('ggdeals')?.prices || {};
   const freebies = w.free
     ? dealabsRaw.map((it) => dealabsFreebie(it, { stores: w.stores, prime: w.prime, maxAgeDays: settings.dealMaxAgeDays || 7 }, now)).filter(Boolean)
     : [];
@@ -166,7 +188,7 @@ export function assembleDeals(rawSettings, cache, history, now = Date.now(), err
     {
       // copies : buildDeals ajoute des badges, le cache doit rester brut
       cheapshark: applyEuros(items('cheapshark'), cache.cheapshark?.steam || {}, rate),
-      wishlist: settings.pcDeals ? structuredClone(cache.wishlist?.items || []) : [],
+      wishlist: settings.pcDeals ? structuredClone(read('wishlist')?.items || []) : [],
       gog: items('gog'),
       ea: items('ea'),
       bundles: [...items('bundles'), ...items('storebundles'), ...items('itchbundles')].filter(bundleWanted),
@@ -199,7 +221,7 @@ export function assembleDeals(rawSettings, cache, history, now = Date.now(), err
   for (const name of Object.keys(enabled)) {
     if (!enabled[name]) continue;
     status[name] = errors[name]
-      ? { ok: false, error: errors[name], at: cache[name]?.at || null }
+      ? { ok: false, error: errors[name], at: cache[name]?.at || null, stale: isStale(cache[name], now) }
       : { ok: true, count: counts[name] ?? 0, at: cache[name]?.at || null };
   }
 

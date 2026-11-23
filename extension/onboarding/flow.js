@@ -19,6 +19,14 @@ const enter = (step, d, seen) => {
 
 export const start = (steps, d) => enter(visibleSteps(steps, d)[0], d, []);
 
+// Reprise d'un tutoriel quitté en route : même page, si elle existe encore.
+export function resumeAt(steps, d, pos) {
+  const step = visibleSteps(steps, d).find((s) => s.id === pos?.step);
+  if (!step || !Array.isArray(pos.seen)) return start(steps, d);
+  const part = visibleParts(step, d).find((p) => p.id === pos.part);
+  return part ? at(step, part, pos.seen) : enter(step, d, pos.seen);
+}
+
 function locate(steps, d, pos) {
   const list = visibleSteps(steps, d);
   const i = Math.max(0, list.findIndex((s) => s.id === pos.step));

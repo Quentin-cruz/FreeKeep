@@ -164,6 +164,10 @@ a { color: inherit; }
   font-size: 12px;
 }
 
+.banner.info { background: rgba(96, 165, 250, .08); border-color: rgba(96, 165, 250, .3); color: #bfdbfe; }
+.banner a { color: inherit; font-weight: 600; }
+.banner .btn { margin-left: 4px; }
+
 /* ---------- Liste ---------- */
 .list {
   padding: 8px 14px 12px;

@@ -1,6 +1,8 @@
 // FreeKeep — réglages (onglets, enregistrement automatique)
 import { LEVELS, ALARM_NAME, INTERVALS, DEAL_SOURCES } from '../src/config.js';
-import { getSettings, saveSettings } from '../src/store.js';
+import { getSettings, saveSettings, getData } from '../src/store.js';
+import { originsFor, missingOrigins, requestAccess, siteName } from '../src/access.js';
+import { makeBackup, readBackup, MAX_FILE } from '../src/backup.js';
 import { wants } from '../src/prefs.js';
 import { formatAgo } from '../src/util.js';
 import { h, toggleCard, switchRow, selectRow, storeGrid, primeBox, genreChips, tagInput, levelCards, bundleBox, steamProfileField, steamSessionField, gogSessionField } from '../ui/components.js';
@@ -12,14 +14,28 @@ let tab = new URLSearchParams(location.search).get('tab') || 'profile';
 // ---------- Enregistrement ----------
 let saveTimer = null;
 let savedTimer = null;
+let backupNote = ''; // gardé quand l'onglet se redessine
+let asked = []; // sites utiles aux réglages déjà connus
 function save({ rerender = false } = {}) {
+  // Nouveau choix qui a besoin d'un site : le navigateur demande tout de suite (il faut être dans le clic).
+  const sites = originsFor(settings);
+  const added = sites.filter((o) => !asked.includes(o));
+  asked = sites;
+  if (added.length) requestAccess(added).then(renderAccess);
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async () => {
-    await saveSettings(settings);
+    let error = null;
+    try {
+      await saveSettings(settings);
+    } catch (e) {
+      error = /quota/i.test(e?.message) ? 'liste trop longue pour le navigateur' : e?.message || e;
+    }
     const el = $('#saved');
     el.hidden = false;
+    el.classList.toggle('ko', !!error);
+    el.textContent = error ? `⚠ Non enregistré : ${error}` : 'Enregistré ✓';
     clearTimeout(savedTimer);
-    savedTimer = setTimeout(() => (el.hidden = true), 1300);
+    if (!error) savedTimer = setTimeout(() => (el.hidden = true), 1300);
   }, 250);
   renderNav();
   if (rerender) renderPanel();
@@ -202,6 +218,37 @@ const PANELS = {
       reset.textContent = 'Réinitialiser';
     });
     setTimeout(refreshSources, 0);
+    const backupMsg = h('small', { class: 'backup-msg', role: 'status' }, backupNote);
+    const note = (text) => { backupNote = text; $('.backup-msg').textContent = text; };
+    const file = h('input', { type: 'file', accept: '.json,application/json', hidden: true });
+    file.addEventListener('change', async () => {
+      const f = file.files[0];
+      file.value = '';
+      if (!f) return;
+      try {
+        if (f.size > MAX_FILE) throw new Error('fichier trop gros');
+        const saved = readBackup(await f.text());
+        await saveSettings({ ...settings, ...saved.settings });
+        const res = await chrome.runtime.sendMessage({ type: 'importStates', states: saved.states, dealStates: saved.dealStates });
+        if (res?.error) throw new Error(res.error);
+        settings = await getSettings();
+        asked = originsFor(settings);
+        renderAccess();
+        const n = Object.values(saved.states).filter((s) => s.claimed && s.snapshot).length;
+        backupNote = `✔ Importé : réglages et ${n} jeu${n > 1 ? 'x' : ''} récupéré${n > 1 ? 's' : ''}.`;
+        renderNav();
+        renderPanel();
+      } catch (e) {
+        note(`⚠ Import impossible : ${e.message}`);
+      }
+    });
+    const exportBackup = async () => {
+      const blob = new Blob([JSON.stringify(makeBackup(settings, await getData()), null, 1)], { type: 'application/json' });
+      const a = h('a', { href: URL.createObjectURL(blob), download: `freekeep-${new Date().toISOString().slice(0, 10)}.json` });
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+      note('✔ Fichier créé dans tes téléchargements.');
+    };
     const dept = h('input', { type: 'text', class: 'short', value: settings.departments || '', placeholder: 'ex. 80, 60' });
     let t = null;
     dept.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => set('departments')(dept.value.trim()), 500); });
@@ -216,16 +263,29 @@ const PANELS = {
         selectRow({ title: 'Garder les deals pendant', value: settings.dealMaxAgeDays, options: [[3, '3 jours'], [7, '7 jours'], [14, '14 jours']], onChange: (v) => set('dealMaxAgeDays')(Number(v)) }),
       )),
       box('Données', null, h('div', { class: 'rows' },
+        h('div', { class: 'row' }, h('span', { class: 'row-text' }, h('strong', {}, 'Sauvegarde'), h('small', {}, 'Réglages, jeux récupérés et éléments masqués, pour un autre PC ou une réinstallation. La clé GG.deals n’y est pas.'), backupMsg),
+          h('button', { type: 'button', class: 'btn', onclick: exportBackup }, 'Exporter'), h('button', { type: 'button', class: 'btn', onclick: () => file.click() }, 'Importer'), file),
+        switchRow({ title: 'Me prévenir des nouvelles versions', desc: 'Lit une fois par jour le numéro de version sur GitHub. Rien n’est envoyé ni installé.', checked: settings.checkUpdates, onChange: set('checkUpdates') }),
         h('div', { class: 'row' }, h('span', { class: 'row-text' }, h('strong', {}, 'Tout réinitialiser'), h('small', {}, 'Efface l’historique des jeux récupérés, les éléments masqués et le cache. Les réglages sont conservés.')), reset))),
       h('p', { class: 'credits' }, 'Sources : Epic Games Store, Steam, ',
         h('a', { href: 'https://www.gamerpower.com', target: '_blank' }, 'GamerPower'), ', ',
         h('a', { href: 'https://www.cheapshark.com', target: '_blank' }, 'CheapShark'), ' (prix convertis au taux de la Banque centrale européenne), GOG, EA, eShop Nintendo, Eneba, Kinguin, Instant Gaming, Fanatical, Humble Bundle, ',
         h('a', { href: 'https://barter.vg', target: '_blank' }, 'Barter.vg'), ', ',
         h('a', { href: 'https://www.dealabs.com', target: '_blank' }, 'Dealabs'), ', ',
-        h('a', { href: 'https://gg.deals', target: '_blank' }, 'GG.deals'), ', SteamSpy. FreeKeep<3 n’est affilié à aucun de ces services.'),
+        h('a', { href: 'https://gg.deals', target: '_blank' }, 'GG.deals'), '. FreeKeep<3 n’est affilié à aucun de ces services.'),
     ];
   },
 };
+
+// Sites refusés ou pas encore demandés
+async function renderAccess() {
+  const missing = await missingOrigins(settings);
+  const bar = $('#access');
+  bar.hidden = !missing.length;
+  bar.replaceChildren(
+    h('span', {}, `🔒 ${missing.length} site${missing.length > 1 ? 's' : ''} à autoriser : `, h('small', {}, missing.map(siteName).join(', '))),
+    h('button', { type: 'button', class: 'btn primary', onclick: () => requestAccess(missing).then(renderAccess) }, 'Autoriser'));
+}
 
 function renderPanel() {
   if (!TABS.find((t) => t.id === tab && (!t.show || t.show()))) tab = 'profile';
@@ -336,7 +396,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (card) refreshLibCard(card);
   }
   // Réglages modifiés ailleurs (tutoriel) : on recharge
-  if (area === 'sync' && changes.settings && JSON.stringify(changes.settings.newValue) !== JSON.stringify(settings)) {
+  if ((area === 'sync' && changes.settings || area === 'local' && changes.ggdealsKey) && JSON.stringify(changes.settings?.newValue) !== JSON.stringify(settings)) {
     getSettings().then((s) => {
       if (JSON.stringify(s) === JSON.stringify(settings)) return;
       settings = s;
@@ -345,11 +405,15 @@ chrome.storage.onChanged.addListener((changes, area) => {
     });
   }
 });
+chrome.permissions.onAdded.addListener(renderAccess);
+chrome.permissions.onRemoved.addListener(renderAccess);
 setInterval(refreshSources, 30 * 1000);
 
 (async () => {
   settings = await getSettings();
   if (!LEVELS[settings.level] && settings.level !== 'custom') settings.level = 'balanced';
+  asked = originsFor(settings);
+  renderAccess();
   renderNav();
   renderPanel();
 })();

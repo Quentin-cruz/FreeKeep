@@ -1,10 +1,16 @@
 // Pages et catégories du tutoriel. Une catégorie = une chose à faire, montrée par la flèche.
-// part : { id, title, hint?, optional?, when?(d), valid?(d), invalidMsg?, body?(d) }
+// part : { id, title, hint?, optional?, when?(d), valid?(d), invalidMsg?, body?(d, ctx) }
 // ask : une seule réponse à donner, la flèche repart aussitôt.
+// step.leave(d) : appelé dans le clic qui quitte la page.
 // step.build(d) sert aux pages dont les catégories partagent des données : { before?, bodies: { [id]: élément } }
 import { STORES, STORE_ORDER, PC_STORE_ORDER, PRIME_STORES, BUNDLE_STORES, LEVELS, INTERVALS } from '../src/config.js';
 import { GENRE_BY_ID } from '../src/genres.js';
+import { originsFor, requestAccess, siteName } from '../src/access.js';
 import { h, toggleCard, switchRow, storeGrid, bundleSites, yesNo, choiceChips, more, genreChips, tagInput, levelCards, steamProfileField, steamSessionField, gogSessionField } from '../ui/components.js';
+
+// Sites déjà autorisés (tenu à jour par onboarding.js) : une question ne peut pas attendre une réponse du navigateur.
+export const allowed = new Set();
+export const missing = (d) => originsFor(d).filter((o) => !allowed.has(o));
 
 export const anyDeals = (d) => (d.pc && (d.pcDeals || d.bundles)) || (d.switch && d.switchDeals);
 export const anyStore = (d) => PC_STORE_ORDER.some((s) => d.stores[s]) || (d.prime && PRIME_STORES.some((s) => d.stores[s]));
@@ -116,6 +122,7 @@ export const STEPS = [
   },
   {
     id: 'content',
+    leave: (d) => requestAccess(missing(d)), // refusé ou passé : redemandé une fois au clic sur « Continuer »
     title: 'Tes envies',
     valid: (d) => (d.pc && (d.freeGames || d.pcDeals || d.bundles)) || (d.switch && d.switchDeals),
     invalidMsg: 'Active au moins une catégorie.',
@@ -153,6 +160,19 @@ export const STEPS = [
         title: 'Les sites de clés aussi ?',
         hint: 'Eneba, Instant Gaming, G2A… Moins cher, mais pas officiel.',
         body: (d) => yesNo({ value: d.keyshops, yes: { icon: '🔑' }, onChange: (v) => { d.keyshops = v; } }),
+      },
+      {
+        id: 'access',
+        title: 'Autorise la lecture de ces sites',
+        hint: 'Ton navigateur va te demander confirmation.',
+        when: (d) => missing(d).length > 0,
+        body: (d, { changed }) => {
+          const ask = () => requestAccess(missing(d)).then(changed);
+          const names = () => originsFor(d).map(siteName).join(', ');
+          const list = h('p', {}, names());
+          return [h('button', { type: 'button', class: 'btn primary', 'data-manual': true, onclick: ask }, '🔓 Autoriser'),
+            h('details', { class: 'help more', ontoggle: () => { list.textContent = names(); } }, h('summary', {}, 'Voir les sites'), list)];
+        },
       },
     ],
   },
@@ -323,7 +343,7 @@ export const STEPS = [
         id: 'autoClick',
         ask: true,
         title: 'Cliquer sur « Obtenir » à ta place ?',
-        hint: 'Expérimental. Jamais d’achat payant.',
+        hint: 'Expérimental : agit sur ton compte du store. Jamais d’achat payant.',
         when: (d) => d.pc && d.freeGames,
         body: (d) => yesNo({ value: d.autoClick, yes: { icon: '🖱️', desc: 'Quand tu cliques « Récupérer »' }, onChange: (v) => { d.autoClick = v; } }),
       },

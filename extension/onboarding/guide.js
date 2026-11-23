@@ -11,7 +11,7 @@ export function arrow(className) {
 }
 
 // Construit les catégories d'une page. `onGo(partId)` : clic sur un titre ; `onTouch(partId)` : réponse modifiée.
-export function buildParts(step, d, { onGo, onTouch }) {
+export function buildParts(step, d, { onGo, onTouch, changed }) {
   const built = step.build ? step.build(d) : {};
   const rows = new Map();
   const root = h('div', { class: `guide${step.parts.length === 1 ? ' single' : ''}` });
@@ -21,11 +21,11 @@ export function buildParts(step, d, { onGo, onTouch }) {
       num, h('span', { class: 'part-title' }, part.title, part.optional ? h('em', {}, 'facultatif') : null));
     const inner = h('div', { class: 'part-inner' },
       part.hint ? h('p', { class: 'part-hint' }, part.hint) : null,
-      part.body ? part.body(d) : built.bodies?.[part.id]);
+      part.body ? part.body(d, { changed }) : built.bodies?.[part.id]);
     const body = h('div', { class: 'part-body' }, inner);
     const el = h('section', { class: 'part', 'data-part': part.id }, head, body);
     inner.addEventListener('change', () => onTouch(part.id));
-    inner.addEventListener('click', (e) => { if (e.target.closest('button')) onTouch(part.id); });
+    inner.addEventListener('click', (e) => { if (e.target.closest('button:not([data-manual])')) onTouch(part.id); });
     rows.set(part.id, { part, el, head, body, num });
     root.append(el);
   }

@@ -11,6 +11,8 @@
     : /steampowered\.com$/.test(host) ? 'steam'
     : /gog\.com$/.test(host) ? 'gog'
     : /ubisoft\.com$/.test(host) ? 'ubisoft'
+    : /\.itch\.io$/.test(host) ? 'itch'
+    : /^freebies\.indiegala\.com$/.test(host) ? 'indiegala'
     : null;
   if (!STORE) return;
 
@@ -42,6 +44,17 @@
       claim: ['get it for free', 'get for free', 'obtenir gratuitement', 'obtenez le gratuitement', 'recuperer gratuitement', 'telecharger gratuitement', 'free download'],
       owned: ['owned', 'possede', 'deja possede', 'in your library', 'dans votre bibliotheque'],
       success: ['added to your library', 'is now in your library', 'ajoute a votre bibliotheque', 'est maintenant dans votre bibliotheque', 'thank you for your order', 'merci pour votre commande'],
+    },
+    // itch.io : « Download or claim » → « No thanks, just take me to the downloads » → « Claim ». Jamais le bouton d'achat.
+    itch: {
+      claim: ['download or claim', 'no thanks just take me to the downloads', 'claim', 'claim game'],
+      owned: [],
+      success: ['you own this game', 'you claimed this', 'you ve claimed this', 'this game has been claimed'],
+    },
+    indiegala: {
+      claim: ['add to your library'],
+      owned: ['in your library', 'already in your library'],
+      success: ['product added to your library', 'added to your library', 'already in your library'],
     },
   }[STORE];
 
@@ -145,10 +158,16 @@
   const send = (msg) => chrome.runtime.sendMessage(msg).catch(() => null);
 
   // ---------- Boucle principale ----------
+  let onOwned = null;
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg?.type === 'freekeep:owned' && TOP) onOwned?.(msg.title);
+  });
+
   async function main() {
-    const info = await send({ type: 'claim:hello', url: location.href, top: TOP });
+    const info = await send({ type: 'claim:hello', url: location.href, title: document.title, top: TOP });
     if (!info?.game) return;
     const { linked, autoClick, owned, game } = info;
+    const page = location.pathname;
 
     if (owned) {
       if (linked) toast(`${game.title} est déjà marqué comme récupéré.`, 'ok');
@@ -168,9 +187,7 @@
       toast(msg, 'ok');
     };
 
-    chrome.runtime.onMessage.addListener((msg) => {
-      if (msg?.type === 'freekeep:owned' && TOP && !done) finish(`${msg.title} est dans ta bibliothèque. Marqué comme récupéré ✓`);
-    });
+    onOwned = (title) => { if (!done) finish(`${title} est dans ta bibliothèque. Marqué comme récupéré ✓`); };
 
     if (linked && TOP && !autoClick) {
       toast(`Clique sur le bouton de récupération pour ajouter ${game.title}. FreeKeep<3 détectera l'ajout.`, 'info', true);
@@ -178,6 +195,14 @@
 
     const tick = async () => {
       if (done) return;
+      // Le site a changé de page sans recharger : on repart de zéro, c'est peut-être un autre jeu.
+      if (location.pathname !== page) {
+        done = true;
+        clearInterval(timer);
+        toastHost?.remove();
+        main();
+        return;
+      }
       if (Date.now() - started > maxDuration) return clearInterval(timer);
 
       if (isOwned(linked)) {

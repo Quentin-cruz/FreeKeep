@@ -21,6 +21,10 @@ function storageArea() {
       await tick();
       Object.assign(data, copy);
     },
+    async remove(keys) {
+      await tick();
+      for (const k of [].concat(keys)) delete data[k];
+    },
     async clear() {
       await tick();
       data = {};
@@ -140,7 +144,7 @@ test('Deux « Récupérer » rapprochés : les deux onglets restent suivis', asy
   const [a, b] = await setup();
   await Promise.all([send({ type: 'openClaim', key: a.key }), send({ type: 'openClaim', key: b.key })]);
   const { claimTabs } = await chrome.storage.session.get('claimTabs');
-  assert.deepEqual(Object.values(claimTabs).sort(), [a.key, b.key].sort());
+  assert.deepEqual(Object.values(claimTabs).map((t) => t.key).sort(), [a.key, b.key].sort());
 });
 
 test('Tout effacer pendant une vérification : les anciennes données ne reviennent pas', async () => {
@@ -361,4 +365,84 @@ test('Jeux Prime sans abonnement : comptés, pas affichés', async () => {
   } finally {
     globalThis.fetch = real;
   }
+});
+
+test('« Récupérer » puis un autre jeu dans le même onglet : FreeKeep<3 n’y touche pas', async () => {
+  await setup();
+  const g = { key: 'steam:111', keys: ['steam:111'], store: 'steam', appid: '111', title: 'Jeu A', status: 'active', url: 'https://store.steampowered.com/app/111/' };
+  const sync = await chrome.storage.sync.get('settings');
+  await chrome.storage.sync.set({ settings: { ...sync.settings, autoClick: true } });
+  await chrome.storage.local.set({ games: [g], states: {} });
+  await send({ type: 'openClaim', key: g.key });
+  const tab = { id: nextTab - 1 };
+  const hello = (url, top = true) => send({ type: 'claim:hello', url, title: '', top }, { tab });
+  assert.equal((await hello('https://store.steampowered.com/app/111/Jeu_A/')).linked, true);
+  assert.deepEqual(await hello('https://store.steampowered.com/app/999/Autre/'), { linked: false, game: null });
+  // Cadre de commande : actif seulement si la dernière page vue est celle du jeu
+  assert.equal((await hello('https://store.epicgames.com/purchase', false)).linked, false);
+  await hello('https://store.steampowered.com/app/111/');
+  assert.equal((await hello('https://store.epicgames.com/purchase', false)).linked, true);
+});
+
+test('Tutoriel quitté en route : réponses gardées et alertes après 30 min', async () => {
+  await setup();
+  await chrome.storage.local.clear();
+  const settings = { ...structuredClone(DEFAULT_SETTINGS), onboarded: false };
+  await chrome.storage.sync.set({ settings });
+  const { getSettings, saveDraft } = await import('../extension/src/store.js');
+  const base = JSON.stringify(await getSettings());
+  const draft = { ...(await getSettings()), intervalHours: 1 };
+  const go = async (at) => {
+    await saveDraft({ draft, pos: null, base, at });
+    await chrome.storage.local.set({ meta: { firstSeen: at } });
+    notified = [];
+    await send({ type: 'refresh' });
+    return (await getSettings()).intervalHours;
+  };
+  assert.equal(await go(Date.now() - 60e3), DEFAULT_SETTINGS.intervalHours, 'tutoriel en cours : rien ne bouge');
+  assert.deepEqual(notified, []);
+  await chrome.storage.local.set({ seen: [], meta: {} });
+  assert.equal(await go(Date.now() - 31 * 60e3), 1);
+  assert.equal((await getSettings()).onboarded, false, 'le popup propose toujours de le finir');
+  assert.ok(notified.length > 0);
+});
+
+test('Réglages : longues listes de licences découpées, clé GG.deals hors synchronisation', async () => {
+  const { getSettings, saveSettings, migrateKey } = await import('../extension/src/store.js');
+  await setup();
+  const words = Array.from({ length: 900 }, (_, i) => `licence très longue numéro ${i}`);
+  await saveSettings({ ...(await getSettings()), bannedKeywords: words, ggdealsKey: 'secret' });
+  const raw = await chrome.storage.sync.get(null);
+  for (const [k, v] of Object.entries(raw)) assert.ok(new TextEncoder().encode(k + JSON.stringify(v)).length < 8192, k);
+  assert.ok(!JSON.stringify(raw).includes('secret'));
+  const back = await getSettings();
+  assert.deepEqual(back.bannedKeywords, words);
+  assert.equal(back.ggdealsKey, 'secret');
+  assert.ok(!('bannedChunks' in back));
+  // Un mot changé se voit dans `settings` (sinon rien ne serait revérifié)
+  await saveSettings({ ...back, bannedKeywords: [...words.slice(0, -1), 'autre'] });
+  assert.notDeepEqual((await chrome.storage.sync.get('settings')).settings, raw.settings);
+  // Liste raccourcie : plus de morceaux oubliés
+  await saveSettings({ ...back, bannedKeywords: ['LEGO'] });
+  assert.deepEqual(Object.keys(await chrome.storage.sync.get(null)), ['settings']);
+  assert.deepEqual((await getSettings()).bannedKeywords, ['LEGO']);
+  // Ancienne version : la clé était synchronisée
+  await chrome.storage.local.clear();
+  await chrome.storage.sync.set({ settings: { ...DEFAULT_SETTINGS, ggdealsKey: 'ancienne' } });
+  assert.equal((await getSettings()).ggdealsKey, 'ancienne');
+  await migrateKey();
+  assert.ok(!('ggdealsKey' in (await chrome.storage.sync.get('settings')).settings));
+  assert.equal((await getSettings()).ggdealsKey, 'ancienne');
+  await send({ type: 'resetData' });
+  assert.equal((await getSettings()).ggdealsKey, 'ancienne', 'Réinitialiser garde les réglages');
+});
+
+test('Importer une sauvegarde ne perd aucun jeu récupéré', async () => {
+  const [a, b] = await setup();
+  await send({ type: 'setClaimed', key: a.key, claimed: true });
+  await send({ type: 'importStates', states: { [b.key]: { claimed: true, claimedAt: 5, snapshot: { title: 'B' } }, [a.key]: { hidden: true } }, dealStates: { x: { hidden: true, at: 1 } } });
+  const { states, dealStates } = await send({ type: 'getState' });
+  assert.ok(states[a.key].claimed && states[a.key].hidden && states[b.key].claimed);
+  assert.equal(states[b.key].claimedAt, 5);
+  assert.ok(dealStates.x.hidden);
 });

@@ -1,5 +1,9 @@
 {
   "name": "freekeep-dev",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:edge": "node tests/e2e/edge.mjs"
+  }
 }

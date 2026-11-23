@@ -11,7 +11,6 @@ import { enrichAppInfo } from './src/sources/steamapps.js';
 import { resolveSteamIds } from './src/sources/steamsearch.js';
 import { fetchSteamItems } from './src/sources/steamstore.js';
 import { worthInEur, DEFAULT_USD_EUR } from './src/sources/rates.js';
-import { needsTags } from './src/genres.js';
 import { mergeGames } from './src/merge.js';
 import { refreshDeals, fetchDealSources, assembleDeals } from './src/refresh-deals.js';
 import { fetchLootScraper } from './src/sources/lootscraper.js';
@@ -19,8 +18,13 @@ import { tasteFrom, genresToHide, rankFranchises, filterHits, recommendedLevel, 
 import { isExceptional, scoreDeal } from './src/deals.js';
 import { effective, wants, hiddenReason, makeOwnedIndex, sameGameStrict, extractGameName, steamOnly, showsGame } from './src/prefs.js';
 import {
-  getSettings, getData, saveData, locked, updateData, stateFor, patchState, keysForHistory, getClaimTabs, updateClaimTabs,
+  getSettings, saveSettings, migrateKey, getDraft, saveDraft, getData, saveData, locked, updateData, stateFor, patchState, keysForHistory, getClaimTabs, updateClaimTabs,
 } from './src/store.js';
+import { isNewer, fetchLatestVersion, CHECK_EVERY } from './src/update.js';
+import { mergeStates } from './src/backup.js';
+import { deniedSources, missingOrigins, syncClaimScripts, DENIED } from './src/access.js';
+import { pausedError, noteFailure, noteSuccess, checkDrop } from './src/health.js';
+import { isGamePage, isNextStep, isProductPage, matchByUrl, steamApp } from './src/claim.js';
 import { formatDate, formatDuration, formatPrice } from './src/util.js';
 
 const SOURCES = ['epic', 'steam', 'lootscraper', 'gamerpower']; // ordre de priorité pour la fusion
@@ -38,6 +42,8 @@ const storeName = (g) => STORES[g.store]?.short || g.store;
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
+  await migrateKey().catch((e) => console.warn('[FreeKeep] clé GG.deals :', e));
+  await updateScripts();
   await scheduleAlarm();
   const settings = await getSettings();
   // Tutoriel au premier lancement (et après une mise à jour si jamais fait)
@@ -49,17 +55,26 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
 
 chrome.runtime.onStartup.addListener(async () => {
   await scheduleAlarm();
+  await updateScripts();
   const { meta } = await getData();
   if (!meta.lastRefresh || Date.now() - meta.lastRefresh > 60 * 60 * 1000) refresh('startup');
   else updateBadge();
 });
+
+// Accès à un site accordé ou retiré
+const updateScripts = () => syncClaimScripts().catch((e) => console.warn('[FreeKeep] pages des stores :', e));
+chrome.permissions?.onAdded.addListener(async () => {
+  await updateScripts();
+  settingsRefresh(['dealabs', 'goglib', 'rate', ...DEAL_SOURCES]);
+});
+chrome.permissions?.onRemoved.addListener(updateScripts);
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) refresh('alarm');
 });
 
 // Réglages qui ne demandent qu'un nouveau tri (pas de nouveau téléchargement)
-const CHEAP_SETTINGS = ['notifyNew', 'notifyLastDay', 'notifyDeals', 'notifyWishlist', 'autoClick', 'intervalHours', 'onboarded'];
+const CHEAP_SETTINGS = ['notifyNew', 'notifyLastDay', 'notifyDeals', 'notifyWishlist', 'autoClick', 'intervalHours', 'onboarded', 'checkUpdates'];
 // Réglages qui changent ce qu'on demande aux API
 const REFETCH_SETTINGS = ['pc', 'switch', 'stores', 'ggdealsKey', 'keyshops', 'bundles', 'pcDeals', 'switchDeals'];
 const LIBRARY_SETTINGS = ['steamProfile', 'steamOwnedSync', 'useWishlist'];
@@ -70,6 +85,8 @@ const changedSettings = (a, b) => Object.keys({ ...a, ...b }).filter((k) => JSON
 const needsRefresh = (changed) => changed.some((k) => !CHEAP_SETTINGS.includes(k));
 
 chrome.storage.onChanged.addListener((changes, area) => {
+  // Clé GG.deals : gardée sur cet ordinateur, hors des réglages synchronisés
+  if (area === 'local' && changes.ggdealsKey && (changes.ggdealsKey.oldValue || '') !== (changes.ggdealsKey.newValue || '')) settingsRefresh(['ggdeals', 'watchlist']);
   if (area !== 'sync' || !changes.settings) return;
   const before = changes.settings.oldValue || {};
   const after = changes.settings.newValue || {};
@@ -125,8 +142,19 @@ let next = null;    // vérification à lancer juste après
 
 function start(reason, force) {
   current = { settings: null, force };
-  running = doRefresh(reason, force).finally(() => { running = null; });
+  running = keepAlive(doRefresh(reason, force)).finally(() => { running = null; });
   return running;
+}
+
+// Le navigateur arrête un service worker inactif depuis 30 s, même s'il attend encore une réponse.
+// Un appel régulier à une API de l'extension le garde éveillé, seulement le temps du travail.
+async function keepAlive(work) {
+  const beat = setInterval(() => chrome.runtime.getPlatformInfo?.().catch(() => {}), 20 * 1000);
+  try {
+    return await work;
+  } finally {
+    clearInterval(beat);
+  }
 }
 
 /**
@@ -149,7 +177,26 @@ function refresh(reason = 'manual', { force = [], fresh = false } = {}) {
   return next.promise;
 }
 
+// Tutoriel quitté en route depuis 30 min : les réponses déjà données s'appliquent, et les alertes démarrent.
+const TUTORIAL_QUIET = 30 * 60 * 1000;
+async function adoptDraft(now) {
+  const saved = await getDraft();
+  if (!saved?.draft || saved.adopted || now - saved.at < TUTORIAL_QUIET) return;
+  const settings = await getSettings();
+  if (settings.onboarded || saved.base !== JSON.stringify(settings) || !(saved.draft.pc || saved.draft.switch)) return;
+  await saveSettings({ ...saved.draft, onboarded: false });
+  await saveDraft({ ...saved, base: JSON.stringify(await getSettings()), adopted: true });
+}
+
+// Pas d'alerte pendant le tutoriel ; s'il n'est jamais fini, elles démarrent quand même au bout de 30 min.
+async function tutorialRunning(settings, meta, now) {
+  if (settings.onboarded) return false;
+  const saved = await getDraft();
+  return now - Math.max(meta.firstSeen || now, saved?.at || 0) < TUTORIAL_QUIET;
+}
+
 async function doRefresh(reason, force) {
+  await adoptDraft(Date.now()).catch((e) => console.warn('[FreeKeep] tutoriel :', e));
   const rawSettings = await getSettings();
   current.settings = rawSettings;
   const settings = effective(rawSettings);
@@ -157,6 +204,7 @@ async function doRefresh(reason, force) {
   const data = await getData();
   const enabled = w.free ? w.stores : [];
   const now = Date.now();
+  const denied = await deniedSources();
 
   // ---- 1. Jeux gratuits ----
   const jobs = {
@@ -169,11 +217,23 @@ async function doRefresh(reason, force) {
   await Promise.all(
     SOURCES.map(async (name) => {
       if (!jobs[name]) return;
-      if (reason === 'alarm' && data.cache[name] && now - data.cache[name].at < FREE_GAP) return;
+      if (denied.has(name)) {
+        errors[name] = DENIED;
+        return;
+      }
+      if (reason === 'alarm') {
+        const paused = pausedError(data.cache, name, now);
+        if (paused) errors[name] = paused;
+        if (paused || (data.cache[name] && now - data.cache[name].at < FREE_GAP)) return;
+      }
       try {
-        data.cache[name] = { items: await jobs[name](), at: Date.now() };
+        const got = { items: await jobs[name](), at: Date.now() };
+        checkDrop(data.cache[name], got, now, name === 'epic' ? 1 : 5); // Epic offre toujours au moins un jeu
+        data.cache[name] = got;
+        noteSuccess(data.cache, name);
       } catch (e) {
         errors[name] = String(e?.message || e);
+        noteFailure(data.cache, name, errors[name], now);
         console.warn(`[FreeKeep] source ${name} :`, e);
       }
     }),
@@ -195,7 +255,7 @@ async function doRefresh(reason, force) {
       ? { ok: false, error: data.steamLib.error, at: data.steamLib.at }
       : { ok: true, count: data.steamLib.count || 0, at: data.steamLib.at };
   }
-  await syncGogLibrary(settings, data, now, force.includes('goglib'));
+  await syncGogLibrary(settings, data, now, force.includes('goglib'), denied);
   if (data.gogLib?.at) {
     sourceStatus.goglib = data.gogLib.error
       ? { ok: false, error: data.gogLib.error, at: data.gogLib.at }
@@ -213,11 +273,14 @@ async function doRefresh(reason, force) {
   let rate = DEFAULT_USD_EUR;
   let wishNames = [];
   try {
-    ({ deals, freebies, errors: dealErrors, status: dealStatus, rate, wishNames } = await refreshDeals(settings, data.dealCache, data.dealHistory, now, force, { wishlist }));
+    ({ deals, freebies, errors: dealErrors, status: dealStatus, rate, wishNames } = await refreshDeals(settings, data.dealCache, data.dealHistory, now, force, { wishlist, denied }));
   } catch (e) {
     dealErrors = { bons_plans: String(e?.message || e) };
     console.warn('[FreeKeep] bons plans :', e);
   }
+
+  // Ce qui est téléchargé est gardé tout de suite : si le navigateur coupe la suite, rien n'est à refaire.
+  await locked(() => saveData({ cache: data.cache, dealCache: data.dealCache, steamLib: data.steamLib, gogLib: data.gogLib, steamNames: data.steamNames }));
 
   // Fusion des jeux gratuits. Si une source échoue, on réutilise son dernier résultat (s'il a moins de 3 jours).
   // Les jeux offerts repérés sur Dealabs (Prime, Microsoft Store, Battle.net…) passent en dernier.
@@ -242,7 +305,7 @@ async function doRefresh(reason, force) {
   if ((settings.excludedGenres || []).length) {
     const appids = [...games.map((g) => g.appid), ...deals.map((d) => d.steamAppID)].filter(Boolean);
     try {
-      await enrichAppInfo(appids, data.appInfo, { withTags: needsTags(settings.excludedGenres), adult: settings.excludedGenres.includes('adult'), now });
+      await enrichAppInfo(appids, data.appInfo, { now });
     } catch (e) {
       console.warn('[FreeKeep] genres Steam :', e);
     }
@@ -272,6 +335,7 @@ async function doRefresh(reason, force) {
   }).sort((a, b) => b.score - a.score);
 
   const sessionIds = await steamSessionIds(games, data.states, settings);
+  const update = await checkUpdate(settings, data.meta.update, now);
 
   // ---- 6. Enregistrement ----
   // Les téléchargements prennent plusieurs secondes : on relit ce que l'utilisateur a pu changer entre-temps
@@ -283,7 +347,10 @@ async function doRefresh(reason, force) {
     markSteamOwned(games, data.states, data.steamLib, sessionIds);
     syncGogOwned(games, data.states, owned);
     const latest = await getSettings();
+    data.meta.firstSeen ||= now;
+    data.meta.update = update;
     await finishRefresh({
+      quiet: await tutorialRunning(latest, data.meta, now),
       data, games, deals, now, reason, errors, dealErrors,
       sources: { ...sourceStatus, ...dealStatus }, primeHidden,
       // Réglages de notification du moment, même coupés en cours de route
@@ -296,12 +363,25 @@ async function doRefresh(reason, force) {
   return { ok: true, errors, dealErrors };
 }
 
+// Nouvelle version sur GitHub (une lecture par jour, sauf extension installée depuis un store).
+async function checkUpdate(settings, last, now) {
+  const manifest = chrome.runtime.getManifest?.();
+  if (!settings.checkUpdates || !manifest || manifest.update_url) return null;
+  if (last && now - last.at < CHECK_EVERY) return last;
+  try {
+    const version = await fetchLatestVersion();
+    return { at: now, version: isNewer(version, manifest.version) ? version : null };
+  } catch (e) {
+    console.warn('[FreeKeep] nouvelle version :', e);
+    return { at: now, version: last?.version || null };
+  }
+}
+
 // Notifications + enregistrement (appelé sous verrou).
-async function finishRefresh({ data, games, deals, settings, now, reason, errors, dealErrors, sources, outdated, primeHidden }) {
-  // Pas de notification pendant le tutoriel
+async function finishRefresh({ quiet, data, games, deals, settings, now, reason, errors, dealErrors, sources, outdated, primeHidden }) {
   const visibleGames = games.filter((g) => !g.hiddenBy);
   const visibleDeals = deals.filter((d) => !d.hiddenBy);
-  if (settings.onboarded) {
+  if (!quiet) {
     if (!outdated) {
       notifyChanges(visibleGames, data, settings, now);
       notifyDeals(visibleDeals, data, settings);
@@ -333,8 +413,9 @@ const gogError = (e) => {
   return /HTTP 40[13]|JSON|Unexpected token|pas connecté/i.test(m) ? 'pas connecté à gog.com dans ce navigateur' : m;
 };
 
-async function syncGogLibrary(settings, data, now, force) {
+async function syncGogLibrary(settings, data, now, force, denied) {
   const lib = data.gogLib || {};
+  if (denied.has('goglib')) return false;
   if (!(settings.pc && settings.stores?.gog && settings.gogSessionSync)) {
     data.gogLib = {};
     return !!lib.at;
@@ -658,7 +739,7 @@ async function openClaim(key, { active = true } = {}) {
   if (!g) return;
   const url = stateFor(states, g).resolvedUrl || g.url;
   const tab = await chrome.tabs.create({ url, active });
-  await updateClaimTabs((tabs) => { tabs[tab.id] = g.key; });
+  await updateClaimTabs((tabs) => { tabs[tab.id] = { key: g.key, on: false }; });
 }
 
 async function openAll() {
@@ -677,44 +758,27 @@ async function openAll() {
 // Dialogue avec les pages des stores (content/claim.js)
 // ---------------------------------------------------------------------------
 
-const PRODUCT_PAGE = [
-  /^https:\/\/store\.epicgames\.com\/[^/]+\/(?:p|bundles)\/[^/?#]+/,
-  /^https:\/\/store\.steampowered\.com\/app\/\d+/,
-  /^https:\/\/www\.gog\.com\/(?:[a-z]{2}\/)?game\/[^/?#]+/,
-  /^https:\/\/store\.ubisoft\.com\/.+\.html/,
-  /^https:\/\/register\.ubisoft\.com\/[^/?#]+/,
-];
-const isProductPage = (url) => PRODUCT_PAGE.some((re) => re.test(url || ''));
-
-const cleanUrl = (u) =>
-  String(u || '').split(/[?#]/)[0].replace(/\/$/, '').replace(/\/(?:fr|en|en-us|fr-fr|fr-FR|en-US)(?=\/)/, '');
-
-function matchByUrl(games, states, url) {
-  if (!url) return null;
-  const epicSlug = /store\.epicgames\.com\/[^/]+\/(?:p|bundles)\/([^/?#]+)/.exec(url)?.[1];
-  const appid = /store\.steampowered\.com\/app\/(\d+)/.exec(url)?.[1];
-  return (
-    games.find((g) => {
-      const s = stateFor(states, g);
-      if (epicSlug) return g.store === 'epic' && (g.slug === epicSlug || cleanUrl(s.resolvedUrl).endsWith(`/${epicSlug}`));
-      if (appid) return g.store === 'steam' && String(g.appid || s.appid) === appid;
-      return !!s.resolvedUrl && cleanUrl(s.resolvedUrl) === cleanUrl(url);
-    }) || null
-  );
-}
-
 async function claimHello(msg, sender) {
   const tabId = sender.tab?.id;
   const [settings, data, tabs] = await Promise.all([getSettings(), getData(), getClaimTabs()]);
-  const linkedKey = tabId != null ? tabs[tabId] : null;
-  const game = linkedKey ? findGame(data.games, linkedKey) : matchByUrl(data.games, data.states, msg.url);
+  const claim = tabId != null ? tabs[tabId] : null;
+  const claimed = claim ? findGame(data.games, claim.key) : null;
+  // Onglet ouvert par « Récupérer » : on n'agit que sur la page de CE jeu (et l'étape qui la suit), jamais
+  // sur un autre jeu visité ensuite dans le même onglet.
+  let linked = false;
+  if (claimed) {
+    const step = isNextStep(msg.url);
+    linked = !msg.top || step ? !!claim.on : isGamePage(claimed, stateFor(data.states, claimed), msg.url, msg.title);
+    if (msg.top && !step && linked !== !!claim.on) await updateClaimTabs((t) => { if (t[tabId]) t[tabId].on = linked; });
+  }
+  const game = linked ? claimed : msg.top ? matchByUrl(data.games, (g) => stateFor(data.states, g), msg.url) : null;
   if (!game) return { linked: false, game: null };
 
   const s = stateFor(data.states, game);
   // Lien GamerPower -> on mémorise la vraie page du store pour la suite.
-  if (linkedKey && msg.top && isProductPage(msg.url) && !s.resolvedUrl && /gamerpower\.com/.test(game.url)) {
+  if (linked && msg.top && isProductPage(msg.url) && !s.resolvedUrl && /gamerpower\.com/.test(game.url)) {
     const patch = { resolvedUrl: msg.url.split('#')[0] };
-    const appid = /store\.steampowered\.com\/app\/(\d+)/.exec(msg.url)?.[1];
+    const appid = steamApp(msg.url);
     if (appid) patch.appid = appid;
     await updateData(({ states }) => {
       patchState(states, game, patch);
@@ -723,7 +787,7 @@ async function claimHello(msg, sender) {
   }
 
   return {
-    linked: !!linkedKey,
+    linked,
     autoClick: settings.autoClick,
     owned: !!s.claimed,
     game: { key: game.key, title: game.title, store: game.store },
@@ -761,7 +825,7 @@ function libSummary(lib = {}) {
 async function publicState() {
   const [settings, data] = await Promise.all([getSettings(), getData()]);
   return {
-    settings, games: data.games, states: data.states, meta: data.meta, refreshing: !!(running || next),
+    settings, games: data.games, states: data.states, meta: data.meta, refreshing: !!(running || next), tutorialStarted: !!(await getDraft()), missing: await missingOrigins(settings),
     deals: data.deals, dealStates: data.dealStates, steamLib: libSummary(data.steamLib),
     gogLib: { username: data.gogLib?.username || '', count: data.gogLib?.count || 0, at: data.gogLib?.at || null, error: data.gogLib?.error || null },
   };
@@ -794,11 +858,14 @@ async function testSteamSession() {
 async function prefetch(draft) {
   while (running || next) await (next?.promise || running).catch(() => {});
   current = { settings: null, force: [] };
-  running = (async () => {
+  running = keepAlive((async () => {
     const data = await getData();
-    await fetchDealSources(draft, data.dealCache, Date.now(), [], { wishlist: data.steamLib?.wishlist || [] });
-    await locked(() => saveData({ dealCache: data.dealCache }));
-  })().finally(() => { running = null; });
+    await fetchDealSources(draft, data.dealCache, Date.now(), [], { wishlist: data.steamLib?.wishlist || [], denied: await deniedSources() });
+    // Tags Steam des annonces trouvées : sans eux, le nombre de jeux par genre serait faux.
+    const { deals } = assembleDeals({ ...draft, level: 'wide' }, data.dealCache, {}, Date.now());
+    await enrichAppInfo(deals.map((d) => d.steamAppID), data.appInfo).catch((e) => console.warn('[FreeKeep] genres Steam :', e));
+    await locked(() => saveData({ dealCache: data.dealCache, appInfo: data.appInfo }));
+  })()).finally(() => { running = null; });
   await running;
 }
 
@@ -899,9 +966,17 @@ async function handleMessage(msg, sender) {
     case 'resetData':
       // Une vérification en cours réenregistrerait les anciennes données : on la laisse finir d'abord.
       while (running || next) await (next?.promise || running).catch(() => {});
-      await locked(() => chrome.storage.local.clear());
+      await locked(async () => {
+        const { ggdealsKey } = await chrome.storage.local.get('ggdealsKey'); // un réglage, donc conservé
+        await chrome.storage.local.clear();
+        if (ggdealsKey) await chrome.storage.local.set({ ggdealsKey });
+      });
       await refresh('reset');
       return publicState();
+    case 'importStates':
+      await updateData(({ states, dealStates }) => ({ states: mergeStates(states, msg.states || {}), dealStates: { ...msg.dealStates, ...dealStates } }));
+      await updateBadge();
+      return { ok: true };
     case 'claim:hello':
       return claimHello(msg, sender);
     case 'claim:owned':

@@ -1,5 +1,7 @@
 // Configuration centrale de FreeKeep.
 
+export const REPO = 'https://github.com/Quentin-cruz/FreeKeep';
+export const RAW_MANIFEST = 'https://raw.githubusercontent.com/Quentin-cruz/FreeKeep/main/extension/manifest.json';
 export const COUNTRY = 'FR';
 export const LOCALE = 'fr';
 
@@ -138,9 +140,7 @@ export const ENDPOINTS = {
   ggdeals: 'https://api.gg.deals/v1/prices/by-steam-app-id/',
   steamCommunity: 'https://steamcommunity.com',
   steamWishlist: 'https://api.steampowered.com/IWishlistService/GetWishlist/v1/',
-  steamAppDetails: 'https://store.steampowered.com/api/appdetails',
   steamStoreSearch: 'https://store.steampowered.com/api/storesearch/',
-  steamSpy: 'https://steamspy.com/api.php',
   gogUser: 'https://www.gog.com/userData.json',
   gogOwned: 'https://www.gog.com/account/getFilteredProducts',
 };
@@ -198,8 +198,10 @@ export const DEFAULT_SETTINGS = {
   notifyDeals: true,
   notifyWishlist: true,
 
-  // Récupération
-  autoClick: true,
+  // Récupération : agit sur ton compte, donc jamais sans un « oui » explicite
+  autoClick: false,
+
+  checkUpdates: true,     // prévenir d'une nouvelle version sur GitHub
 };
 
 // Sources à relire quand un réglage de bons plans change.

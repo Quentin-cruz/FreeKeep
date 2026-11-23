@@ -25,6 +25,7 @@ export function parseSteamItems(data) {
       rating: it.reviews?.summary_filtered?.percent_positive ?? null,
       reviews: it.reviews?.summary_filtered?.review_count ?? 0,
       ...(it.tags ? { tags: it.tags.map((t) => t.tagid) } : {}),
+      descriptors: (it.content_descriptorids || []).map(Number),
     };
   }
   return out;

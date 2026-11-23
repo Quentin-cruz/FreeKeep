@@ -1,6 +1,8 @@
 // FreeKeep — popup : 3 sections (Gratuits, Promos PC, Switch)
-import { STORES, PC_STORE_ORDER, BUNDLE_STORES, CHANNELS, SWITCH_PLATFORMS, STALE_AFTER_MS } from '../src/config.js';
+import { STORES, PC_STORE_ORDER, BUNDLE_STORES, CHANNELS, SWITCH_PLATFORMS, STALE_AFTER_MS, REPO } from '../src/config.js';
 import { stateFor } from '../src/store.js';
+import { isNewer } from '../src/update.js';
+import { DENIED, requestAccess } from '../src/access.js';
 import { wants, showsGame } from '../src/prefs.js';
 import { GENRE_BY_ID } from '../src/genres.js';
 import { normTitle, formatDuration, formatDate, formatShortDate, formatAgo, formatPrice } from '../src/util.js';
@@ -98,6 +100,10 @@ function render() {
   $('.sections').hidden = w.sections.length < 2;
   document.querySelectorAll('.section').forEach((b) => { b.hidden = !w.sections.includes(b.dataset.section); });
   $('#onboard').hidden = !!S.settings.onboarded;
+  if (S.tutorialStarted) {
+    $('#onboard-text').textContent = 'Reprends le tutoriel où tu l’as laissé.';
+    $('#btn-onboard').textContent = 'Reprendre';
+  }
 
   // Sélecteur de section
   const counts = { free: free.available.length, pc: pc.visible.length, bundle: bd.visible.length, switch: sw.visible.length };
@@ -143,21 +149,35 @@ function render() {
 function renderBanner() {
   const box = $('#banner');
   box.replaceChildren();
+  const version = S.meta.update?.version;
+  if (S.settings.checkUpdates && version && isNewer(version, chrome.runtime.getManifest().version)) {
+    box.append(h('div', { class: 'banner info' }, `⬆ FreeKeep<3 ${version} est disponible. `, h('a', { href: REPO, target: '_blank', rel: 'noopener' }, 'Télécharger')));
+  }
   const names = {
     epic: 'Epic Games', steam: 'Steam', gamerpower: 'GamerPower', lootscraper: 'LootScraper', cheapshark: 'CheapShark', eshop: 'eShop Nintendo',
-    dealabs: 'Dealabs', ggdeals: 'GG.deals', gog: 'GOG', ea: 'EA', bundles: 'bundles', storebundles: 'bundles Steam et GOG', itchbundles: 'itch.io', switchkeys: 'clés Switch', watchlist: 'CheapShark', bons_plans: 'bons plans',
+    dealabs: 'Dealabs', ggdeals: 'GG.deals', gog: 'GOG', ea: 'EA', bundles: 'bundles', storebundles: 'bundles Steam et GOG', itchbundles: 'itch.io', switchkeys: 'clés Switch', dealabsPages: 'pages Dealabs', wishlist: 'souhaits Steam', watchlist: 'CheapShark', bons_plans: 'bons plans',
   };
   const relevant = {
-    bundle: ['bundles', 'storebundles', 'itchbundles', 'dealabs'],
+    bundle: ['bundles', 'storebundles', 'itchbundles', 'dealabs', 'bons_plans'],
     free: ['epic', 'steam', 'gamerpower', 'lootscraper'],
-    pc: ['cheapshark', 'gog', 'dealabs', 'ggdeals', 'watchlist', 'bons_plans'],
-    switch: ['eshop', 'switchkeys', 'dealabs', 'bons_plans'],
+    pc: ['cheapshark', 'gog', 'ea', 'dealabs', 'dealabsPages', 'ggdeals', 'watchlist', 'wishlist', 'bons_plans'],
+    switch: ['eshop', 'switchkeys', 'dealabs', 'dealabsPages', 'bons_plans'],
   }[ui.section];
   const all = { ...(S.meta.errors || {}), ...(S.meta.dealErrors || {}) };
-  const errors = Object.entries(all).filter(([k]) => relevant.includes(k));
+  if (S.missing?.length && S.settings.onboarded) {
+    const n = S.missing.length;
+    box.append(h('div', { class: 'banner info' }, `🔒 ${n} site${n > 1 ? 's' : ''} à autoriser pour voir tout ce que tu as choisi. `,
+      h('button', { type: 'button', class: 'btn mini primary', onclick: () => requestAccess(S.missing) }, 'Autoriser')));
+  }
+  const errors = Object.entries(all).filter(([k, v]) => relevant.includes(k) && v !== DENIED);
   if (!errors.length) return;
-  const txt = errors.map(([k, v]) => `${names[k] || k} (${v})`).join(', ');
-  box.append(h('div', { class: 'banner' }, `⚠ Source indisponible : ${txt}. Les dernières données connues sont affichées.`));
+  const age = (k) => {
+    const at = S.meta.sources?.[k]?.at;
+    if (!at) return 'jamais lu';
+    return S.meta.sources[k].stale ? `lu ${formatAgo(at)}, trop vieux : masqué` : `lu ${formatAgo(at)}`;
+  };
+  const txt = errors.map(([k, v]) => `${names[k] || k} (${v} ; ${age(k)})`).join(', ');
+  box.append(h('div', { class: 'banner' }, `⚠ ${errors.length > 1 ? 'Sources indisponibles' : 'Source indisponible'} : ${txt}. Au-delà de 24 h, les prix ne sont plus affichés.`));
 }
 
 // ---------- Section « Gratuits » ----------

@@ -19,15 +19,19 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en quatre se
 4. Clique sur **Charger l'extension non empaquetée** et choisis le dossier **`extension/`**.
 5. Épingle l'icône ❤️ (le cœur).
 
-**Mise à jour** : remplace le contenu du dossier `extension/`, puis clique sur ↻ (Recharger) sur la carte FreeKeep<3. Ton historique est conservé.
+**Accès aux sites** : à l'installation, seuls Epic et Steam sont demandés. Les autres le sont pendant le tutoriel, selon tes choix, et tu peux refuser : la source correspondante est alors simplement ignorée. GamerPower et Barter.vg sont ouverts à tous, sans accès à donner.
+
+**Mise à jour** : le popup prévient quand GitHub a une version plus récente (une lecture par jour du numéro de version, désactivable). Remplace alors le contenu du dossier `extension/`, puis clique sur ↻ (Recharger) sur la carte FreeKeep<3. Ton historique est conservé.
+
+**Sauvegarde** : Réglages → Sources & données → Exporter / Importer (réglages, jeux récupérés, éléments masqués), pour un autre PC ou une réinstallation. L'import ajoute sans rien effacer. La clé GG.deals n'est ni exportée ni synchronisée : elle reste sur ton ordinateur.
 
 ## Personnalisation
 
-**Tutoriel au premier lancement**, relançable depuis Réglages → « Relancer le tutoriel ». Une **flèche** guide tout : elle glisse d'une catégorie à la suivante (chacune s'ouvre quand elle arrive, celles d'avant restent modifiables), puis montre le bouton « Continuer ». Elle repart dès que tu as répondu, ou toute seule si tout te convient déjà, et attend tant que ta souris est dessus. Entrée continue, et les animations se coupent si ton système le demande. Il a 9 pages avec l'accueil, certaines n'apparaissent que si elles te concernent :
+**Tutoriel au premier lancement**, relançable depuis Réglages → « Relancer le tutoriel ». Une **flèche** guide tout : elle glisse d'une catégorie à la suivante (chacune s'ouvre quand elle arrive, celles d'avant restent modifiables), puis montre le bouton « Continuer ». Elle repart dès que tu as répondu, ou toute seule si tout te convient déjà, et attend tant que ta souris est dessus, que tu fais défiler ou que tu lis une explication. Quitté en route, il reprend où tu en étais. Entrée continue, et les animations se coupent si ton système le demande. Il a 9 pages avec l'accueil, certaines n'apparaissent que si elles te concernent :
 
 1. **Plateformes** : PC, Switch, et « je veux aussi les jeux Switch 2 ».
 2. **Stores PC** où tu actives tes jeux : Steam, Epic Games, GOG, EA app, Ubisoft Connect, Battle.net, Microsoft Store, itch.io, IndieGala, Autres. Puis **Bundles** (oui / non, puis quels sites). Puis **Amazon Prime** (oui / non, puis où) : Amazon Games, Legacy Games, Luna (cloud).
-3. **Ce que tu veux voir** : jeux gratuits, promos PC, promos Switch, jeux en boîte (+ ton département), sites de clés, bundles.
+3. **Ce que tu veux voir** : jeux gratuits, promos PC, promos Switch, jeux en boîte (+ ton département), sites de clés, bundles. Puis **l'accès aux sites** utiles à ces choix.
 4. **Niveau d'exigence** : 🔥 que les affaires de fou, ⚖️ équilibré ou 🌊 large, avec le nombre d'annonces que chacun donnerait et celui qui te convient le mieux.
 5. **Tes bibliothèques** : lecture de tes jeux Steam et GOG via les sessions déjà ouvertes dans ton navigateur (lien de profil Steam facultatif). Les promos sur tes jeux sont masquées et ta liste de souhaits Steam est mise en avant.
 6. **Ce que tu ne veux pas voir** (avec des conseils : nombre d'annonces que chaque filtre retirerait, genres et licences absents de ta bibliothèque Steam) : 16 genres à masquer (horreur, sport, hentai…) et des licences à bannir (LEGO, Mortal Kombat, Hogwarts Legacy…). Les orthographes proches et les variantes (« Hogwart's Legacy », « NBA 2K26 », « EA FC 27 ») sont reconnues.
@@ -75,8 +79,7 @@ Chaque bon plan Switch est classé **Switch** (jouable sur Switch 1, et donc aus
 
 ### Genres
 
-- Les genres viennent des données officielles Steam (genres et avertissements de contenu) et des catégories de l'eShop Nintendo.
-- Pour l'horreur, le FPS, le puzzle, etc., les tags joueurs viennent de SteamSpy, interrogé seulement si tu masques un de ces genres.
+- Les genres viennent des principaux tags et des avertissements de contenu Steam, lus par lots : tout est filtré dès la première vérification. Pour la Switch, des catégories de l'eShop Nintendo.
 - **Hentai / sexe explicite** : seul l'avertissement Steam « contenu sexuel réservé aux adultes » compte, plus les tags Hentai et NSFW. Les jeux violents ou PEGI 18 (GTA, Red Dead, Call of Duty…) et ceux avec de la nudité (The Witcher 3, Cyberpunk 2077…) restent visibles.
 - Pour les jeux sans données (Epic, Dealabs…), FreeKeep se base sur le titre.
 - La liste de souhaits ignore le filtre de genres, mais pas les mots-clés bannis.
@@ -84,18 +87,19 @@ Chaque bon plan Switch est classé **Switch** (jouable sur Switch 1, et donc aus
 ## Vérifications automatiques
 
 - Les vérifications interrogent les vrais sites. Elles tournent en arrière-plan, même popup fermé, tant que le navigateur est ouvert.
-- **Fréquence** : toutes les 15 min par défaut, réglable de 5 min à 24 h (5 à 15 min conseillé pour les erreurs de prix). Aucune notification n'est envoyée tant que le tutoriel n'est pas terminé. Une vérification se lance aussi :
+- **Fréquence** : toutes les 15 min par défaut, réglable de 5 min à 24 h (5 à 15 min conseillé pour les erreurs de prix). Aucune notification n'est envoyée pendant le tutoriel ; s'il est abandonné depuis 30 min, tes réponses s'appliquent et les alertes démarrent. Une vérification se lance aussi :
   - à l'installation ;
   - au démarrage du navigateur ;
   - à l'ouverture du popup si la dernière date de plus de 30 min.
 - **Réglages → État des sources** : chaque source y est affichée en direct (✔ nombre de résultats ou ✘ erreur), avec l'heure de la prochaine vérification et un bouton « Vérifier maintenant ».
 - Pour ne pas se faire bloquer par les API, chaque source garde ses résultats un minimum de temps : environ 15 min pour CheapShark, l'eShop et (lors des vérifications automatiques) Epic, Steam et GamerPower, 4 min pour Dealabs, 50 min pour GG.deals.
+- **Source en panne** : elle est rappelée de moins en moins souvent (10 min, 20, 40… puis toutes les 6 h). Ses derniers prix restent affichés 24 h au plus, avec leur âge. Une source qui tombe d'un coup à zéro est signalée, et son ancien résultat gardé.
 
 ## 🎁 Gratuits
 
 - Sources : API officielle Epic, recherche Steam (-100 %), catalogue GOG (jeux passés à 0 €), [LootScraper](https://feed.eikowagenknecht.com/lootscraper/) (Amazon Prime, GOG, Ubisoft, Humble, itch.io), [GamerPower](https://www.gamerpower.com), qui recense les giveaways de jeux PC (dont Prime), et les jeux offerts postés sur [Dealabs](https://www.dealabs.com) (Prime, Microsoft Store, Battle.net…). Les week-ends gratuits, démos, free-to-play, DLC, jeux mobiles, bonus de stream (Twitch Drops…) et packs de contenu sont écartés.
 - Le site qui organise le giveaway est affiché, par exemple « via Alienware Arena ». Ces sites demandent parfois un compte.
-- Le bouton **Récupérer** ouvre la page du store et clique sur « Obtenir » pour toi (clic automatique *expérimental*, désactivable). Sur Epic, la commande n'est validée que si le total est à 0 €. Les captchas restent à faire toi-même.
+- Le bouton **Récupérer** ouvre la page du store et détecte l'ajout à ta bibliothèque (Epic, Steam, GOG, Ubisoft, itch.io, IndieGala). Le **clic automatique** sur « Obtenir » est *expérimental* et désactivé par défaut : il n'agit que sur la page du jeu demandé, jamais sur un autre jeu ouvert dans le même onglet. Sur Epic, la commande n'est validée que si le total est à 0 €. Les captchas restent à faire toi-même.
 - Les jeux que tu possèdes déjà sont détectés : sur Steam et GOG via ta session, sur les stores quand la page affiche « Dans la bibliothèque ».
 
 ## 💻 Promos PC : que des pépites
@@ -142,6 +146,8 @@ extension/
 │   ├── refresh-deals.js       # récupération des sources avec cache (ménage les API)
 │   ├── titles.js                  # comparaison des titres (doublons), la même partout
 │   ├── levels.js, keywords.js, recommend.js  # niveaux, licences bannies, conseils du tutoriel
+│   ├── health.js, access.js, claim.js        # pannes, accès aux sites, page du bon jeu
+│   ├── backup.js, update.js                  # sauvegarde, nouvelle version
 │   ├── store.js, util.js
 │   └── sources/
 │       ├── epic.js, steam.js, gamerpower.js      # gratuits
@@ -162,14 +168,16 @@ extension/
 ├── popup/  options/  icons/
 tests/
 ├── fixtures.js                # données calquées sur le format réel des API
-├── unit.test.js               # 75 tests
-└── background.test.js         # 19 tests : service worker dans un navigateur simulé
+├── unit.test.js               # 83 tests
+├── background.test.js         # 23 tests : service worker dans un navigateur simulé
+└── e2e/edge.mjs               # essai complet dans un vrai Edge, profil jetable
 ```
 
 ## Tests
 
 ```bash
-node --test
+npm test            # tests unitaires, aussi lancés par GitHub à chaque envoi
+npm run test:edge   # tutoriel, réglages et popup dans un vrai Edge (Windows)
 ```
 
 Une partie des tests reprend des réponses relevées sur les vrais sites en novembre 2026.
@@ -193,12 +201,13 @@ Une version précédente (0.3) a aussi été testée de bout en bout dans Chrome
 - **G2A** bloque les lectures automatiques : ses offres n'apparaissent que si elles sont postées sur Dealabs.
 - **Clés PC** : sans clé API GG.deals, seules celles postées sur Dealabs sont vues.
 - **Dealabs** : les flux par groupe ne donnent pas la température (le flux « Hot » la met en tête du titre, FreeKeep<3 la retire). FreeKeep s'appuie donc sur le flux « Hot » officiel et garde un historique de 14 jours. Un deal peut avoir expiré même s'il est encore listé.
-- Dealabs, CheapShark, Nintendo et GG.deals peuvent changer leurs API. Si une source tombe, un bandeau le signale, l'État des sources passe en ✘ et les dernières données connues restent affichées.
+- Dealabs, CheapShark, Nintendo et GG.deals peuvent changer leurs API. Si une source tombe, un bandeau le signale, l'État des sources passe en ✘ et les dernières données connues restent affichées, 24 h au plus.
 - Navigateur fermé = pas de vérification : la suivante se fait au redémarrage.
 - Les sites de clés sont du marché gris : prix plus bas, mais pas de garantie éditeur.
 - **Amazon Prime n'a pas d'API publique** (la page des jeux Luna est générée en JavaScript). Les jeux Prime sont repérés via LootScraper, GamerPower et Dealabs : il peut en manquer, surtout les jeux Luna en cloud.
 - **Steam** : une annonce Dealabs au titre ambigu (édition inconnue, lot de jeux) n'est pas reconnue, donc pas masquée si tu possèdes le jeu.
 - **Launchers** : Battle.net et le Microsoft Store n'ont pas de source publique. Pour eux, seules les annonces Dealabs comptent, donc souvent peu de promos.
+- **Récupération itch.io et IndieGala** : reconnue d'après les textes de leurs pages, pas encore essayée avec un compte connecté.
 - **GOG** : `getFilteredProducts` n'est pas une API documentée ; GOG peut la changer. En cas d'échec, la carte GOG passe en ⚠️ et le reste fonctionne.
 
 ---
