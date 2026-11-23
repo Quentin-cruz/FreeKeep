@@ -3,7 +3,7 @@
 //              seen: catégories déjà ouvertes, done: questions Oui / Non répondues ou confirmées }.
 // Aucun accès à l'écran ici.
 
-export const visibleSteps = (steps, d) => steps.filter((s) => !s.show || s.show(d));
+const visibleSteps = (steps, d) => steps.filter((s) => !s.show || s.show(d));
 export const visibleParts = (step, d) => (step?.parts || []).filter((p) => !p.when || p.when(d));
 export const seenKey = (step, part) => `${step.id}/${part.id}`;
 
@@ -17,7 +17,7 @@ const at = (step, part, seen, done) => {
 };
 
 /** Catégorie remplie : réponse valable, et pour une question, réponse donnée (ou confirmée par « Suite »). */
-export const filled = (step, part, d, done) =>
+const filled = (step, part, d, done) =>
   (!part.valid || part.valid(d)) && (!part.ask || part.optional || (part.key ? d[part.key] !== undefined : done.includes(seenKey(step, part))));
 
 const ANSWER = 'Choisis une réponse.';

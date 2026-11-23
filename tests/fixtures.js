@@ -216,10 +216,6 @@ export function cheapsharkGamesFixture() {
   };
 }
 
-export function cheapsharkPopularFixture() {
-  return [csDeal({ title: 'Open World Epic', gameID: 301, appid: 900301, sale: 59.99, normal: 59.99, meta: 92, steam: 94, count: 300000 })];
-}
-
 const esDoc = (o) => ({
   title: o.title,
   url: `/fr-fr/Jeux/Jeux-Nintendo-Switch/${o.title.replace(/\W+/g, '-')}-${o.fs}.html`,
@@ -382,44 +378,6 @@ export function steamGamesXmlFixture() {
 }
 
 export const steamWishlistFixture = { response: { items: [{ appid: 900102, priority: 1, date_added: 1700000000 }, { appid: 900203, priority: 2, date_added: 1700000000 }] } };
-
-export function steamAppDetailsFixture(appid) {
-  const genres = {
-    900102: [{ id: '1', description: 'Action' }, { id: '28', description: 'Simulation' }],
-    900201: [{ id: '4', description: 'Casual' }],
-    900301: [{ id: '1', description: 'Action' }, { id: '3', description: 'RPG' }],
-  }[appid] || [{ id: '1', description: 'Action' }];
-  return { [appid]: { success: true, data: { type: 'game', name: `App ${appid}`, genres, content_descriptors: { ids: [] } } } };
-}
-
-// ---------- v0.3 : Prime, Battle.net, bibliothèque GOG (utilisés par le test de bout en bout) ----------
-export function gamerPowerPrimeExtras(now = Date.now()) {
-  const g = (id, title, platforms, instructions) => ({
-    id, title, worth: '$19.99', thumbnail: `https://www.gamerpower.com/offers/1/${id}.jpg`, image: `https://www.gamerpower.com/offers/1b/${id}.jpg`,
-    description: 'Free for Prime members.', instructions, open_giveaway_url: `https://www.gamerpower.com/open/${id}`,
-    published_date: gp(now - D), type: 'Game', platforms, end_date: gp(now + 9 * D), status: 'Active', gamerpower_url: `https://www.gamerpower.com/x-${id}`,
-  });
-  return [
-    g(3101, 'Kingdom Quest (Prime Gaming) Giveaway', 'PC, Epic Games Store', 'Claim it on Amazon Luna with Prime, then redeem on Epic Games.'),
-    g(3102, 'Pixel Pirates (Prime Gaming) Giveaway', 'PC, DRM-Free', 'Claim with Prime and download it with the Amazon Games app.'),
-  ];
-}
-
-export function dealabsFreebiesXml(now = Date.now()) {
-  return [
-    { id: 3449001, slug: 'diablo-classic', title: 'Jeu Diablo Classic offert sur PC (Dématérialisé - Battle.net)', merchant: 'Battle.net', price: '0€', at: now - 2 * H },
-    { id: 3449002, slug: 'mystery-manor', title: '[Prime Gaming] Mystery Manor gratuit (Dématérialisé - Legacy Games)', merchant: 'Amazon', price: '0€', at: now - 3 * H },
-    { id: 3449003, slug: 'luna-cloud', title: 'Jeux offerts sur Amazon Luna en cloud avec Prime : Sonic, Tetris', merchant: 'Amazon', price: '0€', at: now - 3 * H },
-    { id: 3449004, slug: 'week-end', title: 'Week-end gratuit sur Steam : Tekken 8', merchant: 'Steam', price: '0€', at: now - 1 * H },
-  ].map(rssItem).join('');
-}
-
-export const gogUserFixture = { isLoggedIn: true, username: 'quentin_gog' };
-export const gogProductsFixture = {
-  totalPages: 1,
-  totalProducts: 2,
-  products: [{ id: 1207658691, title: 'Shadow Tactics' }, { id: 1207658692, title: 'SHINOBI Art of Vengeance' }],
-};
 
 // ---------- Réponses relevées sur les vrais sites (novembre 2026) ----------
 

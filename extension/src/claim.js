@@ -42,7 +42,7 @@ export const isNextStep = (url) => {
   return STORE_HOSTS.itch.test(u.hostname) && /^\/[^/]+\/(?:purchase|download)(?:\/|$)/.test(u.pathname);
 };
 
-export const cleanUrl = (u) =>
+const cleanUrl = (u) =>
   String(u || '').split(/[?#]/)[0].replace(/\/$/, '').replace(/\/(?:fr|en|en-us|fr-fr|fr-FR|en-US)(?=\/)/, '');
 
 const epicSlug = (url) => /store\.epicgames\.com\/(?:[^/]+\/)?(?:p|bundles)\/([^/?#]+)/.exec(url || '')?.[1] || null;

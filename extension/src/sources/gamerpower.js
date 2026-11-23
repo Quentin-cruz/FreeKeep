@@ -12,11 +12,11 @@ export async function fetchGamerPower(stores, now = Date.now(), { prime = false 
 const textOf = (g) => `${g.title || ''}\n${g.instructions || ''}\n${g.description || ''}`;
 
 // Offert aux abonnés Amazon Prime (ex-Prime Gaming, désormais dans Amazon Luna).
-export const PRIME_RE = /prime gaming|amazon prime|amazon luna|luna\.amazon|\bluna\b|prime members?|membres? prime/i;
+const PRIME_RE = /prime gaming|amazon prime|amazon luna|luna\.amazon|\bluna\b|prime members?|membres? prime/i;
 export const isPrimeGiveaway = (g) => PRIME_RE.test(textOf(g));
 
 // Plateforme d'activation d'un avantage Prime : Epic / GOG / Microsoft Store / Legacy Games / Amazon Games.
-export function primeStore(text, parts = []) {
+function primeStore(text, parts = []) {
   if (parts.some((p) => p.includes('epic')) || /epic games/i.test(text)) return 'epic';
   if (parts.some((p) => p.includes('gog')) || /\bgog\b/i.test(text)) return 'gog';
   if (/legacy games/i.test(text)) return 'legacy';

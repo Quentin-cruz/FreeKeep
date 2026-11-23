@@ -6,7 +6,7 @@ const APP = 'FreeKeep<3';
 export const MAX_FILE = 5 * 1024 * 1024;
 
 export function makeBackup(settings, { states = {}, dealStates = {} } = {}, now = Date.now()) {
-  const { ggdealsKey, onboarded, ...rest } = settings; // ggdealsKey : ancienne version
+  const { onboarded, ...rest } = settings;
   return { app: APP, format: 1, date: new Date(now).toISOString(), settings: rest, states, dealStates };
 }
 
@@ -21,7 +21,7 @@ function readSettings(raw) {
   const out = {};
   for (const [k, def] of Object.entries(DEFAULT_SETTINGS)) {
     const v = raw[k];
-    if (['ggdealsKey', 'onboarded'].includes(k) || typeof v !== typeof def || Array.isArray(v) !== Array.isArray(def)) continue;
+    if (k === 'onboarded' || typeof v !== typeof def || Array.isArray(v) !== Array.isArray(def)) continue;
     if (Array.isArray(def)) out[k] = v.filter((x) => text(x, 100)).slice(0, 4000);
     else if (isObject(def)) out[k] = Object.fromEntries(Object.keys(def).map((id) => [id, typeof v[id] === 'boolean' ? v[id] : def[id]]));
     else if (typeof v !== 'string' || text(v) !== undefined) out[k] = v;

@@ -1,6 +1,6 @@
 // Fonctions utilitaires partagées (service worker + popup).
 
-export function stripAccents(s) {
+function stripAccents(s) {
   return String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
@@ -42,7 +42,7 @@ export function parseUtc(s) {
   return Number.isFinite(t) ? t : null;
 }
 
-export async function fetchWithTimeout(url, { timeout = 15000, ...init } = {}) {
+async function fetchWithTimeout(url, { timeout = 15000, ...init } = {}) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeout);
   try {

@@ -1,7 +1,7 @@
 // Fusionne les résultats des différentes sources et supprime les doublons.
 import { normTitle, titlesMatch } from './util.js';
 
-export function effectiveStatus(item, now = Date.now()) {
+function effectiveStatus(item, now = Date.now()) {
   if (item.status === 'upcoming' && item.start && item.start <= now) return 'active';
   return item.status;
 }

@@ -116,8 +116,6 @@ body[data-step="done"] .to-toolbar { display: flex; }
 
 .sub { margin: 12px 0 0 0; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); border: 1px dashed var(--border-2); }
 .field { display: flex; align-items: center; gap: 12px; margin-top: 12px; color: var(--muted); font-size: 13.5px; }
-.panel-lite { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 4px 14px; }
-.panel-lite .row { border-color: var(--border); }
 
 /* Récapitulatif */
 .recap { display: grid; grid-template-columns: 170px 1fr; gap: 8px 16px; margin: 12px 0 0; }

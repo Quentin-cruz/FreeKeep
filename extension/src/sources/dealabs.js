@@ -65,7 +65,7 @@ function parseAttrs(s) {
 
 // Le flux « hot » préfixe chaque titre par la température : « 119° - Moonlighter… ».
 const TEMPERATURE = /^\s*-?\d+\s*°\s*[-–]\s*/;
-export const stripTemperature = (title) => String(title ?? '').replace(TEMPERATURE, '').trim();
+const stripTemperature = (title) => String(title ?? '').replace(TEMPERATURE, '').trim();
 
 export function parseRss(xml) {
   const out = [];
@@ -106,7 +106,7 @@ export function mentionsSwitch1(title) {
   return hits.some((h) => !h[1] || h[1].trim() !== '2');
 }
 
-export const mentionsSwitch2 = (title) => /switch\s*2\b/i.test(String(title));
+const mentionsSwitch2 = (title) => /switch\s*2\b/i.test(String(title));
 
 // Plateforme d'activation d'un jeu PC d'après le titre Dealabs.
 export function pcPlatformOf(title, merchant = '') {
@@ -173,7 +173,7 @@ const mobileOnly = (t) => /\b(android|ios|iphone|ipad|play store|google play|app
 const notKeepable = (title, merchant = '') => NOT_KEEP.test(title) || STREAM_BONUS.test(title)
   || (GAME_CONTENT.test(title) && !GAME_PACK.test(title)) || mobileOnly(`${title} ${merchant}`);
 
-export const isFreebieTitle = (title, merchant = '') => FREE_WORDS.test(title) && !notKeepable(title, merchant);
+const isFreebieTitle = (title, merchant = '') => FREE_WORDS.test(title) && !notKeepable(title, merchant);
 // Console seulement (l'Xbox App / Xbox PC, c'est le Microsoft Store sur PC).
 const consoleOnly = (t) => /\b(ps[345]|playstation)\b/i.test(t) || (/\bxbox\b/i.test(t) && !/\b(pc|windows|xbox app|xbox pc|microsoft store)\b/i.test(t));
 // Post qui regroupe plusieurs jeux (« 8 jeux offerts avec Prime en novembre »)

@@ -6,7 +6,7 @@ import { ENDPOINTS } from '../config.js';
 import { fetchJson } from '../util.js';
 
 const DAY = 24 * 3600 * 1000;
-export const NX_LIMITS = {
+const NX_LIMITS = {
   perRun: 16,            // appels par vérification, soit ~1 par minute (NEXARDA bloque les IP trop pressées)
   pause: 700,            // ms entre deux appels
   priceTtl: 6 * 3600e3,  // un prix de clé est relu au plus toutes les 6 h

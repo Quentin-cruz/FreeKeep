@@ -17,7 +17,7 @@ export function parseSteamProfile(input) {
   return null;
 }
 
-export const profileUrl = (p) => `${ENDPOINTS.steamCommunity}/${p.kind}/${encodeURIComponent(p.id)}`;
+const profileUrl = (p) => `${ENDPOINTS.steamCommunity}/${p.kind}/${encodeURIComponent(p.id)}`;
 
 const unCdata = (s) => String(s ?? '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').trim();
 
@@ -133,7 +133,7 @@ export async function fetchSteamLibrary({ input = '', useSession = true } = {}) 
 }
 
 // Liste de souhaits publique (meilleur effort : silencieux si Steam la refuse).
-export async function fetchSteamWishlist(steamID64) {
+async function fetchSteamWishlist(steamID64) {
   if (!steamID64) return [];
   const data = await fetchJson(`${ENDPOINTS.steamWishlist}?steamid=${steamID64}`);
   return (data?.response?.items || []).map((i) => String(i.appid)).filter(Boolean);

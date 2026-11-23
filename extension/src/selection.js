@@ -7,7 +7,7 @@ const YEAR = 365.25 * 24 * 3600 * 1000;
 const clamp = (x, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, x));
 
 /** Nombre de cartes montrées d'abord, par section. */
-export const limitsFor = (settings) => (LEVELS[settings.level] || LEVELS.balanced).limits;
+const limitsFor = (settings) => (LEVELS[settings.level] || LEVELS.balanced).limits;
 const barFor = (settings) => (LEVELS[settings.level] || LEVELS.balanced).bar;
 
 export const ageOf = (released, now = Date.now()) => (released ? Math.max(0, (now - released) / YEAR) : null);

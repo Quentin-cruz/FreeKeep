@@ -3,20 +3,20 @@
 // ask : une seule réponse à donner, la flèche repart aussitôt.
 // step.leave(d) : appelé dans le clic qui quitte la page.
 // step.build(d) sert aux pages dont les catégories partagent des données : { before?, bodies: { [id]: élément } }
-import { STORES, STORE_ORDER, PC_STORE_ORDER, PRIME_STORES, BUNDLE_STORES, LEVELS, INTERVALS } from '../src/config.js';
+import { STORES, STORE_ORDER, PC_STORE_ORDER, PRIME_STORES, LEVELS, INTERVALS } from '../src/config.js';
 import { GENRE_BY_ID } from '../src/genres.js';
 import { originsFor, requestAccess, siteName } from '../src/access.js';
-import { h, toggleCard, switchRow, storeGrid, bundleSites, yesNo, choiceChips, more, genreChips, tagInput, levelCards, steamProfileField, steamSessionField, gogSessionField } from '../ui/components.js';
+import { h, toggleCard, storeGrid, bundleSites, yesNo, choiceChips, more, genreChips, tagInput, levelCards, steamProfileField, steamSessionField, gogSessionField } from '../ui/components.js';
 
 // Sites déjà autorisés (tenu à jour par onboarding.js) : une question ne peut pas attendre une réponse du navigateur.
 export const allowed = new Set();
 export const missing = (d) => originsFor(d).filter((o) => !allowed.has(o));
 
-export const anyDeals = (d) => (d.pc && (d.pcDeals || d.bundles)) || (d.switch && d.switchDeals);
+const anyDeals = (d) => (d.pc && (d.pcDeals || d.bundles)) || (d.switch && d.switchDeals);
 // Session Steam lue avec succès (page « Tes bibliothèques ») : null = pas encore vérifiée
 let steamOk = null;
 
-export const anyStore = (d) => PC_STORE_ORDER.some((s) => d.stores[s]) || (d.prime && PRIME_STORES.some((s) => d.stores[s]));
+const anyStore = (d) => PC_STORE_ORDER.some((s) => d.stores[s]) || (d.prime && PRIME_STORES.some((s) => d.stores[s]));
 
 const freqLabel = (v) => (v < 1 ? `${Math.round(v * 60)} min` : `${v} h`);
 const setStore = (d) => (id, on) => { d.stores[id] = on; };

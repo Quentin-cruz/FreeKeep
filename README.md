@@ -1,228 +1,172 @@
-# FreeKeep<3 : jeux gratuits à vie & vrais bons plans, à ta mesure
+<img src="extension/icons/logo-512.png" width="96" alt="Logo FreeKeep<3" align="right">
 
-<img src="extension/icons/logo-512.png" width="96" alt="Logo FreeKeep<3">
+# FreeKeep<3
 
-Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en quatre sections.
+**Jeux gratuits à garder à vie et vrais bons plans, triés pour toi.**
+Extension pour Chrome, Edge, Opera GX et Brave (Manifest V3). Aucun compte à créer.
 
-| Section | Contenu |
+| Section | Ce que tu y trouves |
 |---|---|
-| 🎁 **Gratuits** | Jeux PC offerts à garder à vie : Epic, Steam, GOG, Ubisoft, EA, Battle.net, Microsoft Store, **Amazon Prime** (Amazon Games, Legacy Games, Luna), **et les drops ponctuels** (Alienware Arena, Fanatical, Humble Bundle, IndieGala, itch.io…) |
-| 💻 **Promos PC** | Les jeux que les joueurs **achètent en ce moment**, récents et bien notés, au **meilleur prix** sur 30+ stores. Les vieux jeux et les petites promos attendent derrière « Voir tout » |
-| 📚 **Bundles** | Les meilleurs packs : Humble Bundle · Fanatical + Green Man Gaming + Digiphile · bundles de tes stores (Steam, GOG) · indie sans DRM (itch.io + IndieGala) |
-| 🎮 **Switch** | Grosses promos **eShop** (jeux jouables sur Switch 1), **jeux en boîte** (Amazon, Fnac, Leclerc…) et **clés** |
+| 🎁 **Gratuits** | Jeux PC offerts à garder : Epic, Steam, GOG, Ubisoft, EA, Battle.net, Microsoft Store, Amazon Prime, et les giveaways (Alienware Arena, Fanatical, Humble, IndieGala, itch.io…) |
+| 💻 **Promos PC** | Les jeux que les joueurs achètent en ce moment, récents et bien notés, au meilleur prix sur 30+ stores, avec le prix sur les sites de clés |
+| 📚 **Bundles** | Les meilleurs packs : Humble, Fanatical, Green Man Gaming, Digiphile, bundles Steam et GOG, indés sans DRM (itch.io, IndieGala) |
+| 🎮 **Switch** | Grosses promos eShop, jeux en boîte (Amazon, Fnac, Leclerc…) et clés, Switch 1 et Switch 2 |
 
 ## Installation
 
-1. Dézippe l'archive. Range le dossier quelque part de fixe, par exemple `Documents\FreeKeep` : le navigateur le relit à chaque démarrage.
-2. Ouvre `chrome://extensions` (ou `opera://extensions`, `edge://extensions`).
-3. Active le **Mode développeur**.
-4. Clique sur **Charger l'extension non empaquetée** et choisis le dossier **`extension/`**.
-5. Épingle l'icône ❤️ (le cœur).
+1. Télécharge le projet (**Code → Download ZIP**) et dézippe-le dans un dossier fixe, par exemple `Documents\FreeKeep` : le navigateur le relit à chaque démarrage.
+2. Ouvre `chrome://extensions` (ou `edge://extensions`, `opera://extensions`) et active le **Mode développeur**.
+3. Clique sur **Charger l'extension non empaquetée** et choisis le dossier **`extension/`**.
+4. Épingle l'icône FreeKeep<3, puis suis le tutoriel qui s'ouvre.
 
-**Accès aux sites** : à l'installation, seuls Epic et Steam sont demandés. Les autres le sont pendant le tutoriel, selon tes choix, et tu peux refuser : la source correspondante est alors simplement ignorée. GamerPower et Barter.vg sont ouverts à tous, sans accès à donner.
-
-**Mise à jour** : le popup prévient quand GitHub a une version plus récente (une lecture par jour du numéro de version, désactivable). Remplace alors le contenu du dossier `extension/`, puis clique sur ↻ (Recharger) sur la carte FreeKeep<3. Ton historique est conservé.
-
-**Sauvegarde** : Réglages → Sources & données → Exporter / Importer (réglages, jeux récupérés, éléments masqués), pour un autre PC ou une réinstallation. L'import ajoute sans rien effacer.
-
-## Personnalisation
-
-**Tutoriel au premier lancement**, relançable depuis Réglages → « Relancer le tutoriel ». Une **flèche** guide tout : elle glisse d'une catégorie à la suivante (chacune s'ouvre quand elle arrive, celles d'avant restent modifiables), puis montre le bouton « Continuer ». Jamais de minuteur : elle passe à la suite quand ta réponse est complète (Oui / Non cliqué, ou tout coché), quand ton curseur descend sur la catégorie suivante ou sur le bouton, ou quand tu cliques « Suite ». Impossible de sauter une catégorie : elle ne s'ouvre que si celles d'avant sont remplies. Elle ne remonte jamais : une réponse modifiée plus haut la laisse où elle est. Aucune réponse n'est cochée d'avance ; un bouton « OK » ou une vérification réussie valident aussi la catégorie. Chaque niveau d'exigence explique ce qu'il change. Si ta session Steam est lue, le lien de profil n'est pas demandé. Une fois tout enregistré, l'onglet se ferme et le popup s'ouvre. Quitté en route, il reprend où tu en étais. Entrée continue, et les animations se coupent si ton système le demande. Il a 9 pages avec l'accueil, certaines n'apparaissent que si elles te concernent :
-
-1. **Plateformes** : PC, Switch, et « je veux aussi les jeux Switch 2 ».
-2. **Stores PC** où tu actives tes jeux : Steam, Epic Games, GOG, EA app, Ubisoft Connect, Battle.net, Microsoft Store, itch.io, IndieGala, Autres. Puis **Bundles** (oui / non, puis quels sites). Puis **Amazon Prime** (oui / non, puis où) : Amazon Games, Legacy Games, Luna (cloud).
-3. **Ce que tu veux voir** : jeux gratuits, promos PC, promos Switch, jeux en boîte (+ ton département), sites de clés, bundles. Puis **l'accès aux sites** utiles à ces choix.
-4. **Niveau d'exigence** : 🔥 que les affaires de fou, ⚖️ équilibré ou 🌊 large, avec le nombre d'annonces montrées d'abord pour chacun.
-5. **Tes bibliothèques** : lecture de tes jeux Steam et GOG via les sessions déjà ouvertes dans ton navigateur (lien de profil Steam facultatif). Les promos sur tes jeux sont masquées et ta liste de souhaits Steam est mise en avant.
-6. **Ce que tu ne veux pas voir** (avec des conseils : nombre d'annonces que chaque filtre retirerait, genres et licences absents de ta bibliothèque Steam) : 16 genres à masquer (horreur, sport, hentai…) et des licences à bannir (LEGO, Mortal Kombat, Hogwarts Legacy…). Les orthographes proches et les variantes (« Hogwart's Legacy », « NBA 2K26 », « EA FC 27 ») sont reconnues.
-7. **Alertes** : notifications, fréquence, clic automatique.
-8. **Récapitulatif**.
-
-**Filtres du popup** : deux lignes qui se combinent. Promos PC : **tes launchers** (Steam, Epic, GOG, Ubisoft…), puis Top, Souhaits, Clés. Bundles : par site, puis Les meilleurs, Moins de 10 €, Contient un souhait. Switch : Switch / Switch 2, puis eShop, Physique, Clés. Un jeu vendu sur plusieurs launchers affiche le prix de celui que tu as choisi. Tes launchers restent affichés même à 0.
-
-**Pas de doublons** : un jeu vu par plusieurs sources n'a qu'une carte (« Part 2 » = « Part II », éditions, ponctuation…). La carte montre l'offre la moins chère et « Aussi : » les autres.
-
-**Menus adaptatifs** : le popup n'affiche que tes sections. Il n'y a pas de barre de sections s'il n'y en a qu'une, pas de filtre Switch 2 si tu ne l'as pas choisi, et pas d'onglet « Bientôt » sans Epic. Les éléments masqués par tes filtres restent consultables (« 🚫 N masqués par tes filtres »), avec la raison du masquage.
-
-**Réglages en 6 onglets** : Mes plateformes (+ Amazon Prime) · Ce que je veux voir · Filtres · Mes bibliothèques · Alertes · Sources & données.
-
-### Bibliothèque Steam : via ta session, sans mot de passe
-
-- Steam ne montre plus la liste des jeux d'un profil sans connexion, même s'il est public. FreeKeep<3 lit donc tes jeux et ta liste de souhaits via ta session `store.steampowered.com`, si tu es déjà connecté dans ce navigateur. Aucun identifiant n'est demandé ni enregistré. Désactivable dans les réglages.
-- **Lien de profil (facultatif)** : sans session ouverte, il permet de lire ta liste de souhaits si elle est publique. Avec une session, « Vérifier » affiche le nombre de jeux possédés reconnus.
-- **Annonces Dealabs** : elles n'ont pas d'identifiant Steam. FreeKeep<3 le retrouve par le nom du jeu (10 recherches par vérification), pour masquer aussi ceux que tu possèdes.
-- Ce que ça change :
-  - les promos sur les jeux que tu possèdes sont masquées, sur Steam comme sur les autres launchers ;
-  - un jeu de ta liste de souhaits Steam n'est proposé que sur Steam ;
-  - les jeux gratuits Steam que tu as déjà sont cochés « récupérés » ;
-  - les jeux de ta liste de souhaits remontent en tête dès -20 %, et une alerte part dès -50 %.
-- La bibliothèque se resynchronise toutes les 12 h (toutes les heures si tu n'étais pas connecté), ou avec le bouton « Synchroniser ».
-
-### Bibliothèque GOG : via ta session, sans mot de passe
-
-- Si tu es déjà connecté à gog.com dans ton navigateur, FreeKeep<3 lit ta liste de jeux GOG (`gog.com/userData.json` puis `account/getFilteredProducts`). Aucun identifiant n'est demandé ni enregistré.
-- Ce que ça change : les promos sur ces jeux sont masquées (correspondance stricte du nom), et les jeux gratuits GOG que tu as déjà sont cochés « récupérés ».
-- Pas connecté ? La carte GOG des réglages l'indique ; connecte-toi sur gog.com puis clique « Synchroniser ». Désactivable à tout moment.
-
-**Autres plateformes** : Epic, Ubisoft, EA, Battle.net, Microsoft Store et Amazon ne publient pas de bibliothèque lisible sans te connecter à ton compte. FreeKeep<3 note donc un jeu comme possédé quand sa page affiche « Dans la bibliothèque », ou quand tu cliques « Je l'ai ».
-
-### Amazon Prime (ex-Prime Gaming)
-
-- Coche « J'ai Amazon Prime » pour voir les jeux offerts aux abonnés. Sans Prime, ils restent cachés : tu ne pourrais pas les récupérer.
-- Les jeux Prime à activer sur **Epic**, **GOG** ou le **Microsoft Store** suivent tes choix de stores. Les autres vont dans **Amazon Games** (l'application d'Amazon), **Legacy Games** (codes) ou **Luna** (jeux en cloud, à jouer en streaming : pas à garder, donc ni comptés dans le badge ni ouverts par « Tout récupérer »).
-- Sans Prime, le popup indique seulement combien de jeux tu manques.
-- Chaque jeu Prime porte le badge 👑 Prime. Sur Dealabs, il est reconnu par le titre, le magasin, le lien Amazon ou la description.
-
-### Switch / Switch 2
-
-Chaque bon plan Switch est classé **Switch** (jouable sur Switch 1, et donc aussi sur Switch 2) ou **Switch 2** (exclusif). Le classement s'appuie sur les codes Nintendo (HAC = Switch 1, BEE = Switch 2) et sur les titres Dealabs. Les jeux Switch 2 n'apparaissent que si tu les as demandés.
-
-### Genres
-
-- Les genres viennent des principaux tags et des avertissements de contenu Steam, lus par lots : tout est filtré dès la première vérification. Pour la Switch, des catégories de l'eShop Nintendo.
-- **Hentai / sexe explicite** : seul l'avertissement Steam « contenu sexuel réservé aux adultes » compte, plus les tags Hentai et NSFW. Les jeux violents ou PEGI 18 (GTA, Red Dead, Call of Duty…) et ceux avec de la nudité (The Witcher 3, Cyberpunk 2077…) restent visibles.
-- Pour les jeux sans données (Epic, Dealabs…), FreeKeep se base sur le titre.
-- La liste de souhaits ignore le filtre de genres, mais pas les mots-clés bannis.
-
-## Vérifications automatiques
-
-- Les vérifications interrogent les vrais sites. Elles tournent en arrière-plan, même popup fermé, tant que le navigateur est ouvert.
-- **Fréquence** : toutes les 15 min par défaut, réglable de 5 min à 24 h (5 à 15 min conseillé pour les erreurs de prix). Aucune notification n'est envoyée pendant le tutoriel ; s'il est abandonné depuis 30 min, tes réponses s'appliquent et les alertes démarrent. Une vérification se lance aussi :
-  - à l'installation ;
-  - au démarrage du navigateur ;
-  - à l'ouverture du popup si la dernière date de plus de 30 min.
-- **Réglages → État des sources** : chaque source y est affichée en direct (✔ nombre de résultats ou ✘ erreur), avec l'heure de la prochaine vérification et un bouton « Vérifier maintenant ».
-- Pour ne pas se faire bloquer par les API, chaque source garde ses résultats un minimum de temps : environ 15 min pour CheapShark, l'eShop et (lors des vérifications automatiques) Epic, Steam et GamerPower, 4 min pour Dealabs, 14 min pour la recherche de clés NEXARDA, 55 min pour les meilleures ventes de clés.
-- **Source en panne** : elle est rappelée de moins en moins souvent (10 min, 20, 40… puis toutes les 6 h). Ses derniers prix restent affichés 24 h au plus, avec leur âge. Une source qui tombe d'un coup à zéro est signalée, et son ancien résultat gardé.
+- **Mise à jour** : le popup te prévient quand une nouvelle version est sur GitHub. Remplace le dossier `extension/`, puis clique sur ↻ sur la carte FreeKeep<3. Ton historique est conservé.
+- **Accès aux sites** : seuls Epic et Steam sont demandés à l'installation. Les autres sont demandés pendant le tutoriel, selon tes choix. Si tu refuses, la source est simplement ignorée.
+- **Sauvegarde** : Réglages → Sources & données → Exporter / Importer (réglages, jeux récupérés, éléments masqués). L'import ajoute sans rien effacer.
 
 ## 🎁 Gratuits
 
-- Sources : API officielle Epic, recherche Steam (-100 %), catalogue GOG (jeux passés à 0 €), [LootScraper](https://feed.eikowagenknecht.com/lootscraper/) (Amazon Prime, GOG, Ubisoft, Humble, itch.io), [GamerPower](https://www.gamerpower.com), qui recense les giveaways de jeux PC (dont Prime), et les jeux offerts postés sur [Dealabs](https://www.dealabs.com) (Prime, Microsoft Store, Battle.net…). Les week-ends gratuits, démos, free-to-play, DLC, jeux mobiles, bonus de stream (Twitch Drops…) et packs de contenu sont écartés.
-- Le site qui organise le giveaway est affiché, par exemple « via Alienware Arena ». Ces sites demandent parfois un compte.
-- Le bouton **Récupérer** ouvre la page du store et détecte l'ajout à ta bibliothèque (Epic, Steam, GOG, Ubisoft, itch.io, IndieGala). Le **clic automatique** sur « Obtenir » est *expérimental* et désactivé par défaut : il n'agit que sur la page du jeu demandé, jamais sur un autre jeu ouvert dans le même onglet. Sur Epic, la commande n'est validée que si le total est à 0 €. Les captchas restent à faire toi-même.
-- Les jeux que tu possèdes déjà sont détectés : sur Steam et GOG via ta session, sur les stores quand la page affiche « Dans la bibliothèque ».
+- **Sources** : API Epic, recherche Steam (-100 %), catalogue GOG, [GamerPower](https://www.gamerpower.com), [LootScraper](https://feed.eikowagenknecht.com/lootscraper/) (Prime, GOG, Ubisoft, Humble, itch.io) et les jeux offerts postés sur [Dealabs](https://www.dealabs.com).
+- **Écartés** : week-ends gratuits, démos, free-to-play, DLC, jeux mobiles, Twitch Drops et packs de contenu.
+- **Récupérer** ouvre la page du store et repère l'ajout à ta bibliothèque. Le **clic automatique** sur « Obtenir » est expérimental et désactivé par défaut. Sur Epic, il ne valide que si le total est à 0 €. Les captchas restent à faire toi-même.
+- **Amazon Prime** : coche « J'ai Amazon Prime » pour voir les jeux offerts aux abonnés (badge 👑). Ceux à activer sur Epic, GOG ou le Microsoft Store suivent tes stores ; les autres vont dans Amazon Games, Legacy Games ou Luna (cloud, donc non compté comme jeu à garder).
 
-## 💻 Promos PC : les jeux voulus, au meilleur prix
+## 💻 Promos PC
 
-**Sélection** : chaque section montre d'abord ses meilleures annonces (30 PC, 20 Switch, 10 bundles en « Équilibré » ; deux fois moins en « Que les affaires de fou », deux fois plus en « Large »). Le reste attend derrière **Voir tout**, avec la raison affichée (🕰️ vieux jeu, 👎 peu ou mal noté, ❔ peu demandé, 💤 petite remise, 🗳️ peu voté).
+Chaque section montre d'abord ses **meilleures annonces** (30 en PC au niveau « Équilibré »). Le reste attend derrière **Voir tout**, avec la raison : 🕰️ vieux jeu, 👎 mal noté, ❔ peu demandé, 💤 petite remise.
 
-- **Ce qui compte** : ce que les joueurs achètent (meilleures ventes Steam en promo, votes Dealabs, téléchargements eShop), la note Steam, l'âge du jeu, puis la remise et le plus bas historique.
-- **Vieux jeux** : au-delà de 6 ans (4 ou 10 selon le niveau, réglable), un jeu passe après, sauf s'il est dans ta liste de souhaits, très plébiscité sur Dealabs ou en erreur de prix.
-- **Remise selon l'âge** : un jeu sorti cette année n'est jamais à −60 %. Il suffit de −27 % la première année, −33 % la deuxième, −48 % jusqu'à 4 ans (niveau Équilibré).
-- **Ménage** : pas de DLC ni d'extensions ; une seule carte par jeu, clés comprises (le store officiel reste devant, la clé est indiquée) ; titres Dealabs raccourcis au nom du jeu, sauf prix sous condition.
-- **Prix d'un revendeur** (GameBillet, Fanatical, GMG…) : sa remise est appliquée au vrai prix Steam en euros, plus juste qu'une conversion du dollar.
+- **Ce qui compte** : les ventes (meilleures ventes Steam, votes Dealabs), la note Steam, l'âge du jeu, puis la remise et le plus bas historique.
+- **La remise suit l'âge** : un jeu sorti cette année n'est jamais à -60 %, donc -27 % suffit la première année, -33 % la deuxième, -48 % jusqu'à 4 ans.
+- **Une seule carte par jeu** : la moins chère devant, les autres offres en « Aussi : ». Le store officiel reste devant une clé.
+- **Ce qui est gardé** : un **gros jeu** (29 $ ou plus, Metacritic 75+ ou Steam 80 %+) dès -60 %, une **💎 pépite** (Steam 90 %+, 3 000 avis) dès -70 %. Les seuils sont réglables.
 
-| Source | Ce qu'elle apporte |
+Badges : ⚠️ erreur de prix · 📉 chute soudaine (-30 % depuis la vérification précédente) · 🏆 plus bas historique · 🔥 hot Dealabs · 🔑 prix sur les sites de clés.
+
+| Source | Apport |
 |---|---|
-| [GOG](https://www.gog.com) | Catalogue officiel, en euros, jeux notés 4/5 et plus |
-| EA | Offres du site EA, en euros |
-| Bundles | Humble Bundle, Fanatical, Green Man Gaming, Digiphile : contenu via [Barter.vg](https://barter.vg), gardés s'ils ont au moins 3 jeux bien notés sur Steam (2 à 6 selon le niveau). Steam et GOG : remise d'au moins 60 à 85 % sur la valeur du contenu selon le niveau. IndieGala : au moins 4 jeux et 70 à 85 % d'avis positifs en moyenne (clés Steam). [itch.io](https://itch.io/bundles) : lots de 4 jeux et plus à 2,50 € le jeu maximum (pas de note disponible) |
-| Steam | Meilleures ventes en promo (les jeux voulus), prix officiels en euros, note, date de sortie, promos de ta liste de souhaits |
-| [CheapShark](https://www.cheapshark.com) | Promos sur 30+ stores officiels (Steam, GOG, Humble, Fanatical, GMG, Gamesplanet, Battle.net…), avec la note Metacritic et les avis Steam |
-| [Dealabs](https://www.dealabs.com) | Deals **hot** validés par la communauté, y compris sur les sites de clés (Eneba, Instant Gaming, G2A…), et **erreurs de prix** (avec le groupe « erreur de prix ») |
-| [NEXARDA](https://www.nexarda.com) | Pour **chaque promo PC affichée** : le meilleur prix sur **35 sites de clés** (G2A, Kinguin, Eneba, Gamivo, K4G, Instant Gaming, HRK, Driffle, Loaded…), en euros, code promo compris. API publique, **aucun compte** |
-| [Eneba](https://www.eneba.com), [Instant Gaming](https://www.instant-gaming.com) | Leurs **meilleures ventes de clés Steam**, comparées au prix Steam en euros, pour repérer les grosses affaires « clé » même sans promo officielle |
+| Steam | Meilleures ventes en promo, prix officiels en euros, note, date de sortie, liste de souhaits |
+| [CheapShark](https://www.cheapshark.com) | Promos sur 30+ stores officiels, notes Metacritic et Steam |
+| GOG, EA | Promos officielles en euros |
+| [Dealabs](https://www.dealabs.com) | Deals **hot** validés par la communauté et **erreurs de prix** |
+| [NEXARDA](https://www.nexarda.com) | Pour chaque promo affichée : la meilleure clé parmi **35 sites** (G2A, Kinguin, Eneba, Gamivo, K4G, Instant Gaming…), code promo compris |
+| Eneba, Instant Gaming | Leurs meilleures ventes de clés Steam, pour repérer une grosse affaire même sans promo officielle |
 
-Ce qui est gardé (seuils réglables) :
-- **Gros jeu** : vendu 29 $ ou plus, Metacritic 75+ ou avis Steam 80 %+, remise d'au moins 60 %.
-- **💎 Pépite** : avis Steam 90 %+ (3 000 avis minimum), remise d'au moins 70 %.
+### 🔑 Sites de clés : sans compte
 
-Badges : ⚠️ erreur de prix · 📉 chute soudaine (-30 % depuis la vérif précédente) · 🏆 plus bas historique · 🔥 hot Dealabs · 🔑 prix sur les sites de clés.
+Coche « 🔑 Sites de clés » et c'est tout. Le badge **🔑 Clé** n'apparaît que si la clé est moins chère que la promo ; un clic ouvre l'offre, avec le code promo éventuel. Une clé n'a sa propre carte que si c'est une vraie affaire (-50 % ou plus, et nettement sous le prix Steam). Les sites de clés sont du marché gris : moins chers, mais sans garantie de l'éditeur.
 
-**Sites de clés** : rien à configurer, aucun compte. Si « 🔑 Sites de clés » est coché, FreeKeep<3 cherche sur [NEXARDA](https://www.nexarda.com) le prix « clé » de chaque promo PC affichée (les plus vendues d'abord, une quinzaine d'appels par vérification, chaque prix relu toutes les 6 h), et lit les meilleures ventes de clés Steam d'Eneba et d'Instant Gaming. Le badge « 🔑 Clé » n'apparaît que si la clé est moins chère que la promo ; un clic ouvre l'offre, et le code promo éventuel est indiqué. Une clé n'apparaît seule que si c'est une vraie affaire (-50 % ou plus, et nettement sous le prix Steam du moment). Il te prévient si un prix chute brutalement ; le 🏆 plus bas arrive après un mois de suivi.
+## 📚 Bundles
+
+- **Humble, Fanatical, Green Man Gaming, Digiphile** : contenu via [Barter.vg](https://barter.vg), gardés s'ils ont au moins 3 jeux bien notés sur Steam (2 à 6 selon le niveau).
+- **Steam et GOG** : remise d'au moins 60 à 85 % sur la valeur du contenu.
+- **IndieGala** : au moins 4 jeux et 70 à 85 % d'avis positifs. **itch.io** : 4 jeux et plus, 2,50 € le jeu au maximum.
 
 ## 🎮 Switch
 
-- **eShop** : moteur de recherche officiel de Nintendo Europe, plus l'API de prix Nintendo pour le prix exact en € et la date de fin. Ne sont gardés que les jeux bien classés dans les téléchargements Nintendo : top 500, ou top 1 500 s'ils sont vendus 20 € et plus. Les jeux Nintendo sont gardés dès -20 %. Les jeux inconnus bradés à -90 % sont écartés, et les jeux réservés à la Switch 2 aussi, sauf si tu les as demandés. Si seul le pack ou l'édition Deluxe est en promo, c'est son prix qui s'affiche, avec la mention « pack ou Deluxe ».
-- **Physique** : jeux en boîte postés sur Dealabs (Amazon, Fnac, Leclerc, Micromania…), nationaux et locaux à égalité. Les pages Dealabs donnent la température, le prix de référence et les offres encore valables des 30 derniers jours ; le RSS ajoute les toutes dernières.
-- **Clés** : Eneba, Kinguin et Instant Gaming (Europe), comparés au prix de l'eShop, plus les deals Dealabs. Les comptes partagés, cartes prépayées et DLC sont écartés.
-- **Tri** : Les accessoires et consoles sont écartés, et les jeux uniquement Switch 2 aussi, sauf si tu les as demandés. Les promos valables dans un seul magasin ne sont gardées que pour les départements que tu indiques (aucun par défaut ; numéros ou code postal).
+- **eShop** : recherche et prix officiels de Nintendo Europe, en euros, avec la date de fin. Seuls les jeux bien classés dans les téléchargements sont gardés ; les jeux Nintendo dès -20 %.
+- **Jeux en boîte** : deals Dealabs (Amazon, Fnac, Leclerc, Micromania…). Une promo valable dans un seul magasin n'est gardée que pour tes départements.
+- **Clés** : Eneba, Kinguin et Instant Gaming (Europe), comparés au prix eShop.
+- **Switch 2** : les jeux exclusifs Switch 2 n'apparaissent que si tu les demandes.
 
-## Notifications
+## Personnalisation
 
-- Nouveau jeu gratuit, et rappel quand il reste moins de 24 h.
-- **Affaires exceptionnelles** : erreur de prix, chute soudaine, plus bas historique à -75 % et plus, deal hot à -60 % et plus, jeu Nintendo à -40 % et plus.
+Le **tutoriel** se lance à l'installation (relançable depuis les réglages). Une question à la fois, une flèche te guide, et rien n'est coché d'avance :
 
-## Structure
+1. **Plateformes** : PC, Switch, Switch 2.
+2. **Stores PC**, **bundles** et **Amazon Prime**.
+3. **Ce que tu veux voir** : gratuits, promos PC et Switch, jeux en boîte, sites de clés, bundles. Puis l'accès aux sites.
+4. **Niveau d'exigence** : 🔥 que les affaires de fou, ⚖️ équilibré ou 🌊 large.
+5. **Tes bibliothèques** Steam et GOG.
+6. **Ce que tu ne veux pas voir** : genres (horreur, sport, hentai…) et licences à bannir (LEGO, Mortal Kombat…), avec le nombre d'annonces que chaque filtre retirerait.
+7. **Alertes** : notifications, fréquence, clic automatique.
+8. **Récapitulatif**.
 
-```
-extension/
-├── background.js              # service worker : vérifs, notifs, badge, messages
-├── src/
-│   ├── config.js              # stores, sites, réglages par défaut
-│   ├── merge.js               # fusion des jeux gratuits
-│   ├── deals.js               # fusion des bons plans, chutes de prix, score, « exceptionnel »
-│   ├── refresh-deals.js       # récupération des sources avec cache (ménage les API)
-│   ├── titles.js                  # comparaison des titres (doublons), la même partout
-│   ├── selection.js           # ce qui est montré d'abord : envie, note, âge, prix
-│   ├── levels.js, keywords.js, recommend.js  # niveaux, licences bannies, conseils du tutoriel
-│   ├── health.js, access.js, claim.js        # pannes, accès aux sites, page du bon jeu
-│   ├── backup.js, update.js                  # sauvegarde, nouvelle version
-│   ├── store.js, util.js
-│   └── sources/
-│       ├── epic.js, steam.js, gamerpower.js      # gratuits
-│       ├── cheapshark.js                         # promos PC
-│       ├── eshop.js                              # promos Switch
-│       ├── dealabs.js                            # boîtes, clés, erreurs de prix, jeux offerts (RSS)
-│       ├── dealabspages.js                       # température, prix de référence, offres récentes
-│       ├── gog.js, ea.js                         # promos officielles en euros
-│       ├── bundles.js, storebundles.js           # Humble, Fanatical… ; Steam, GOG, itch.io
-│       ├── switchkeys.js                         # clés Switch (Eneba, Kinguin, Instant Gaming)
-│       ├── pckeys.js                             # clés Steam PC (Eneba, Instant Gaming), sans compte
-│       ├── nexarda.js                            # prix « clé » de chaque promo PC (35 sites), sans compte
-│       ├── steamstore.js, rates.js               # prix Steam en euros, taux BCE
-│       └── goglibrary.js                         # jeux GOG via la session gog.com
-├── src/prefs.js, src/genres.js            # personnalisation : sections, exclusions, jeux possédés
-├── src/sources/steamlibrary.js, steamapps.js, steamsearch.js  # bibliothèque/souhaits, fiches (genres, note, âge), recherche par nom
-├── src/sources/wanted.js      # meilleures ventes Steam en promo, meilleur prix sur 30+ stores
-├── onboarding/                # tutoriel : steps.js (questions), flow.js (ordre), guide.js (flèches)
-├── ui/                        # composants partagés (tutoriel + réglages)
-├── content/claim.js           # clic assisté + détection « possédé »
-├── popup/  options/  icons/
-tests/
-├── fixtures.js                # données calquées sur le format réel des API
-├── unit.test.js               # 89 tests
-├── background.test.js         # 23 tests : service worker dans un navigateur simulé
-└── e2e/edge.mjs               # essai complet dans un vrai Edge, profil jetable
-```
+Le popup n'affiche que tes sections, avec des filtres par launcher (Steam, Epic, GOG…) et par type (Top, Souhaits, Clés). Ce que tes filtres masquent reste consultable, avec la raison.
 
-## Tests
+<details>
+<summary><b>Bibliothèques Steam et GOG</b> : via ta session, sans mot de passe</summary>
 
-```bash
-npm test            # tests unitaires, aussi lancés par GitHub à chaque envoi
-npm run test:edge   # tutoriel, réglages et popup dans un vrai Edge (Windows)
-```
+- **Steam** : FreeKeep<3 lit tes jeux et ta liste de souhaits via ta session `store.steampowered.com`, si tu es connecté dans ce navigateur. Sans session, un lien de profil public permet de lire la liste de souhaits. Resynchronisation toutes les 12 h, ou avec « Synchroniser ».
+- **GOG** : même principe via ta session gog.com.
+- **Ce que ça change** : les promos sur tes jeux sont masquées (sur tous les launchers), les jeux gratuits déjà possédés sont cochés « récupérés », et ta liste de souhaits remonte dès -20 % avec une alerte dès -50 %.
+- **Autres stores** (Epic, Ubisoft, EA, Battle.net, Microsoft Store, Amazon) : pas de bibliothèque lisible sans ton compte. Un jeu est noté possédé quand sa page affiche « Dans la bibliothèque », ou quand tu cliques « Je l'ai ».
+- Aucun identifiant n'est demandé ni enregistré. Tout est désactivable.
 
-Une partie des tests reprend des réponses relevées sur les vrais sites en novembre 2026.
+</details>
 
-Une version précédente (0.3) a aussi été testée de bout en bout dans Chrome (36 vérifications), avec de fausses versions de toutes les API et pages des stores. Ces tests ne prouvent pas que les vrais sites répondent comme prévu. Les scénarios couverts :
+<details>
+<summary><b>Genres</b> : comment le filtre décide</summary>
 
-- installation et tutoriel complet ;
-- bibliothèque et liste de souhaits Steam, bibliothèque GOG via la session ;
-- jeux Prime (Epic, Amazon Games, Legacy), Battle.net et Microsoft Store, Luna cloud ignoré si non coché ;
-- filtres de genres et de mots-clés, tri Switch / Switch 2 ;
-- menus qui s'adaptent quand on décoche une plateforme ;
-- fusion des sources et tri des bons plans ;
-- erreurs de prix, chute soudaine sur un site de clés, notifications ;
-- filtres et masquage dans le popup ;
-- récupération assistée (Steam, Epic, GOG) et sécurité sur le total Epic.
+- Les genres viennent des tags et avertissements de contenu Steam, et des catégories de l'eShop pour la Switch. Sans données (Epic, Dealabs…), FreeKeep<3 se base sur le titre.
+- **Hentai / sexe explicite** : seul l'avertissement Steam « contenu sexuel réservé aux adultes » compte, plus les tags Hentai et NSFW. Les jeux violents (GTA, Call of Duty…) ou avec de la nudité (The Witcher 3, Cyberpunk 2077…) restent visibles.
+- Les licences bannies reconnaissent les variantes (« Hogwart's Legacy », « NBA 2K26 », « EA FC 27 »).
+- La liste de souhaits ignore le filtre de genres, mais pas les licences bannies.
+
+</details>
+
+## Alertes et vérifications
+
+- **Notifications** : nouveau jeu gratuit, rappel à moins de 24 h de la fin, et **affaires exceptionnelles** (erreur de prix, chute soudaine, plus bas historique à -75 %, deal hot à -60 %, jeu Nintendo à -40 %).
+- **Fréquence** : toutes les 15 min par défaut, de 5 min à 24 h, en arrière-plan tant que le navigateur est ouvert. Une vérification se lance aussi au démarrage et à l'ouverture du popup si la dernière date de plus de 30 min.
+- **État des sources** (Réglages → Sources & données) : ✔ nombre de résultats ou ✘ erreur pour chaque source, et un bouton « Vérifier maintenant ».
+- **Source en panne** : elle est rappelée de moins en moins souvent (10 min, 20, 40… puis toutes les 6 h), et ses derniers prix restent affichés 24 h au plus.
 
 ## Limites connues
 
-- **Prix en euros** : exacts pour Steam, GOG, EA, l'eShop, les clés Switch, les bundles et Dealabs. CheapShark (Epic, Ubisoft, revendeurs) et GamerPower ne donnent que des dollars : la remise est appliquée au prix Steam en euros quand il est connu, sinon le prix est converti au taux de la Banque centrale européenne. Dans les deux cas, il est précédé de « ≈ ».
-- **Bundles** : le prix n'est pas connu pour Digiphile et certains Fanatical. Seul le contenu est comparé.
-- **G2A** bloque les lectures automatiques : ses offres n'apparaissent que si elles sont postées sur Dealabs.
-- **Clés PC** : environ 1 jeu sur 4 n'est pas dans le catalogue NEXARDA (par exemple Red Dead Redemption 2 ou Hollow Knight) : il n'a alors de prix « clé » que s'il est dans les meilleures ventes d'Eneba ou d'Instant Gaming, ou posté sur Dealabs. Au premier lancement, les prix « clé » arrivent au fil des vérifications (quelques jeux à chaque fois). Pas de vrai historique : le 🏆 plus bas est celui vu par FreeKeep<3, après un mois de suivi.
-- **Dealabs** : les flux par groupe ne donnent pas la température (le flux « Hot » la met en tête du titre, FreeKeep<3 la retire). FreeKeep s'appuie donc sur le flux « Hot » officiel et garde un historique de 14 jours. Un deal peut avoir expiré même s'il est encore listé.
-- Dealabs, CheapShark, Nintendo, NEXARDA, Eneba et Instant Gaming peuvent changer leurs pages ou leurs API. Si une source tombe, un bandeau le signale, l'État des sources passe en ✘ et les dernières données connues restent affichées, 24 h au plus.
-- Navigateur fermé = pas de vérification : la suivante se fait au redémarrage.
-- Les sites de clés sont du marché gris : prix plus bas, mais pas de garantie éditeur.
-- **Amazon Prime n'a pas d'API publique** (la page des jeux Luna est générée en JavaScript). Les jeux Prime sont repérés via LootScraper, GamerPower et Dealabs : il peut en manquer, surtout les jeux Luna en cloud.
-- **Steam** : une annonce Dealabs au titre ambigu (édition inconnue, lot de jeux) n'est pas reconnue, donc pas masquée si tu possèdes le jeu.
-- **Launchers** : Battle.net et le Microsoft Store n'ont pas de source publique. Pour eux, seules les annonces Dealabs comptent, donc souvent peu de promos.
+- **Prix en dollars** : CheapShark (Epic, Ubisoft, revendeurs) et GamerPower ne donnent que des dollars. La remise est appliquée au prix Steam en euros quand il est connu, sinon le prix est converti au taux BCE, précédé de « ≈ ».
+- **Clés PC** : environ 1 jeu sur 4 n'est pas dans le catalogue NEXARDA (Red Dead Redemption 2, Hollow Knight…). Les prix « clé » arrivent progressivement après l'installation, et le 🏆 plus bas d'une clé n'apparaît qu'après un mois de suivi.
+- **Sans source publique** : G2A, Battle.net et le Microsoft Store ne sont vus que via Dealabs. Amazon Prime n'a pas d'API : il peut manquer des jeux, surtout sur Luna.
+- **Dealabs** : un deal peut avoir expiré même s'il est encore listé. Une annonce au titre ambigu n'est pas reconnue comme un jeu que tu possèdes.
+- **Bundles** : le prix de Digiphile et de certains Fanatical n'est pas connu ; seul le contenu est comparé.
 - **Récupération itch.io et IndieGala** : reconnue d'après les textes de leurs pages, pas encore essayée avec un compte connecté.
-- **GOG** : `getFilteredProducts` n'est pas une API documentée ; GOG peut la changer. En cas d'échec, la carte GOG passe en ⚠️ et le reste fonctionne.
+- **Sites qui changent** : les pages et API utilisées peuvent changer. La source passe alors en ✘ dans l'État des sources, sans bloquer le reste.
+- Navigateur fermé, pas de vérification : la suivante se fait au redémarrage.
+
+## Développement
+
+```bash
+npm test            # 116 tests unitaires (Node 24), aussi lancés par GitHub à chaque envoi
+npm run test:edge   # tutoriel, réglages et popup dans un vrai Edge (Windows), profil jetable
+```
+
+Une partie des tests rejoue des réponses relevées sur les vrais sites (novembre 2026). Les tests ne prouvent pas que ces sites répondent toujours de la même façon.
+
+<details>
+<summary><b>Structure du code</b></summary>
+
+```
+extension/
+├── background.js          service worker : vérifications, notifications, badge, messages
+├── popup/  options/       popup et réglages
+├── onboarding/            tutoriel : steps.js (questions), flow.js (ordre), guide.js (flèche)
+├── ui/                    composants partagés (tutoriel + réglages)
+├── content/claim.js       récupération assistée, détection « possédé »
+├── icons/                 logo.svg (source) et icônes PNG
+└── src/
+    ├── config.js          stores, adresses des sources, réglages par défaut
+    ├── refresh-deals.js   lecture des sources, avec cache pour ménager les sites
+    ├── merge.js           fusion des jeux gratuits
+    ├── deals.js           fusion des bons plans, chutes de prix, score, « exceptionnel »
+    ├── selection.js       ce qui est montré d'abord (envie, note, âge, prix)
+    ├── titles.js          comparaison des titres (doublons)
+    ├── prefs.js, genres.js, keywords.js, levels.js, recommend.js   personnalisation
+    ├── health.js, access.js, claim.js, backup.js, update.js, store.js, util.js
+    └── sources/
+        ├── epic, steam, gamerpower, lootscraper                    gratuits
+        ├── wanted, cheapshark, steamstore, gog, ea, rates          promos PC, prix en euros
+        ├── nexarda, pckeys                                         sites de clés PC
+        ├── bundles, storebundles                                   bundles
+        ├── eshop, switchkeys                                       Switch
+        ├── dealabs, dealabspages                                   Dealabs
+        └── steamlibrary, steamapps, steamsearch, goglibrary        bibliothèques, genres
+tests/
+├── unit.test.js           93 tests
+├── background.test.js     23 tests : service worker dans un navigateur simulé
+├── fixtures.js            réponses calquées sur les vraies API
+└── e2e/edge.mjs           essai complet dans un vrai Edge
+```
+
+</details>
 
 ---
 
-Données : Epic Games Store, Steam, GOG, [GamerPower](https://www.gamerpower.com), [CheapShark](https://www.cheapshark.com), Nintendo eShop, [Dealabs](https://www.dealabs.com), [NEXARDA](https://www.nexarda.com), Eneba, Instant Gaming. FreeKeep<3 n'est affilié à aucun de ces services.
+Données : Epic Games Store, Steam, GOG, EA, Nintendo eShop, [GamerPower](https://www.gamerpower.com), [LootScraper](https://feed.eikowagenknecht.com/lootscraper/), [CheapShark](https://www.cheapshark.com), [Barter.vg](https://barter.vg), [Dealabs](https://www.dealabs.com), [NEXARDA](https://www.nexarda.com), Eneba, Kinguin, Instant Gaming. FreeKeep<3 n'est affilié à aucun de ces services.

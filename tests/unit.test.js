@@ -1671,14 +1671,14 @@ const { makeBackup, readBackup } = await import('../extension/src/backup.js');
 const { isNewer } = await import('../extension/src/update.js');
 
 test('Sauvegarde : aller-retour, sans la clé ; contenu douteux écarté', () => {
-  const settings = { ...structuredClone(DEFAULT_SETTINGS), ggdealsKey: 'secret', prime: true, bannedKeywords: ['LEGO'], onboarded: true };
+  const settings = { ...structuredClone(DEFAULT_SETTINGS), prime: true, bannedKeywords: ['LEGO'], onboarded: true };
   const states = { 'epic:a': { claimed: true, claimedAt: 5, snapshot: { title: 'A', store: 'epic', url: 'https://a.test/', images: ['https://i.test/1.jpg'], worth: '10 €' } } };
   const file = JSON.stringify(makeBackup(settings, { states, dealStates: { d: { hidden: true, at: 1 } } }));
   assert.ok(!file.includes('secret'));
   const back = readBackup(file);
   assert.equal(back.settings.prime, true);
   assert.deepEqual(back.settings.bannedKeywords, ['LEGO']);
-  assert.ok(!('onboarded' in back.settings) && !('ggdealsKey' in back.settings));
+  assert.ok(!('onboarded' in back.settings));
   assert.deepEqual(back.states, states);
   assert.deepEqual(back.dealStates, { d: { hidden: true, at: 1 } });
 

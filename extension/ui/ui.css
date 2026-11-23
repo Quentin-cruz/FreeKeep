@@ -90,7 +90,6 @@ select, input[type="text"] {
 }
 input[type="text"].wide { flex: 1; min-width: 0; }
 input[type="text"].short { width: 130px; }
-input[type="text"].mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
 select:focus, input:focus { outline: 2px solid rgba(52, 211, 153, .4); outline-offset: 1px; }
 
 /* Champ Steam */

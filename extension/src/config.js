@@ -100,12 +100,6 @@ export const KEYSHOPS = [
   'allkeyshop', 'yuplay', 'cjs cdkeys', 'electronic first', 'gameseal', 'kinguin.net',
 ];
 
-export const PC_STORES = [
-  'steam', 'gog', 'epic games', 'fanatical', 'humble', 'gamesplanet', 'green man gaming', 'greenmangaming', 'gmg',
-  'ubisoft', 'ea', 'battle.net', 'indiegala', 'gamersgate', 'wingamestore', 'dlgamer', 'gamebillet', 'voidu',
-  'nuuvem', 'microsoft', 'xbox', '2game', 'noctre', 'dreamgame',
-];
-
 // Magasins de boîtes (jeux physiques).
 export const PHYSICAL_STORES = [
   'amazon', 'fnac', 'cdiscount', 'leclerc', 'micromania', 'carrefour', 'auchan', 'cultura', 'rakuten', 'boulanger',
@@ -124,7 +118,6 @@ export const ENDPOINTS = {
   steamUserData: 'https://store.steampowered.com/dynamicstore/userdata/',
   cheapsharkDeals: 'https://www.cheapshark.com/api/1.0/deals',
   cheapsharkGames: 'https://www.cheapshark.com/api/1.0/games',
-  cheapsharkStores: 'https://www.cheapshark.com/api/1.0/stores',
   cheapsharkRedirect: 'https://www.cheapshark.com/redirect',
   eshopSearch: 'https://searching.nintendo-europe.com/fr/select',
   eshopPrice: 'https://api.ec.nintendo.com/v1/price',

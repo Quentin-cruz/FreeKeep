@@ -5,7 +5,7 @@ const MAX_CACHE = 3000;
 const DAY = 24 * 3600 * 1000;
 const RETRY_FAILED_AFTER = 3 * DAY;
 const REFRESH_AFTER = 30 * DAY;
-export const TAG_COUNT = 12;
+const TAG_COUNT = 12;
 
 // Ancien format (sans note ni date de sortie) : à relire.
 const usable = (e, now) => !!e && e.v === 3 && now - e.at < (e.failed ? RETRY_FAILED_AFTER : REFRESH_AFTER);
