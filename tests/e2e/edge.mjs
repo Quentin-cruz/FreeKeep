@@ -130,6 +130,15 @@ async function main() {
   await click('[data-part=switch2] [data-answer=no]');
   await until('platforms/switch2/bouton');
   console.log('✔ page 2 : la flèche descend quand la réponse est complète, puis va au bouton');
+  // Une réponse modifiée plus haut : la flèche ne remonte pas
+  await hover('[data-part=switch2] [data-answer=yes]');
+  await click('[data-part=switch2] [data-answer=yes]');
+  await hover('[data-part=machines] .tcard:nth-child(1)');
+  await click('[data-part=machines] .tcard:nth-child(1)');
+  await click('[data-part=machines] .tcard:nth-child(1)');
+  await sleep(800);
+  assert.equal(await where(), 'platforms/switch2/bouton');
+  console.log('✔ réponses modifiées plus haut : la flèche reste sur le bouton');
   await next();
   await until('stores/stores');
   // Le curseur descend : la flèche suit, une catégorie à la fois
@@ -143,8 +152,9 @@ async function main() {
   await hover('[data-part=prime]');
   await until('stores/prime');
   await hover('[data-part=stores]');
-  await until('stores/stores');
-  console.log('✔ la flèche suit le curseur, sans sauter de catégorie');
+  await sleep(600);
+  assert.equal(await where(), 'stores/prime', 'la flèche ne remonte pas');
+  console.log('✔ la flèche suit le curseur vers le bas, sans sauter de catégorie, et ne remonte jamais');
   await hover('[data-part=prime]');
   await click('[data-part=prime] [data-answer=yes]');
   await until('stores/primeStores');

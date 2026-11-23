@@ -4,7 +4,7 @@ import { getSettings, saveSettings, getDraft, saveDraft, clearDraft } from '../s
 import { h } from '../ui/components.js';
 import { STEPS, allowed } from './steps.js';
 import { originsFor, missingOrigins } from '../src/access.js';
-import { start, resumeAt, forward, backward, follow, select, answer, complete, reachable, firstGap, currentError, progress, visibleParts } from './flow.js';
+import { start, resumeAt, forward, backward, follow, select, answer, complete, reachable, firstGap, currentError, progress, visibleParts, seenKey } from './flow.js';
 import { arrow, buildParts, createPointer } from './guide.js';
 
 const $ = (s) => document.querySelector(s);
@@ -13,6 +13,7 @@ const $ = (s) => document.querySelector(s);
 //  - le curseur descend sur la catégorie suivante, ou sur le bouton ;
 //  - tu cliques « Suite » ou appuies sur Entrée.
 // Une catégorie ne s'ouvre que si celles d'avant sont remplies.
+// La flèche ne remonte jamais : modifier une réponse plus haut la laisse où elle est.
 const AFTER_ANSWER = 280;
 const HOVER = 120; // le curseur ne fait que passer : on n'y va pas
 
@@ -71,10 +72,38 @@ function showError(msg) {
   warn.textContent = msg ? `⚠ ${msg}` : '';
 }
 
+// Rang d'une catégorie dans la page, et « plus bas que la flèche »
+const rank = (id) => visibleParts(view.step, draft).findIndex((p) => p.id === id);
+const below = (id) => !ready && rank(id) > rank(pos.part);
+
+// Catégories apparues au-dessus de la flèche (réponse modifiée plus haut) : elles s'ouvrent sur place,
+// avec la réponse affichée, et la flèche ne remonte pas les chercher.
+function openAbove(p) {
+  const shown = visibleParts(view.step, draft);
+  const limit = ready ? shown.length : rank(p.part);
+  const keys = shown.slice(0, limit).map((x) => seenKey(view.step, x));
+  return { ...p, seen: [...new Set([...p.seen, ...keys])], done: [...new Set([...(p.done || []), ...keys])] };
+}
+
 function touched(partId) {
   if (finished) return;
-  pos = select(STEPS, draft, pos, partId);
-  if (activePart()?.ask) pos = answer(STEPS, draft, pos);
+  if (partId === pos.part && !ready) {
+    if (activePart()?.ask) pos = answer(STEPS, draft, pos);
+  } else if (below(partId)) {
+    pos = select(STEPS, draft, pos, partId);
+    if (activePart()?.ask) pos = answer(STEPS, draft, pos);
+  } else {
+    // Plus haut que la flèche : la réponse compte, la flèche reste
+    const there = select(STEPS, draft, pos, partId);
+    const marked = view.step.parts.find((p) => p.id === partId)?.ask ? answer(STEPS, draft, there) : there;
+    pos = openAbove({ ...pos, seen: marked.seen, done: marked.done });
+    saveDraft({ draft, pos, base, at: Date.now() });
+    refreshAccess().then(() => { if (!finished) show(ready); });
+    showError('');
+    show(ready);
+    return;
+  }
+  pos = openAbove(pos);
   saveDraft({ draft, pos, base, at: Date.now() });
   refreshAccess().then(() => { if (!finished) show(ready); });
   showError('');
@@ -83,11 +112,9 @@ function touched(partId) {
   else disarm();
 }
 
-// Il faut d'abord finir la catégorie en cours : elle se secoue, la flèche y reste.
-function nudge() {
-  const gap = firstGap(STEPS, draft, pos);
-  if (gap && gap !== pos.part) go(select(STEPS, draft, pos, gap));
-  const el = activeEl();
+// Il faut d'abord finir une catégorie : elle se secoue, la flèche ne bouge pas.
+function nudge(partId = firstGap(STEPS, draft, pos) || pos.part) {
+  const el = view.guide?.el(partId);
   if (!el) return;
   el.classList.remove('nudge');
   void el.offsetWidth;
@@ -96,9 +123,10 @@ function nudge() {
 
 // Le curseur passe sur une catégorie : la flèche le suit, sans jamais sauter une catégorie à remplir.
 function pointTo(partId) {
-  if (finished || !view.guide || (partId === pos.part && !ready)) return;
+  if (finished || !view.guide || !view.step.parts.some((p) => p.id === partId)) return;
+  if (!below(partId)) return; // plus haut : la flèche ne remonte pas
   // Verrouillée : le curseur « interdit » suffit, rien ne bouge
-  if (!view.step.parts.some((p) => p.id === partId) || !reachable(STEPS, draft, pos, partId)) return false;
+  if (!reachable(STEPS, draft, pos, partId)) return false;
   go(select(STEPS, draft, pos, partId), { hover: true });
 }
 
@@ -131,7 +159,7 @@ function drawPage() {
   const here = () => pos.step === step.id;
   const guide = step.parts ? buildParts(step, draft, {
     onGo: (id) => {
-      if (!here()) return;
+      if (!here() || !below(id)) return; // plus haut : déjà ouverte, la flèche reste
       if (reachable(STEPS, draft, pos, id)) go(select(STEPS, draft, pos, id));
       else nudge();
     },
@@ -181,6 +209,11 @@ function next(opts) {
   if (res.done) return finish();
   // Accès aux sites : à demander dans le clic, sans attendre la réponse pour avancer.
   if (!res.error && res.pos.step !== pos.step) view.step.leave?.(draft)?.then(refreshAccess);
+  // Problème plus haut dans la page : la catégorie se secoue avec le message, la flèche ne remonte pas
+  if (res.pos.step === pos.step && res.pos.part !== pos.part && !below(res.pos.part)) {
+    showError(res.error || `Termine d’abord « ${view.step.parts.find((p) => p.id === res.pos.part)?.title || 'cette catégorie'} ».`);
+    return nudge(res.pos.part);
+  }
   go(res.pos, { error: res.error });
 }
 
