@@ -50,6 +50,7 @@ export const STEPS = [
         id: 'machines',
         title: 'Sur quoi tu joues ?',
         valid: (d) => d.pc || d.switch,
+        enough: (d) => d.pc && d.switch, // plus rien à cocher : la flèche passe à la suite
         invalidMsg: 'Choisis au moins une plateforme.',
         body: (d) => h('div', { class: 'tgrid' },
           toggleCard({ icon: '💻', title: 'PC', desc: 'Steam, Epic, GOG…', checked: d.pc, onChange: (v) => { d.pc = v; } }),
@@ -131,6 +132,7 @@ export const STEPS = [
         id: 'pc',
         title: 'Sur PC, tu veux quoi ?',
         when: (d) => d.pc,
+        enough: (d) => d.freeGames && d.pcDeals,
         body: (d) => h('div', { class: 'tgrid' },
           toggleCard({ icon: '🎁', title: 'Jeux gratuits', desc: 'À garder à vie', checked: d.freeGames, onChange: (v) => { d.freeGames = v; } }),
           toggleCard({ icon: '💻', title: 'Promos', desc: 'Bons jeux, grosse remise', checked: d.pcDeals, onChange: (v) => { d.pcDeals = v; } }),
@@ -140,6 +142,7 @@ export const STEPS = [
         id: 'switch',
         title: 'Sur Switch, tu veux quoi ?',
         when: (d) => d.switch,
+        enough: (d) => d.switchDeals && d.physical,
         body: (d) => h('div', { class: 'tgrid' },
           toggleCard({ icon: '🎮', title: 'Promos Switch', desc: 'eShop, boîtes et clés', checked: d.switchDeals, accent: '#f87171', onChange: (v) => { d.switchDeals = v; } }),
           toggleCard({ icon: '📦', title: 'Jeux en boîte', desc: 'Amazon, Fnac, Leclerc…', checked: d.physical, onChange: (v) => { d.physical = v; } }),

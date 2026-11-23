@@ -31,7 +31,8 @@ export function buildParts(step, d, { onGo, onTouch, changed }) {
   }
 
   // Ce qui a été montré reste ouvert (rien ne bouge sous la souris) ; la suite n'est qu'un titre.
-  const update = (pos, ready) => {
+  // `canReach(id)` : catégorie accessible (celles d'avant sont remplies) ; sinon elle reste verrouillée.
+  const update = (pos, ready, canReach = () => true) => {
     const shown = visibleParts(step, d);
     for (const { part, el, head, body, num } of rows.values()) {
       const i = shown.indexOf(part);
@@ -40,6 +41,7 @@ export function buildParts(step, d, { onGo, onTouch, changed }) {
       el.hidden = i < 0;
       el.classList.toggle('active', active);
       el.classList.toggle('open', open);
+      el.classList.toggle('locked', i >= 0 && !active && !canReach(part.id));
       body.inert = !open;
       head.setAttribute('aria-expanded', String(open));
       num.textContent = open && (!active || ready) ? '✓' : String(i + 1);

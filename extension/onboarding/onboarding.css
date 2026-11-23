@@ -94,6 +94,11 @@ body[data-step="done"] .to-toolbar { display: flex; }
 @keyframes poke { 50% { transform: translateX(8px); } }
 @keyframes drop { 50% { transform: translateY(-7px); } }
 @keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.part.locked { cursor: not-allowed; }
+.part.locked > .part-head { cursor: not-allowed; }
+.part.locked:hover { opacity: .32; }
+.part.nudge, .part.active.nudge { animation: shake .35s ease; }
+
 @keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

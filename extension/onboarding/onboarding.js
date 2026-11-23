@@ -4,15 +4,17 @@ import { getSettings, saveSettings, getDraft, saveDraft, clearDraft } from '../s
 import { h } from '../ui/components.js';
 import { STEPS, allowed } from './steps.js';
 import { originsFor, missingOrigins } from '../src/access.js';
-import { start, resumeAt, forward, backward, follow, select, currentError, progress, visibleParts } from './flow.js';
+import { start, resumeAt, forward, backward, follow, select, answer, complete, reachable, firstGap, currentError, progress, visibleParts } from './flow.js';
 import { arrow, buildParts, createPointer } from './guide.js';
 
 const $ = (s) => document.querySelector(s);
-// Quand la flèche passe à la suite :
-const AFTER_ANSWER = 280;  // réponse unique (Oui / Non…) : juste le temps de la voir cochée
-const AFTER_TOUCH = 1300;  // choix multiples : dès que tu t'arrêtes de cocher
-const IDLE = 3500;         // rien touché : tout est déjà bien coché
-const IDLE_ASK = 5000;     // rien répondu à une question : la réponse cochée est gardée
+// La flèche ne part jamais sur un minuteur. Elle passe à la suite quand :
+//  - la réponse est complète (Oui / Non cliqué, ou plus rien à cocher) : juste le temps de la voir cochée ;
+//  - le curseur descend sur la catégorie suivante, ou sur le bouton ;
+//  - tu cliques « Suite » ou appuies sur Entrée.
+// Une catégorie ne s'ouvre que si celles d'avant sont remplies.
+const AFTER_ANSWER = 280;
+const HOVER = 120; // le curseur ne fait que passer : on n'y va pas
 
 let draft = null;
 let pos = null;
@@ -20,9 +22,7 @@ let view = null;      // page affichée : { step, guide }
 let ready = false;    // la flèche montre le bouton
 let finished = false;
 let timer = null;
-let delay = 0;
-let idle = false;     // la flèche partirait d'elle-même, sans réponse donnée
-let selfScroll = 0;   // jusqu'à quand la page défile d'elle-même
+let hoverTimer = null;
 let base = null;      // réglages au départ, pour savoir si un brouillon est encore valable
 const pointer = createPointer($('.ob-card'));
 $('#btn-next').before(arrow('foot-arrow'));
@@ -30,10 +30,8 @@ $('#btn-next').before(arrow('foot-arrow'));
 const activeEl = () => view.guide?.el(pos.part);
 const activePart = () => view.step.parts?.find((p) => p.id === pos.part);
 
-function arm(ms, isIdle = false) {
+function arm(ms) {
   clearTimeout(timer);
-  delay = ms;
-  idle = isIdle;
   timer = setTimeout(moveOn, ms);
 }
 
@@ -45,8 +43,7 @@ function disarm() {
 // La flèche glisse vers la catégorie suivante de la page ; tout est vu : elle montre le bouton.
 function moveOn() {
   timer = null;
-  if (document.hidden || activeEl()?.querySelector('.status.wait')) return arm(1000, idle);
-  if (idle && activeEl()?.querySelector('details[open]')) return arm(1000, true); // tu lis une explication
+  if (activeEl()?.querySelector('.status.wait')) return arm(1000); // vérification en cours
   if (currentError(STEPS, draft, pos)) return; // il manque une réponse : elle reste là
   const to = follow(STEPS, draft, pos);
   if (to) go(to, { auto: true });
@@ -57,14 +54,14 @@ function moveOn() {
 function show(onButton) {
   ready = onButton;
   document.body.classList.toggle('ready', ready);
-  view.guide?.update(pos, ready);
+  view.guide?.update(pos, ready, (id) => reachable(STEPS, draft, pos, id));
   pointer.at(ready ? null : activeEl() || null);
   const p = progress(STEPS, draft, pos);
   $('#bar').style.width = `${Math.round(p.ratio * 100)}%`;
   $('#step-count').textContent = `${p.page} / ${p.pages}`;
   $('#btn-back').style.visibility = backward(STEPS, draft, pos) ? 'visible' : 'hidden';
   $('#btn-skip').hidden = !view.step.skippable;
-  $('#btn-next').textContent = p.complete ? view.step.next || 'Continuer →' : 'Suite ↓';
+  $('#btn-next').textContent = p.complete || p.last ? view.step.next || 'Continuer →' : 'Suite ↓';
   $('#btn-next').classList.toggle('primary', ready);
 }
 
@@ -77,10 +74,42 @@ function showError(msg) {
 function touched(partId) {
   if (finished) return;
   pos = select(STEPS, draft, pos, partId);
+  if (activePart()?.ask) pos = answer(STEPS, draft, pos);
+  saveDraft({ draft, pos, base, at: Date.now() });
   refreshAccess().then(() => { if (!finished) show(ready); });
   showError('');
   show(false);
-  arm(activePart()?.ask ? AFTER_ANSWER : AFTER_TOUCH);
+  if (complete(STEPS, draft, pos)) arm(AFTER_ANSWER);
+  else disarm();
+}
+
+// Il faut d'abord finir la catégorie en cours : elle se secoue, la flèche y reste.
+function nudge() {
+  const gap = firstGap(STEPS, draft, pos);
+  if (gap && gap !== pos.part) go(select(STEPS, draft, pos, gap));
+  const el = activeEl();
+  if (!el) return;
+  el.classList.remove('nudge');
+  void el.offsetWidth;
+  el.classList.add('nudge');
+}
+
+// Le curseur passe sur une catégorie : la flèche le suit, sans jamais sauter une catégorie à remplir.
+function pointTo(partId) {
+  if (finished || !view.guide || (partId === pos.part && !ready)) return;
+  // Verrouillée : le curseur « interdit » suffit, rien ne bouge
+  if (!view.step.parts.some((p) => p.id === partId) || !reachable(STEPS, draft, pos, partId)) return false;
+  go(select(STEPS, draft, pos, partId), { hover: true });
+}
+
+// … ou sur le bouton : seulement quand toute la page est remplie.
+function pointToButton() {
+  if (finished || ready || !view.guide) return;
+  if (currentError(STEPS, draft, pos)) return nudge();
+  const p = progress(STEPS, draft, pos);
+  if (!p.complete) return nudge();
+  disarm();
+  show(true);
 }
 
 // Sites autorisés avec les choix en cours
@@ -101,7 +130,11 @@ function drawPage() {
   const step = STEPS.find((s) => s.id === pos.step);
   const here = () => pos.step === step.id;
   const guide = step.parts ? buildParts(step, draft, {
-    onGo: (id) => { if (here()) go(select(STEPS, draft, pos, id)); },
+    onGo: (id) => {
+      if (!here()) return;
+      if (reachable(STEPS, draft, pos, id)) go(select(STEPS, draft, pos, id));
+      else nudge();
+    },
     onTouch: (id) => { if (here()) touched(id); },
     changed: async () => { await refreshAccess(); if (here()) settled(); },
   }) : null;
@@ -115,11 +148,10 @@ function drawPage() {
   box.classList.remove('enter');
   void box.offsetWidth; // relance l'animation d'entrée
   box.classList.add('enter');
-  selfScroll = Date.now() + 1000;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function go(to, { error = '', auto = false } = {}) {
+function go(to, { error = '', auto = false, hover = false } = {}) {
   disarm();
   const newPage = view?.step.id !== to.step;
   const again = newPage && !!pos && to.seen === pos.seen; // page déjà vue en entier : rien à remontrer
@@ -129,8 +161,7 @@ function go(to, { error = '', auto = false } = {}) {
   const part = activePart();
   show(!part || again);
   showError(error);
-  if (!part || again) return;
-  arm(part.ask ? IDLE_ASK : IDLE, true);
+  if (!part || again || hover) return; // au survol : ni focus, ni défilement, le curseur y est déjà
   const el = activeEl();
   // Le focus suit la flèche : Entrée continue, et un lecteur d'écran lit la question.
   // Jamais pendant une saisie : on ne coupe pas quelqu'un qui tape.
@@ -141,7 +172,6 @@ function go(to, { error = '', auto = false } = {}) {
   if (newPage) return;
   setTimeout(() => {
     if (!el.classList.contains('active')) return;
-    selfScroll = Date.now() + 1000;
     el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, 330);
 }
@@ -201,12 +231,20 @@ document.addEventListener('keydown', (e) => {
     next();
   } else if (!['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON', 'A', 'SUMMARY'].includes(e.target.tagName)) next();
 });
-// Tant que tu t'occupes de la catégorie montrée (souris, clavier), la flèche attend.
-for (const type of ['pointermove', 'keydown', 'input']) {
-  $('#step').addEventListener(type, (e) => { if (timer && delay > AFTER_ANSWER && e.target.closest('.part.active')) arm(delay, idle); });
-}
-// … ou que tu fais défiler la page.
-window.addEventListener('scroll', () => { if (timer && idle && Date.now() > selfScroll) arm(Math.max(delay, IDLE), true); }, { passive: true });
+// La flèche suit le curseur d'une catégorie à l'autre, et jusqu'au bouton.
+// Seulement quand la souris bouge vraiment et entre dans une autre zone : une page qui change ou défile
+// sous une souris immobile ne déplace rien, et bouger dans la catégorie qu'on vient de quitter non plus.
+let under = null;
+document.addEventListener('pointermove', (e) => {
+  if (!e.movementX && !e.movementY) return;
+  const zone = e.target.closest('#btn-next') ? 'button' : e.target.closest('#step .part')?.dataset.part || null;
+  if (zone === under) return;
+  under = zone;
+  clearTimeout(hoverTimer);
+  if (zone === 'button') hoverTimer = setTimeout(pointToButton, HOVER);
+  // Catégorie verrouillée : on réessaiera au prochain mouvement (elle a pu s'ouvrir entre-temps)
+  else if (zone) hoverTimer = setTimeout(() => { if (pointTo(zone) === false) under = null; }, HOVER);
+});
 
 (async () => {
   const settings = await getSettings();

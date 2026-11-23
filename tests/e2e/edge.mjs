@@ -108,24 +108,50 @@ async function main() {
     assert.equal(await where(), expected);
   };
 
+  // Le vrai curseur de la souris, posé au milieu d'un élément
+  const hover = async (selector) => {
+    const box = await run(ob, `(() => { const el = document.querySelector(${JSON.stringify(selector)}); el.scrollIntoView({ block: 'center' }); const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + Math.min(r.height / 2, 20) }; })()`);
+    await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: box.x, y: box.y }, ob);
+    await sleep(500);
+  };
+  const click = async (selector) => { await run(ob, `document.querySelector(${JSON.stringify(selector)}).click()`); await sleep(500); };
+
   await next();
   await until('platforms/machines');
-  await until('platforms/machines/bouton');
+  // Aucun minuteur : sans rien toucher, la flèche reste où elle est
+  await sleep(5000);
+  assert.equal(await where(), 'platforms/machines');
+  // Page 2 : PC et Switch cochés, plus rien à cocher → la flèche descend seule sur « Switch 2 »
+  await click('[data-part=machines] .tcard:nth-child(2)');
+  await until('platforms/switch2');
+  // Le bouton est refusé tant que « Switch 2 » n'a pas de réponse
+  await hover('#btn-next');
+  assert.equal(await where(), 'platforms/switch2');
+  await click('[data-part=switch2] [data-answer=no]');
+  await until('platforms/switch2/bouton');
+  console.log('✔ page 2 : la flèche descend quand la réponse est complète, puis va au bouton');
   await next();
-  // Sans rien toucher, la flèche descend de catégorie en catégorie puis montre le bouton
-  for (const part of ['stores', 'bundles', 'bundleSites', 'prime', 'prime/bouton']) await until(`stores/${part}`);
-  console.log('✔ la flèche descend toute seule');
-  // Une réponse changée : elle va sur la catégorie qui vient de s'ouvrir
-  await run(ob, "document.querySelector('[data-part=prime] [data-answer=yes]').click()");
+  await until('stores/stores');
+  // Le curseur descend : la flèche suit, une catégorie à la fois
+  await hover('[data-part=bundles]');
+  await until('stores/bundles');
+  await hover('[data-part=prime]');
+  assert.equal(await where(), 'stores/bundles', 'pas de saut tant que « Les bundles » n’a pas de réponse');
+  await hover('[data-part=bundles] [data-answer=yes]');
+  await click('[data-part=bundles] [data-answer=yes]');
+  await until('stores/bundleSites');
+  await hover('[data-part=prime]');
+  await until('stores/prime');
+  await hover('[data-part=stores]');
+  await until('stores/stores');
+  console.log('✔ la flèche suit le curseur, sans sauter de catégorie');
+  await hover('[data-part=prime]');
+  await click('[data-part=prime] [data-answer=yes]');
   await until('stores/primeStores');
   console.log('✔ « Oui » à Prime ouvre la suite');
-  // Explication ouverte : elle attend
-  await run(ob, "document.querySelector('.part.active details').open = true");
-  await sleep(6000);
-  assert.equal(await where(), 'stores/primeStores');
-  await run(ob, "document.querySelector('.part.active details').open = false");
+  await hover('#btn-next');
   await until('stores/primeStores/bouton');
-  console.log('✔ la flèche attend pendant la lecture');
+  console.log('✔ curseur sur le bouton : la flèche y va');
   // Quitter puis revenir
   await next();
   await until('content/pc');
