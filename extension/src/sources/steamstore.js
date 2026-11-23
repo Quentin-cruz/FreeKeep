@@ -24,6 +24,8 @@ export function parseSteamItems(data) {
       end: Number(p?.active_discounts?.[0]?.discount_end_date) * 1000 || null,
       rating: it.reviews?.summary_filtered?.percent_positive ?? null,
       reviews: it.reviews?.summary_filtered?.review_count ?? 0,
+      released: Number(it.release?.original_release_date || it.release?.steam_release_date) * 1000 || null,
+      ...(it.assets?.header && it.assets.asset_url_format ? { header: `https://shared.akamai.steamstatic.com/store_item_assets/${it.assets.asset_url_format.replace('${FILENAME}', it.assets.header)}` } : {}),
       ...(it.tags ? { tags: it.tags.map((t) => t.tagid) } : {}),
       descriptors: (it.content_descriptorids || []).map(Number),
     };
@@ -32,7 +34,7 @@ export function parseSteamItems(data) {
 }
 
 /** { [appid]: fiche } — les appid introuvables sont simplement absents. */
-export async function fetchSteamItems(appids, { reviews = true, tags = 0 } = {}) {
+export async function fetchSteamItems(appids, { reviews = true, tags = 0, release = false, assets = false } = {}) {
   const ids = [...new Set((appids || []).filter(Boolean).map(String))].filter((id) => /^\d+$/.test(id));
   const out = {};
   for (let i = 0; i < ids.length; i += BATCH) {
@@ -40,7 +42,7 @@ export async function fetchSteamItems(appids, { reviews = true, tags = 0 } = {})
     const input = {
       ids: ids.slice(i, i + BATCH).map((id) => ({ appid: Number(id) })),
       context: { language: 'english', country_code: 'FR' },
-      data_request: { include_reviews: reviews, ...(tags ? { include_tag_count: tags } : {}) },
+      data_request: { include_reviews: reviews, ...(tags ? { include_tag_count: tags } : {}), ...(release ? { include_release: true } : {}), ...(assets ? { include_assets: true } : {}) },
     };
     Object.assign(out, parseSteamItems(await fetchJson(`${ENDPOINTS.steamItems}?input_json=${encodeURIComponent(JSON.stringify(input))}`)));
   }

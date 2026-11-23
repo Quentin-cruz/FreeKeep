@@ -54,6 +54,7 @@ export function parseGog(products, settings) {
       currency: 'EUR',
       discount,
       merchant: 'GOG',
+      released: Date.parse(String(p.releaseDate || '').replace(/\./g, '-')) || null,
       rating: { gog: rating, gogCount: Number(p.reviewsCount) || 0 },
       platform: 'gog',
       categories: (p.genres || []).map((g) => g.slug).filter(Boolean),

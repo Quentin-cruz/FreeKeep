@@ -1,5 +1,6 @@
 // Récupère toutes les sources de bons plans, avec un cache par source (pour ménager les API).
 import { fetchCheapShark, fetchPopularAppIds } from './sources/cheapshark.js';
+import { fetchWanted } from './sources/wanted.js';
 import { fetchEshop } from './sources/eshop.js';
 import { fetchDealabs, mergeDealabsItems, classifyDealabs, dealabsFreebie } from './sources/dealabs.js';
 import { fetchGgDeals, ggKeyshopDeals } from './sources/ggdeals.js';
@@ -21,6 +22,7 @@ const MIN = 60 * 1000;
 const DAY = 24 * 60 * MIN;
 const GAPS = {
   cheapshark: 14 * MIN, // CheapShark bannit temporairement les clients trop pressés
+  wanted: 55 * MIN,     // meilleures ventes Steam : change peu dans l'heure
   eshop: 14 * MIN,
   dealabs: 4 * MIN,     // les erreurs de prix partent en quelques minutes
   dealabsPages: 25 * MIN,
@@ -50,6 +52,7 @@ const enabledSources = (settings, w) => {
   const st = settings.stores || {};
   return {
     cheapshark: w.pcDeals,
+    wanted: w.pcDeals,
     eshop: w.switchDeals,
     gog: w.pcDeals && !!st.gog,
     ea: w.pcDeals && !!st.ea,
@@ -142,6 +145,8 @@ export async function fetchDealSources(rawSettings, cache, now = Date.now(), for
     }),
   ]);
 
+  // Après CheapShark, pour ne pas l'interroger deux fois en même temps
+  await run('wanted', on.wanted, async () => fetchWanted(settings, { cheapshark: !denied.has('cheapshark') && !pausedError(cache, 'cheapshark', now) }));
   await run('itchbundles', on.itchbundles, async () => ({ items: await fetchItchBundles(cache.rate?.usdEur, now) }));
   await run('storebundles', on.storebundles, async () => {
     const results = await Promise.allSettled([
@@ -160,6 +165,12 @@ export async function fetchDealSources(rawSettings, cache, now = Date.now(), for
     return { prices: await fetchGgDeals(ids, settings.ggdealsKey) };
   });
   return errors;
+}
+
+// Plateformes décochées depuis la lecture : leurs offres disparaissent tout de suite.
+function onlyStores(d, stores) {
+  const offers = Object.entries(d.offers).filter(([p]) => !stores || stores[p]).sort(([, a], [, b]) => a.price - b.price);
+  return offers.length ? { ...d, ...offers[0][1], platform: offers[0][0], offers: Object.fromEntries(offers) } : null;
 }
 
 /** Construit la liste à partir du cache, sans réseau. */
@@ -188,6 +199,7 @@ export function assembleDeals(rawSettings, cache, history, now = Date.now(), err
     {
       // copies : buildDeals ajoute des badges, le cache doit rester brut
       cheapshark: applyEuros(items('cheapshark'), cache.cheapshark?.steam || {}, rate),
+      wanted: items('wanted').map((d) => onlyStores(d, settings.stores)).filter(Boolean),
       wishlist: settings.pcDeals ? structuredClone(read('wishlist')?.items || []) : [],
       gog: items('gog'),
       ea: items('ea'),
@@ -205,6 +217,7 @@ export function assembleDeals(rawSettings, cache, history, now = Date.now(), err
   // État de chaque source pour la page de réglages
   const counts = {
     cheapshark: cache.cheapshark?.items?.length,
+    wanted: cache.wanted?.items?.length,
     eshop: cache.eshop?.items?.length,
     gog: cache.gog?.items?.length,
     ea: cache.ea?.items?.length,
@@ -225,5 +238,5 @@ export function assembleDeals(rawSettings, cache, history, now = Date.now(), err
       : { ok: true, count: counts[name] ?? 0, at: cache[name]?.at || null };
   }
 
-  return { deals: deals.filter((d) => !d.end || d.end > now), freebies, errors, status, rate, wishNames: cache.wishlist?.names || [] };
+  return { deals: deals.filter((d) => !d.end || d.end > now), freebies, errors, status, rate, wishNames: cache.wishlist?.names || [], ranks: read('wanted')?.ranks || {} };
 }

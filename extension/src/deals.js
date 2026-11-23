@@ -7,12 +7,20 @@ import { extractGameName, gameKey } from './titles.js';
 const DAY = 24 * 3600 * 1000;
 
 // Annonces qui couvrent plusieurs jeux : elles ne désignent pas un jeu précis.
-const MANY_GAMES = /s[ée]lection|franchise|promotion|rembours|r[ée]duction|\bjeux\b|m[ée]ga ?thread|\d+\s?% de/i;
+const MANY_GAMES = /s[ée]lection|franchise|\bpromotions?\b|rembours|r[ée]duction|\bjeux\b|m[ée]ga ?thread|\d+\s?% de/i;
+// Prix obtenu sous condition : le titre complet reste affiché.
+const CONDITION = /\bvia\b|rembours|carte|fid[ée]lit|membre|adh[ée]rent|abonn|code\b|coupon|pr[ée]commande|s[ée]lection/i;
+/** Titre lisible d'une annonce Dealabs (« Dordogne sur PC (Dématérialisé - Steam) » → « Dordogne »), ou null. */
+export function cleanLabel(d) {
+  if (d.source !== 'dealabs' || !dealKey(d) || CONDITION.test(d.title)) return null;
+  const name = extractGameName(d.title);
+  return name.length >= 3 && name !== d.title ? name : null;
+}
 // Clé du jeu d'une annonce (null si elle en couvre plusieurs).
 export function dealKey(d) {
   // L'abonnement mensuel Humble s'écrit de plusieurs façons : « Humble Choice (#84) », « Humble Bundle Choice - Novembre »
   if (d.section === 'bundle' && /humble/i.test(`${d.title} ${d.merchant}`) && /\bchoice\b/i.test(d.title)) return 'humblechoice';
-  if (d.source === 'dealabs' && MANY_GAMES.test(d.title)) return null;
+  if (d.source === 'dealabs' && MANY_GAMES.test(extractGameName(d.title))) return null;
   const title = d.section === 'bundle'
     ? String(d.title).replace(/\s*[([].*$/, '').replace(/\s+sur\s+PC\b.*$/i, '').replace(/\b(?:bundle|humble|fanatical|build your own)\b/gi, ' ')
     : d.source === 'dealabs' ? extractGameName(d.title) : d.title;
@@ -24,13 +32,17 @@ export function dealKey(d) {
 export function groupDeals(deals) {
   const groups = new Map();
   const out = [];
+  const modern = new Set(deals.filter((d) => d.section === 'pc' && d.source !== 'dealabs' && d.normalPrice >= 39).map(dealKey));
   for (const d of deals) {
     const key = dealKey(d);
     if (!key) {
       out.push(d);
       continue;
     }
-    const id = [d.section, d.section === 'bundle' ? String(d.merchant).toLowerCase() : d.channel, d.section === 'switch' ? d.platform : '', key].join('|');
+    // PC : un seul jeu, une seule carte, clés comprises (« Dead Space Remake » = le « Dead Space » vendu au prix d'un jeu récent)
+    const same = d.section === 'pc' && key.endsWith('remake') && modern.has(key.slice(0, -6)) ? key.slice(0, -6) : key;
+    const kind = d.section === 'bundle' ? String(d.merchant).toLowerCase() : d.section === 'pc' ? 'game' : d.channel;
+    const id = [d.section, kind, d.section === 'switch' ? d.platform : '', same].join('|');
     if (!groups.has(id)) {
       groups.set(id, []);
       out.push(groups.get(id));
@@ -40,22 +52,28 @@ export function groupDeals(deals) {
   return out.map((g) => {
     if (!Array.isArray(g)) return g;
     if (g.length === 1) return g[0];
-    const sorted = [...g].sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
+    // Le marché gris ne passe jamais devant un store officiel.
+    const grey = (d) => Number(d.section === 'pc' && d.channel === 'keyshop');
+    const sorted = [...g].sort((a, b) => grey(a) - grey(b) || (a.price ?? Infinity) - (b.price ?? Infinity));
     // À prix inconnu, l'annonce la plus complète (contenu du bundle) reste devant.
     const best = { ...sorted[0], ...(sorted[0].bundle ? {} : { bundle: sorted.find((d) => d.bundle)?.bundle }) };
     if (!best.bundle) delete best.bundle;
     const flags = { ...best.flags };
-    for (const d of sorted) for (const f of ['hot', 'wishlist', 'nintendo']) flags[f] ||= !!d.flags?.[f];
+    const peers = sorted.filter((d) => grey(d) === grey(best)); // votes d'une clé ≠ votes de l'offre officielle
+    const key = !grey(best) && sorted.find((d) => grey(d) && d.price < best.price);
+    for (const d of sorted) for (const f of ['wishlist', 'nintendo']) flags[f] ||= !!d.flags?.[f];
+    for (const d of peers) flags.hot ||= !!d.flags?.hot;
     return {
       ...best,
       flags,
       ids: sorted.map((d) => d.id),
       steamAppID: best.steamAppID || sorted.find((d) => d.steamAppID)?.steamAppID || null,
-      temperature: sorted.some((d) => d.temperature != null) ? Math.max(...sorted.map((d) => d.temperature ?? 0)) : best.temperature ?? null,
+      ...(key && !best.keyshop ? { keyshop: { price: key.price, currency: key.currency, url: key.url } } : {}),
+      temperature: peers.some((d) => d.temperature != null) ? Math.max(...peers.map((d) => d.temperature ?? 0)) : best.temperature ?? null,
       normalPrice: best.normalPrice ?? sorted.find((d) => d.normalPrice)?.normalPrice ?? null,
       discount: best.discount ?? (best.price != null && sorted.find((d) => d.normalPrice > best.price) ? Math.round((1 - best.price / sorted.find((d) => d.normalPrice > best.price).normalPrice) * 100) : null),
       images: [...new Set(sorted.flatMap((d) => d.images || []))].slice(0, 4),
-      others: sorted.slice(1, 5).map((d) => ({ merchant: d.merchant, edition: d.source !== 'dealabs' && d.title !== best.title ? d.title : null, price: d.price, currency: d.currency, approx: !!d.approx, url: d.url })),
+      others: sorted.slice(1, 5).map((d) => ({ merchant: `${grey(d) ? '🔑 ' : ''}${d.merchant}`, edition: d.source !== 'dealabs' && best.source !== 'dealabs' && d.title !== best.title ? d.title : null, price: d.price, currency: d.currency, approx: !!d.approx, url: d.url })),
     };
   });
 }
@@ -64,11 +82,14 @@ const sameGame = (a, b) => titlesMatch(a.title, b.title) || titleContains(a.titl
 export function isExceptional(d) {
   const f = d.flags || {};
   const disc = d.discount ?? 0;
+  // Écartée par la sélection (vieux jeu, avis moyens…) : pas d'alerte.
+  if (d.good === false && !f.priceError && !f.wishlist) return false;
   return !!(
     f.priceError ||
     f.drop ||
     (f.wishlist && disc >= 50) ||
     (f.historicLow && disc >= 75) ||
+    (d.good && d.topRank <= 80 && d.age < 4 && disc >= 60) ||
     (f.hot && (f.free || disc >= 60)) ||
     (f.hot && d.channel === 'physical' && disc >= 40) ||
     (d.channel === 'bundle' && f.wishlist) ||
@@ -112,10 +133,12 @@ export function applyEuros(items, steam, rate) {
   for (const d of items) {
     const st = steam[d.steamAppID];
     const known = st?.game && st.normal > 0 ? st : null;
-    for (const [platform, o] of Object.entries(d.offers || {})) {
+    for (const o of Object.values(d.offers || {})) {
       if (o.currency !== 'USD') continue;
-      o.price = toEur(o.price, rate);
-      o.normalPrice = platform === 'steam' && known ? known.normal : toEur(o.normalPrice, rate);
+      // Prix Steam connu : même remise sur le vrai prix en euros (les stores suivent le prix de l'éditeur). Sinon, conversion.
+      const exact = known && o.normalPrice > 0;
+      o.price = exact ? Math.round(known.normal * (o.price / o.normalPrice) * 100) / 100 : toEur(o.price, rate);
+      o.normalPrice = exact ? known.normal : toEur(o.normalPrice, rate);
       o.discount = o.normalPrice > o.price ? Math.round((1 - o.price / o.normalPrice) * 100) : o.discount;
       o.currency = 'EUR';
       o.approx = true;
@@ -136,16 +159,21 @@ export function mergeLaunchers(main, extras) {
     const key = dealKey(d);
     const twin = out.find((o) => o.section === 'pc' && ((d.steamAppID && o.steamAppID && String(o.steamAppID) === String(d.steamAppID)) || (key && dealKey(o) === key)));
     if (!twin) {
-      out.push({ ...d, offers: { [d.platform]: asOffer(d) } });
+      out.push({ ...d, offers: d.offers || { [d.platform]: asOffer(d) } });
       continue;
     }
-    twin.ids = [...(twin.ids || [twin.id]), d.id];
+    twin.ids = [...new Set([...(twin.ids || [twin.id]), d.id])];
     for (const f of ['hot', 'priceError']) if (d.flags?.[f]) twin.flags[f] = true;
     if (d.temperature != null) twin.temperature = Math.max(twin.temperature ?? 0, d.temperature);
     if (d.source === 'dealabs') twin.dealabsUrl = d.url;
     twin.offers ||= { [twin.platform]: asOffer(twin) };
-    const prev = twin.offers[d.platform];
-    if (!prev || d.price <= prev.price) twin.offers[d.platform] = asOffer(d);
+    for (const [platform, o] of Object.entries(d.offers || { [d.platform]: asOffer(d) })) {
+      const prev = twin.offers[platform];
+      if (!prev || o.price <= prev.price) twin.offers[platform] = { ...o };
+    }
+    if (d.source === 'wanted') twin.title = d.title; // nom officiel
+    twin.released ??= d.released ?? null;
+    if (d.source === 'wanted' && d.flags.historicLow) twin.flags.historicLow = true;
     if (d.flags?.wishlist) twin.flags.wishlist = true;
     pickBest(twin);
   }
@@ -160,7 +188,7 @@ export function mergeLaunchers(main, extras) {
 export function buildDeals(lists, history = {}, gg = {}, now = Date.now()) {
   const official = [
     ...mergeLaunchers(lists.cheapshark || [], [
-      ...(lists.wishlist || []), ...(lists.gog || []), ...(lists.ea || []),
+      ...(lists.wanted || []), ...(lists.wishlist || []), ...(lists.gog || []), ...(lists.ea || []),
       ...(lists.dealabs || []).filter((d) => d.section === 'pc' && d.channel === 'official' && d.platform && d.price > 0 && dealKey(d)),
     ]),
     ...(lists.eshop || []),
@@ -211,6 +239,6 @@ export function buildDeals(lists, history = {}, gg = {}, now = Date.now()) {
   for (const [id, h] of Object.entries(history)) if (now - h.at > 30 * DAY) delete history[id];
 
   return groupDeals(all.filter((d) => d.source !== 'ggdeals' || d.candidate || d.flags.drop))
-    .map((d) => ({ ...d, exceptional: isExceptional(d), score: scoreDeal(d) }))
+    .map((d) => ({ ...d, ...(cleanLabel(d) ? { label: cleanLabel(d) } : {}), exceptional: isExceptional(d), score: scoreDeal(d) }))
     .sort((a, b) => b.score - a.score);
 }

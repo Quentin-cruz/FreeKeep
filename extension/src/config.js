@@ -54,10 +54,14 @@ export const SWITCH_PLATFORMS = {
 };
 
 // Niveaux d'exigence (seuils des bons plans)
+//  - limits : cartes montrées d'abord (le reste derrière « Voir tout ») ; bar : note Steam, nombre d'avis, votes Dealabs, jeux récents par bundle
 export const LEVELS = {
-  strict:   { label: 'Que les affaires de fou', emoji: '🔥', desc: 'Très peu de résultats, uniquement des remises énormes.', pcMinDiscount: 75, gemMinDiscount: 80, gemMinRating: 95, switchMinDiscount: 60 },
-  balanced: { label: 'Équilibré', emoji: '⚖️', desc: 'Grosses remises sur de bons jeux.', pcMinDiscount: 60, gemMinDiscount: 70, gemMinRating: 90, switchMinDiscount: 40 },
-  wide:     { label: 'Large', emoji: '🌊', desc: 'Plus de choix, remises plus modestes.', pcMinDiscount: 40, gemMinDiscount: 50, gemMinRating: 85, switchMinDiscount: 30 },
+  strict:   { label: 'Que les affaires de fou', emoji: '🔥', desc: 'Une trentaine d’annonces au plus, énormes remises.', pcMinDiscount: 75, gemMinDiscount: 80, gemMinRating: 95, switchMinDiscount: 60, pcMaxAge: 4,
+    limits: { pc: 15, bundle: 5, switch: 10 }, bar: { rating: 85, reviews: 3000, votes: 300, bigVotes: 500, bundle: 3 } },
+  balanced: { label: 'Équilibré', emoji: '⚖️', desc: 'Les meilleures remises sur des jeux récents ou très demandés.', pcMinDiscount: 60, gemMinDiscount: 70, gemMinRating: 90, switchMinDiscount: 40, pcMaxAge: 6,
+    limits: { pc: 30, bundle: 10, switch: 20 }, bar: { rating: 78, reviews: 1000, votes: 150, bigVotes: 300, bundle: 2 } },
+  wide:     { label: 'Large', emoji: '🌊', desc: 'Deux fois plus de choix, remises plus modestes.', pcMinDiscount: 40, gemMinDiscount: 50, gemMinRating: 85, switchMinDiscount: 30, pcMaxAge: 10,
+    limits: { pc: 60, bundle: 20, switch: 40 }, bar: { rating: 70, reviews: 400, votes: 60, bigVotes: 150, bundle: 1 } },
 };
 
 // Sites d'où viennent les giveaways ponctuels (repérés dans le texte GamerPower).
@@ -172,6 +176,7 @@ export const DEFAULT_SETTINGS = {
   gemMinDiscount: 70,
   gemMinRating: 90,
   switchMinDiscount: 40,
+  pcMaxAge: 6,            // au-delà, un jeu passe derrière « Voir tout » (ans)
   ggdealsKey: '',         // clé API GG.deals (facultative) -> prix des sites de clés
 
   // Ce que je ne veux pas voir
@@ -205,7 +210,7 @@ export const DEFAULT_SETTINGS = {
 };
 
 // Sources à relire quand un réglage de bons plans change.
-export const DEAL_SOURCES = ['cheapshark', 'eshop', 'ggdeals', 'gog', 'ea', 'bundles', 'storebundles', 'itchbundles', 'switchkeys', 'dealabsPages'];
+export const DEAL_SOURCES = ['cheapshark', 'wanted', 'eshop', 'ggdeals', 'gog', 'ea', 'bundles', 'storebundles', 'itchbundles', 'switchkeys', 'dealabsPages'];
 
 // Fréquence des vérifications, en heures.
 export const INTERVALS = [

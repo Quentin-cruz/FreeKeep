@@ -7,7 +7,7 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en quatre se
 | Section | Contenu |
 |---|---|
 | 🎁 **Gratuits** | Jeux PC offerts à garder à vie : Epic, Steam, GOG, Ubisoft, EA, Battle.net, Microsoft Store, **Amazon Prime** (Amazon Games, Legacy Games, Luna), **et les drops ponctuels** (Alienware Arena, Fanatical, Humble Bundle, IndieGala, itch.io…) |
-| 💻 **Promos PC** | Seulement les **gros jeux bien notés** et les **pépites** très appréciées à grosse remise, sur les stores officiels et les sites de clés |
+| 💻 **Promos PC** | Les jeux que les joueurs **achètent en ce moment**, récents et bien notés, au **meilleur prix** sur 30+ stores. Les vieux jeux et les petites promos attendent derrière « Voir tout » |
 | 📚 **Bundles** | Les meilleurs packs : Humble Bundle · Fanatical + Green Man Gaming + Digiphile · bundles de tes stores (Steam, GOG) · indie sans DRM (itch.io + IndieGala) |
 | 🎮 **Switch** | Grosses promos **eShop** (jeux jouables sur Switch 1), **jeux en boîte** (Amazon, Fnac, Leclerc…) et **clés** |
 
@@ -32,7 +32,7 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en quatre se
 1. **Plateformes** : PC, Switch, et « je veux aussi les jeux Switch 2 ».
 2. **Stores PC** où tu actives tes jeux : Steam, Epic Games, GOG, EA app, Ubisoft Connect, Battle.net, Microsoft Store, itch.io, IndieGala, Autres. Puis **Bundles** (oui / non, puis quels sites). Puis **Amazon Prime** (oui / non, puis où) : Amazon Games, Legacy Games, Luna (cloud).
 3. **Ce que tu veux voir** : jeux gratuits, promos PC, promos Switch, jeux en boîte (+ ton département), sites de clés, bundles. Puis **l'accès aux sites** utiles à ces choix.
-4. **Niveau d'exigence** : 🔥 que les affaires de fou, ⚖️ équilibré ou 🌊 large, avec le nombre d'annonces que chacun donnerait et celui qui te convient le mieux.
+4. **Niveau d'exigence** : 🔥 que les affaires de fou, ⚖️ équilibré ou 🌊 large, avec le nombre d'annonces montrées d'abord pour chacun.
 5. **Tes bibliothèques** : lecture de tes jeux Steam et GOG via les sessions déjà ouvertes dans ton navigateur (lien de profil Steam facultatif). Les promos sur tes jeux sont masquées et ta liste de souhaits Steam est mise en avant.
 6. **Ce que tu ne veux pas voir** (avec des conseils : nombre d'annonces que chaque filtre retirerait, genres et licences absents de ta bibliothèque Steam) : 16 genres à masquer (horreur, sport, hentai…) et des licences à bannir (LEGO, Mortal Kombat, Hogwarts Legacy…). Les orthographes proches et les variantes (« Hogwart's Legacy », « NBA 2K26 », « EA FC 27 ») sont reconnues.
 7. **Alertes** : notifications, fréquence, clic automatique.
@@ -102,14 +102,22 @@ Chaque bon plan Switch est classé **Switch** (jouable sur Switch 1, et donc aus
 - Le bouton **Récupérer** ouvre la page du store et détecte l'ajout à ta bibliothèque (Epic, Steam, GOG, Ubisoft, itch.io, IndieGala). Le **clic automatique** sur « Obtenir » est *expérimental* et désactivé par défaut : il n'agit que sur la page du jeu demandé, jamais sur un autre jeu ouvert dans le même onglet. Sur Epic, la commande n'est validée que si le total est à 0 €. Les captchas restent à faire toi-même.
 - Les jeux que tu possèdes déjà sont détectés : sur Steam et GOG via ta session, sur les stores quand la page affiche « Dans la bibliothèque ».
 
-## 💻 Promos PC : que des pépites
+## 💻 Promos PC : les jeux voulus, au meilleur prix
+
+**Sélection** : chaque section montre d'abord ses meilleures annonces (30 PC, 20 Switch, 10 bundles en « Équilibré » ; deux fois moins en « Que les affaires de fou », deux fois plus en « Large »). Le reste attend derrière **Voir tout**, avec la raison affichée (🕰️ vieux jeu, 👎 peu ou mal noté, ❔ peu demandé, 💤 petite remise, 🗳️ peu voté).
+
+- **Ce qui compte** : ce que les joueurs achètent (meilleures ventes Steam en promo, votes Dealabs, téléchargements eShop), la note Steam, l'âge du jeu, puis la remise et le plus bas historique.
+- **Vieux jeux** : au-delà de 6 ans (4 ou 10 selon le niveau, réglable), un jeu passe après, sauf s'il est dans ta liste de souhaits, très plébiscité sur Dealabs ou en erreur de prix.
+- **Remise selon l'âge** : un jeu sorti cette année n'est jamais à −60 %. Il suffit de −27 % la première année, −33 % la deuxième, −48 % jusqu'à 4 ans (niveau Équilibré).
+- **Ménage** : pas de DLC ni d'extensions ; une seule carte par jeu, clés comprises (le store officiel reste devant, la clé est indiquée) ; titres Dealabs raccourcis au nom du jeu, sauf prix sous condition.
+- **Prix d'un revendeur** (GameBillet, Fanatical, GMG…) : sa remise est appliquée au vrai prix Steam en euros, plus juste qu'une conversion du dollar.
 
 | Source | Ce qu'elle apporte |
 |---|---|
 | [GOG](https://www.gog.com) | Catalogue officiel, en euros, jeux notés 4/5 et plus |
 | EA | Offres du site EA, en euros |
 | Bundles | Humble Bundle, Fanatical, Green Man Gaming, Digiphile : contenu via [Barter.vg](https://barter.vg), gardés s'ils ont au moins 3 jeux bien notés sur Steam (2 à 6 selon le niveau). Steam et GOG : remise d'au moins 60 à 85 % sur la valeur du contenu selon le niveau. IndieGala : au moins 4 jeux et 70 à 85 % d'avis positifs en moyenne (clés Steam). [itch.io](https://itch.io/bundles) : lots de 4 jeux et plus à 2,50 € le jeu maximum (pas de note disponible) |
-| Steam | Prix officiels en euros, et promos de ta liste de souhaits |
+| Steam | Meilleures ventes en promo (les jeux voulus), prix officiels en euros, note, date de sortie, promos de ta liste de souhaits |
 | [CheapShark](https://www.cheapshark.com) | Promos sur 30+ stores officiels (Steam, GOG, Humble, Fanatical, GMG, Gamesplanet, Battle.net…), avec la note Metacritic et les avis Steam |
 | [Dealabs](https://www.dealabs.com) | Deals **hot** validés par la communauté, y compris sur les sites de clés (Eneba, Instant Gaming, G2A…), et **erreurs de prix** (avec le groupe « erreur de prix ») |
 | [GG.deals](https://gg.deals) *(facultatif)* | Prix des **sites de clés** en euros, plus bas historiques, surveillance des gros jeux |
@@ -145,6 +153,7 @@ extension/
 │   ├── deals.js               # fusion des bons plans, chutes de prix, score, « exceptionnel »
 │   ├── refresh-deals.js       # récupération des sources avec cache (ménage les API)
 │   ├── titles.js                  # comparaison des titres (doublons), la même partout
+│   ├── selection.js           # ce qui est montré d'abord : envie, note, âge, prix
 │   ├── levels.js, keywords.js, recommend.js  # niveaux, licences bannies, conseils du tutoriel
 │   ├── health.js, access.js, claim.js        # pannes, accès aux sites, page du bon jeu
 │   ├── backup.js, update.js                  # sauvegarde, nouvelle version
@@ -161,14 +170,15 @@ extension/
 │       ├── steamstore.js, rates.js               # prix Steam en euros, taux BCE
 │       └── goglibrary.js                         # jeux GOG via la session gog.com
 ├── src/prefs.js, src/genres.js            # personnalisation : sections, exclusions, jeux possédés
-├── src/sources/steamlibrary.js, steamapps.js, steamsearch.js  # bibliothèque/souhaits, genres, recherche par nom
+├── src/sources/steamlibrary.js, steamapps.js, steamsearch.js  # bibliothèque/souhaits, fiches (genres, note, âge), recherche par nom
+├── src/sources/wanted.js      # meilleures ventes Steam en promo, meilleur prix sur 30+ stores
 ├── onboarding/                # tutoriel : steps.js (questions), flow.js (ordre), guide.js (flèches)
 ├── ui/                        # composants partagés (tutoriel + réglages)
 ├── content/claim.js           # clic assisté + détection « possédé »
 ├── popup/  options/  icons/
 tests/
 ├── fixtures.js                # données calquées sur le format réel des API
-├── unit.test.js               # 83 tests
+├── unit.test.js               # 89 tests
 ├── background.test.js         # 23 tests : service worker dans un navigateur simulé
 └── e2e/edge.mjs               # essai complet dans un vrai Edge, profil jetable
 ```
@@ -196,7 +206,7 @@ Une version précédente (0.3) a aussi été testée de bout en bout dans Chrome
 
 ## Limites connues
 
-- **Prix en euros** : exacts pour Steam, GOG, EA, l'eShop, les clés Switch, les bundles et Dealabs. CheapShark (Epic, Ubisoft, revendeurs) et GamerPower ne donnent que des dollars : le prix est converti au taux de la Banque centrale européenne et précédé de « ≈ ».
+- **Prix en euros** : exacts pour Steam, GOG, EA, l'eShop, les clés Switch, les bundles et Dealabs. CheapShark (Epic, Ubisoft, revendeurs) et GamerPower ne donnent que des dollars : la remise est appliquée au prix Steam en euros quand il est connu, sinon le prix est converti au taux de la Banque centrale européenne. Dans les deux cas, il est précédé de « ≈ ».
 - **Bundles** : le prix n'est pas connu pour Digiphile et certains Fanatical. Seul le contenu est comparé.
 - **G2A** bloque les lectures automatiques : ses offres n'apparaissent que si elles sont postées sur Dealabs.
 - **Clés PC** : sans clé API GG.deals, seules celles postées sur Dealabs sont vues.

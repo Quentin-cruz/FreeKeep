@@ -98,6 +98,8 @@ export function extractGameName(title) {
     .replace(/^(?:le\s+)?jeu\s+(?:(?:pc|nintendo switch(?: ?[12])?|switch(?: ?[12])?)\s+)?(?=\S)/i, '')
     .split(/\s+(?:sur|pour|on)\s+(?:pc|steam|epic|gog|nintendo|switch|ps\d|playstation|xbox)\b/i)[0]
     .replace(/\s*[([].*$/, '')
+    .replace(/\s+à\s+\d+(?:[.,]\d+)?\s?€.*$/i, '')
+    .replace(/\s+\+\s+(?:carte|poster|steelbook|bonus|figurine|goodies?|artbook|porte|stickers?|dlc)\b.*$/i, '')
     .replace(/\s+[-–]\s+(?:nintendo )?switch.*$/i, '')
     .replace(/\s+[-–]\s+(?:[ée]dition|edition|day one|limited|deluxe).*$/i, '')
     .replace(/\s+-\s+.*$/, '')

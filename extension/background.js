@@ -8,6 +8,7 @@ import { fetchGamerPower } from './src/sources/gamerpower.js';
 import { fetchSteamLibrary, fetchSteamProfile, fetchSteamSession } from './src/sources/steamlibrary.js';
 import { fetchGogLibrary } from './src/sources/goglibrary.js';
 import { enrichAppInfo } from './src/sources/steamapps.js';
+import { selectDeals, firstOnes } from './src/selection.js';
 import { resolveSteamIds } from './src/sources/steamsearch.js';
 import { fetchSteamItems } from './src/sources/steamstore.js';
 import { worthInEur, DEFAULT_USD_EUR } from './src/sources/rates.js';
@@ -15,7 +16,7 @@ import { mergeGames } from './src/merge.js';
 import { refreshDeals, fetchDealSources, assembleDeals } from './src/refresh-deals.js';
 import { fetchLootScraper } from './src/sources/lootscraper.js';
 import { tasteFrom, genresToHide, rankFranchises, filterHits, recommendedLevel, COMFORT } from './src/recommend.js';
-import { isExceptional, scoreDeal } from './src/deals.js';
+import { isExceptional } from './src/deals.js';
 import { effective, wants, hiddenReason, makeOwnedIndex, sameGameStrict, extractGameName, steamOnly, showsGame } from './src/prefs.js';
 import {
   getSettings, saveSettings, migrateKey, getDraft, saveDraft, getData, saveData, locked, updateData, stateFor, patchState, keysForHistory, getClaimTabs, updateClaimTabs,
@@ -272,8 +273,9 @@ async function doRefresh(reason, force) {
   let dealStatus = {};
   let rate = DEFAULT_USD_EUR;
   let wishNames = [];
+  let ranks = {};
   try {
-    ({ deals, freebies, errors: dealErrors, status: dealStatus, rate, wishNames } = await refreshDeals(settings, data.dealCache, data.dealHistory, now, force, { wishlist, denied }));
+    ({ deals, freebies, errors: dealErrors, status: dealStatus, rate, wishNames, ranks } = await refreshDeals(settings, data.dealCache, data.dealHistory, now, force, { wishlist, denied }));
   } catch (e) {
     dealErrors = { bons_plans: String(e?.message || e) };
     console.warn('[FreeKeep] bons plans :', e);
@@ -301,14 +303,11 @@ async function doRefresh(reason, force) {
   // Plus de « non précisé » : trouvé sur Steam → Steam, sinon « Autres » (masqué si cette plateforme n'est pas cochée).
   for (const d of deals) if (d.section === 'pc' && !d.platform) d.platform = d.steamAppID ? 'steam' : 'other';
 
-  // ---- 4. Genres (seulement si l'utilisateur en exclut) ----
-  if ((settings.excludedGenres || []).length) {
-    const appids = [...games.map((g) => g.appid), ...deals.map((d) => d.steamAppID)].filter(Boolean);
-    try {
-      await enrichAppInfo(appids, data.appInfo, { now });
-    } catch (e) {
-      console.warn('[FreeKeep] genres Steam :', e);
-    }
+  // ---- 4. Fiches Steam : genres masqués, note, âge ----
+  try {
+    await enrichAppInfo([...games.map((g) => g.appid), ...appidsOf(deals)].filter(Boolean), data.appInfo, { now });
+  } catch (e) {
+    console.warn('[FreeKeep] fiches Steam :', e);
   }
 
   // ---- 5. Personnalisation ----
@@ -329,10 +328,10 @@ async function doRefresh(reason, force) {
     out.hiddenBy = hiddenReason(out, settings, { appInfo: data.appInfo, owned })
       || (out.hiddenBy === 'wishlist' ? 'wishlist' : null)
       || (d.section === 'pc' && d.platform === 'other' && !settings.stores?.other && d.channel !== 'keyshop' ? 'platform' : null);
-    out.exceptional = isExceptional(out);
-    out.score = scoreDeal(out);
     return out;
-  }).sort((a, b) => b.score - a.score);
+  });
+  deals = selectDeals(deals, { appInfo: data.appInfo, ranks, owned, settings, now });
+  for (const d of deals) d.exceptional = isExceptional(d);
 
   const sessionIds = await steamSessionIds(games, data.states, settings);
   const update = await checkUpdate(settings, data.meta.update, now);
@@ -624,7 +623,7 @@ function notifyDeals(deals, data, settings) {
   if (!fresh.length) return;
 
   if (first || fresh.length > 2) {
-    const lines = fresh.slice(0, 4).map((d) => `• ${d.title} (${SECTION_LABEL[d.section]}) ${d.discount ? `-${d.discount} %` : formatPrice(d.price, d.currency)}`);
+    const lines = fresh.slice(0, 4).map((d) => `• ${d.label || d.title} (${SECTION_LABEL[d.section]}) ${d.discount ? `-${d.discount} %` : formatPrice(d.price, d.currency)}`);
     if (fresh.length > 4) lines.push(`+ ${fresh.length - 4} autres`);
     chrome.notifications.create(`dealsummary|${fresh[0].section}|${Date.now()}`, {
       type: 'basic',
@@ -639,7 +638,7 @@ function notifyDeals(deals, data, settings) {
     chrome.notifications.create(`deal|${d.id}`, {
       type: 'basic',
       iconUrl: ICON,
-      title: `${dealHeadline(d)} ${SECTION_LABEL[d.section]} : ${d.title}`,
+      title: `${dealHeadline(d)} ${SECTION_LABEL[d.section]} : ${d.label || d.title}`,
       message: dealLine(d),
       contextMessage: d.end ? `Jusqu'au ${formatDate(d.end)}` : 'FreeKeep<3',
       priority: d.flags.priceError ? 2 : 1,
@@ -863,7 +862,7 @@ async function prefetch(draft) {
     await fetchDealSources(draft, data.dealCache, Date.now(), [], { wishlist: data.steamLib?.wishlist || [], denied: await deniedSources() });
     // Tags Steam des annonces trouvées : sans eux, le nombre de jeux par genre serait faux.
     const { deals } = assembleDeals({ ...draft, level: 'wide' }, data.dealCache, {}, Date.now());
-    await enrichAppInfo(deals.map((d) => d.steamAppID), data.appInfo).catch((e) => console.warn('[FreeKeep] genres Steam :', e));
+    await enrichAppInfo(appidsOf(deals), data.appInfo).catch((e) => console.warn('[FreeKeep] genres Steam :', e));
     await locked(() => saveData({ dealCache: data.dealCache, appInfo: data.appInfo }));
   })()).finally(() => { running = null; });
   await running;
@@ -877,13 +876,24 @@ async function estimate(rawDraft, fetchMissing) {
   const now = Date.now();
   const listFor = (level, filtered = true) => {
     const s = effective({ ...draft, level });
-    return assembleDeals(s, data.dealCache, structuredClone(data.dealHistory), now).deals
+    const { deals, ranks } = assembleDeals(s, data.dealCache, structuredClone(data.dealHistory), now);
+    return selectDeals(deals, { appInfo: data.appInfo, ranks, owned, settings: s, now })
       .filter((d) => !filtered || !hiddenReason(d, s, { appInfo: data.appInfo, owned }));
   };
-  const counts = Object.fromEntries(Object.keys(LEVELS).map((l) => [l, listFor(l).length]));
+  // Ce qui sera montré d'abord, section par section
+  const shown = (l) => {
+    const list = listFor(l);
+    return ['pc', 'bundle', 'switch'].reduce((n, sec) => n + firstOnes(list.filter((d) => d.section === sec), sec, { level: l }).length, 0);
+  };
+  const counts = Object.fromEntries(Object.keys(LEVELS).map((l) => [l, shown(l)]));
   const level = LEVELS[draft.level] ? draft.level : 'balanced';
   const hits = filterHits(listFor(level, false), data.games, data.appInfo);
   return { counts, level, current: counts[level], recommended: recommendedLevel(counts), many: counts[level] > COMFORT, hits };
+}
+
+// Jeux Steam cités par les annonces, contenu des bundles compris
+function appidsOf(deals) {
+  return deals.flatMap((d) => [d.steamAppID, ...(d.bundle?.appids || [])]).filter(Boolean);
 }
 
 let tasteCache = null;

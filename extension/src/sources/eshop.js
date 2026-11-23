@@ -5,7 +5,7 @@ import { fetchJson } from '../util.js';
 
 const FIELDS = [
   'title', 'url', 'nsuid_txt', 'fs_id', 'price_regular_f', 'price_lowest_f', 'price_discount_percentage_f',
-  'image_url_h2x1_s', 'image_url', 'downloads_rank_i', 'publisher', 'playable_on_txt', 'game_categories_txt',
+  'image_url_h2x1_s', 'image_url', 'downloads_rank_i', 'publisher', 'playable_on_txt', 'game_categories_txt', 'date_from',
 ].join(',');
 
 // Rang de téléchargement Nintendo (1 = le plus téléchargé). Les jeux inconnus bradés à -90 % sont bien plus loin
@@ -102,6 +102,7 @@ export function parseEshop(responses, settings) {
         nsuid,
         nsuids,
         rank,
+        released: Date.parse(doc.date_from) || null,
         platform,
         categories: doc.game_categories_txt || [],
         end: null,

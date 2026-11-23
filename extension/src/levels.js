@@ -1,3 +1,5 @@
+import { ageOf, minDiscountFor } from './selection.js';
+
 // Niveau d'exigence : les sources sont lues au plus large, puis triées ici.
 // Changer de niveau est donc immédiat, et le tutoriel peut dire combien d'annonces chaque niveau donnerait.
 
@@ -38,6 +40,8 @@ export function keepAtLevel(items, s) {
         Object.assign(d, top[1], { platform: top[0] });
         return true;
       }
+      case 'wanted': // plus le jeu est récent, moins il faut de remise
+        return discount >= minDiscountFor(ageOf(d.released), s.pcMinDiscount);
       case 'gog':
         return discount >= launcherMin(s) && (s.level !== 'strict' || (d.rating?.gog ?? 0) >= 4.5);
       case 'ea':

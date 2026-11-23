@@ -74,11 +74,11 @@ async function eshopReference(key) {
   const params = new URLSearchParams({
     q: key.name.replace(/[^\p{L}\p{N} ]+/gu, ' '), rows: '8', start: '0', wt: 'json',
     fq: `type:GAME AND playable_on_txt:${key.platform === 'switch2' ? 'BEE' : 'HAC'}`,
-    fl: 'title,price_regular_f,price_lowest_f,publisher,image_url_h2x1_s,image_url',
+    fl: 'title,price_regular_f,price_lowest_f,publisher,image_url_h2x1_s,image_url,downloads_rank_i,date_from',
   });
   const docs = (await fetchJson(`${ENDPOINTS.eshopSearch}?${params}`))?.response?.docs || [];
   const doc = docs.find((d) => Number(d.price_regular_f) > 0 && sameGameStrict(d.title.replace(/\s*[–-]\s*nintendo switch.*edition$/i, ''), key.name));
-  return doc ? { regular: Number(doc.price_regular_f), now: Number(doc.price_lowest_f) || Number(doc.price_regular_f), nintendo: /^nintendo$/i.test(String(doc.publisher || '').trim()), image: doc.image_url_h2x1_s || doc.image_url || null } : null;
+  return doc ? { regular: Number(doc.price_regular_f), now: Number(doc.price_lowest_f) || Number(doc.price_regular_f), nintendo: /^nintendo$/i.test(String(doc.publisher || '').trim()), image: doc.image_url_h2x1_s || doc.image_url || null, rank: doc.downloads_rank_i ?? null, released: Date.parse(doc.date_from) || null } : null;
 }
 
 const refKey = (k) => `${k.platform}:${normTitle(k.name)}`;
@@ -109,6 +109,8 @@ export function buildKeyDeals(keys, refs, settings) {
       discount,
       merchant: k.merchant,
       platform: k.platform,
+      rank: ref?.rank ?? null,
+      released: ref?.released ?? null,
       posted: null,
       end: null,
       flags: { nintendo: !!ref?.nintendo },

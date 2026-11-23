@@ -4,6 +4,7 @@ import { stateFor } from '../src/store.js';
 import { isNewer } from '../src/update.js';
 import { DENIED, requestAccess } from '../src/access.js';
 import { wants, showsGame } from '../src/prefs.js';
+import { firstOnes } from '../src/selection.js';
 import { GENRE_BY_ID } from '../src/genres.js';
 import { normTitle, formatDuration, formatDate, formatShortDate, formatAgo, formatPrice } from '../src/util.js';
 
@@ -11,7 +12,7 @@ const $ = (sel) => document.querySelector(sel);
 const send = (msg) => chrome.runtime.sendMessage(msg);
 
 let S = null; // état renvoyé par le service worker
-const ui = { section: 'free', tab: 'active', filter: 'all', platform: 'all', kind: 'all', showHidden: false, showFiltered: false, refreshing: false };
+const ui = { section: 'free', tab: 'active', filter: 'all', platform: 'all', kind: 'all', showHidden: false, showFiltered: false, showAll: false, refreshing: false };
 
 const params = new URLSearchParams(location.search);
 if (params.has('tab')) document.body.classList.add('in-tab');
@@ -78,6 +79,7 @@ function deriveDeals(section) {
   const hiddenIds = S.dealStates || {};
   const isHidden = (d) => (d.ids || [d.id]).some((id) => hiddenIds[id]?.hidden);
   return {
+    first: firstOnes(all.filter((d) => !isHidden(d) && !d.hiddenBy), section, S.settings),
     visible: all.filter((d) => !isHidden(d) && !d.hiddenBy),
     hidden: all.filter((d) => isHidden(d) && !d.hiddenBy),
     filtered: all.filter((d) => d.hiddenBy),
@@ -106,7 +108,7 @@ function render() {
   }
 
   // Sélecteur de section
-  const counts = { free: free.available.length, pc: pc.visible.length, bundle: bd.visible.length, switch: sw.visible.length };
+  const counts = { free: free.available.length, pc: pc.first.length, bundle: bd.first.length, switch: sw.first.length };
   const hot = { pc: pc.visible.some((d) => d.exceptional), bundle: bd.visible.some((d) => d.exceptional), switch: sw.visible.some((d) => d.exceptional) };
   document.querySelectorAll('.section').forEach((b) => {
     const id = b.dataset.section;
@@ -137,7 +139,7 @@ function render() {
   const sources = {
     free: ['Epic, Steam, GOG, ', h('a', { href: 'https://feed.eikowagenknecht.com/lootscraper/', target: '_blank' }, 'LootScraper'), ', ', h('a', { href: 'https://www.gamerpower.com', target: '_blank' }, 'GamerPower'), S.settings.dealabs ? ', Dealabs' : ''],
     bundle: ['Bundles : ', h('a', { href: 'https://barter.vg', target: '_blank' }, 'Barter.vg'), ', Humble Bundle, Fanatical, GMG, Digiphile, Steam, GOG, itch.io, IndieGala'],
-    pc: ['Prix : ', h('a', { href: 'https://www.cheapshark.com', target: '_blank' }, 'CheapShark'), ', GOG, EA, Barter.vg, Dealabs', S.settings.ggdealsKey ? [', ', h('a', { href: 'https://gg.deals', target: '_blank' }, 'GG.deals')] : ''],
+    pc: ['Prix : Steam, ', h('a', { href: 'https://www.cheapshark.com', target: '_blank' }, 'CheapShark'), ', GOG, EA, Barter.vg, Dealabs', S.settings.ggdealsKey ? [', ', h('a', { href: 'https://gg.deals', target: '_blank' }, 'GG.deals')] : ''],
     switch: ['Prix : eShop, Eneba, Kinguin, Instant Gaming, ', h('a', { href: 'https://www.dealabs.com', target: '_blank' }, 'Dealabs')],
   }[ui.section];
   $('.sources').replaceChildren('Données : ', ...sources.flat());
@@ -154,13 +156,13 @@ function renderBanner() {
     box.append(h('div', { class: 'banner info' }, `⬆ FreeKeep<3 ${version} est disponible. `, h('a', { href: REPO, target: '_blank', rel: 'noopener' }, 'Télécharger')));
   }
   const names = {
-    epic: 'Epic Games', steam: 'Steam', gamerpower: 'GamerPower', lootscraper: 'LootScraper', cheapshark: 'CheapShark', eshop: 'eShop Nintendo',
+    epic: 'Epic Games', steam: 'Steam', gamerpower: 'GamerPower', lootscraper: 'LootScraper', cheapshark: 'CheapShark', wanted: 'meilleures ventes Steam', eshop: 'eShop Nintendo',
     dealabs: 'Dealabs', ggdeals: 'GG.deals', gog: 'GOG', ea: 'EA', bundles: 'bundles', storebundles: 'bundles Steam et GOG', itchbundles: 'itch.io', switchkeys: 'clés Switch', dealabsPages: 'pages Dealabs', wishlist: 'souhaits Steam', watchlist: 'CheapShark', bons_plans: 'bons plans',
   };
   const relevant = {
     bundle: ['bundles', 'storebundles', 'itchbundles', 'dealabs', 'bons_plans'],
     free: ['epic', 'steam', 'gamerpower', 'lootscraper'],
-    pc: ['cheapshark', 'gog', 'ea', 'dealabs', 'dealabsPages', 'ggdeals', 'watchlist', 'wishlist', 'bons_plans'],
+    pc: ['cheapshark', 'wanted', 'gog', 'ea', 'dealabs', 'dealabsPages', 'ggdeals', 'watchlist', 'wishlist', 'bons_plans'],
     switch: ['eshop', 'switchkeys', 'dealabs', 'dealabsPages', 'bons_plans'],
   }[ui.section];
   const all = { ...(S.meta.errors || {}), ...(S.meta.dealErrors || {}) };
@@ -290,15 +292,17 @@ function forPlatform(d, id) {
   return offer ? { ...d, ...offer, platform: id, flags: { ...d.flags, historicLow: false }, exceptional: false } : d;
 }
 
-function chipRow(defs, key, rows) {
+function chipRow(defs, key, rows, count = (list) => list.length) {
   const chip = (id, label, color, n) =>
     h('button', { class: `chip${ui[key] === id ? ' active' : ''}${n ? '' : ' zero'}`, onclick: () => { ui[key] = id; render(); $('#list').scrollTop = 0; } },
       color ? h('span', { class: 'dot', style: `background:${color}` }) : null, label, h('span', { class: 'n' }, n));
-  const counted = defs.map((f) => ({ f, n: rows.filter(f.test).length })).filter(({ f, n }) => n > 0 || f.always || ui[key] === f.id);
-  return h('div', { class: 'filter-row' }, chip('all', 'Tous', null, rows.length), ...counted.map(({ f, n }) => chip(f.id, f.label, f.color, n)));
+  const counted = defs.map((f) => ({ f, n: count(rows.filter(f.test)) })).filter(({ f, n }) => n > 0 || f.always || ui[key] === f.id);
+  return h('div', { class: 'filter-row' }, chip('all', 'Tous', null, count(rows)), ...counted.map(({ f, n }) => chip(f.id, f.label, f.color, n)));
 }
 
-function renderDeals(list, { visible, hidden, filtered }, section) {
+function renderDeals(list, { visible: everything, hidden, filtered }, section) {
+  // D'abord la sélection ; « Voir tout » ajoute le reste (vieux jeux, avis moyens, peu demandés…)
+  const visible = ui.showAll ? everything : everything.filter((d) => d.good);
   const platforms = platformFilters(section);
   const kinds = kindFilters(section);
   const platform = platforms.find((f) => f.id === ui.platform);
@@ -308,10 +312,11 @@ function renderDeals(list, { visible, hidden, filtered }, section) {
   const byPlatform = platform ? visible.filter(platform.test).map((d) => forPlatform(d, platform.id)) : visible;
   const byKind = kind ? visible.filter(kind.test) : visible;
   const rows = kind ? byPlatform.filter(kind.test) : byPlatform;
-  // Chaque ligne compte selon le choix fait dans l'autre.
+  // Chaque ligne compte selon le choix fait dans l'autre, et ce qui sera vraiment montré.
+  const count = ui.showAll ? (l) => l.length : (l) => firstOnes(l, section, S.settings).length;
   $('#filters').replaceChildren(
-    ...(platforms.length >= 2 ? [chipRow(platforms, 'platform', byKind)] : []),
-    chipRow(kinds, 'kind', byPlatform),
+    ...(platforms.length >= 2 ? [chipRow(platforms, 'platform', byKind, count)] : []),
+    chipRow(kinds, 'kind', byPlatform, count),
   );
 
   const enabled = { pc: S.settings.pcDeals, switch: S.settings.switchDeals, bundle: S.settings.bundles !== false }[section];
@@ -330,19 +335,39 @@ function renderDeals(list, { visible, hidden, filtered }, section) {
       section === 'bundle'
         ? empty('📚', 'Aucun bundle intéressant', 'Seuls les bundles avec plusieurs jeux bien notés sur Steam sont gardés.')
         : section === 'pc'
-        ? empty('🔎', 'Aucune pépite pour l’instant', 'Seuls les gros jeux et les jeux très bien notés à grosse remise sont gardés. Les seuils se règlent dans les réglages.')
+        ? empty('🔎', 'Aucune pépite pour l’instant', 'Seuls les jeux récents, bien notés ou très demandés à bon prix sont montrés d’abord. Les seuils se règlent dans les réglages.')
         : empty('🔎', 'Aucune grosse promo Switch', 'FreeKeep<3 écarte les petits jeux bradés : seuls les jeux populaires, les gros jeux et les jeux Nintendo sont gardés.'),
     );
   }
-  rows.forEach((d) => list.append(dealCard(d, false)));
+  const shown = ui.showAll ? rows : firstOnes(rows, section, S.settings);
+  shown.forEach((d) => list.append(dealCard(d, false)));
+  allToggle(list, { more: rows.length - shown.length, rest: everything.length - visible.length, filtered: !!(platform || kind) });
   hiddenToggle(list, hidden.length, () => hidden.forEach((d) => list.append(dealCard(d, true))));
   filteredToggle(list, filtered.length, () => filtered.forEach((d) => list.append(dealCard(d, true))));
 }
 
+function allToggle(list, { more, rest, filtered }) {
+  if (!ui.showAll && more + rest <= 0) return;
+  const label = ui.showAll ? 'Revenir aux meilleures'
+    : more > 0 && !filtered && rest > 0 ? `Voir tout (${more + rest} autres, dont ${rest} vieux ou peu demandés)`
+    : more > 0 ? `Voir tout (${more + (filtered ? 0 : rest)} autres)` : `Voir aussi les vieux jeux et les moins demandés${filtered ? '' : ` (${rest})`}`;
+  list.append(h('button', { class: 'link-btn toggle-all', onclick: () => { ui.showAll = !ui.showAll; render(); if (!ui.showAll) $('#list').scrollTop = 0; } }, label));
+}
+
+// Pourquoi une annonce n'est pas montrée d'abord
+const WHY = {
+  old: ['🕰️ Vieux jeu', 'Sorti il y a longtemps : montré d’abord seulement s’il est très plébiscité ou dans ta liste de souhaits'],
+  rating: ['👎 Peu ou mal noté', 'Pas assez d’avis Steam, ou pas assez bons'],
+  unknown: ['❔ Peu demandé', 'Âge, avis ou ventes inconnus'],
+  price: ['💤 Petite remise', 'Remise faible pour un jeu de cet âge'],
+  votes: ['🗳️ Peu voté', 'Pas assez de votes sur Dealabs'],
+  bundle: ['🕰️ Peu de jeux récents', 'Trop peu de jeux récents et bien notés'],
+};
+
 function priceBlock(d) {
   if (d.price == null) return null;
   return h('div', { class: 'price-row' },
-    h('strong', { class: `price${d.price === 0 ? ' free' : ''}`, title: d.approx ? 'Prix converti du dollar au taux de la Banque centrale européenne' : null }, `${d.approx ? '≈ ' : ''}${formatPrice(d.price, d.currency)}`),
+    h('strong', { class: `price${d.price === 0 ? ' free' : ''}`, title: d.approx ? 'Estimé : remise affichée en dollars, appliquée au prix en euros (ou conversion au taux de la BCE)' : null }, `${d.approx ? '≈ ' : ''}${formatPrice(d.price, d.currency)}`),
     d.normalPrice && d.normalPrice > d.price ? h('s', {}, formatPrice(d.normalPrice, d.currency)) : null,
     d.prevPrice && !d.normalPrice ? h('s', { title: 'Prix à la vérification précédente' }, formatPrice(d.prevPrice, d.currency)) : null,
     h('span', { class: 'merchant' }, d.merchant),
@@ -357,11 +382,14 @@ function dealPills(d) {
   const f = d.flags || {};
   const out = [];
   if (d.hiddenBy) out.push(pill(hiddenLabel(d.hiddenBy), 'muted'));
+  else if (d.good === false && WHY[d.why]) out.push(pill(WHY[d.why][0], 'muted', WHY[d.why][1]));
   if (f.wishlist) out.push(pill('❤️ Liste de souhaits', 'wish'));
   if (f.priceError) out.push(pill('⚠️ Erreur de prix ?', 'danger', 'Signalé comme erreur de prix sur Dealabs : peut être annulé par le vendeur'));
   if (f.drop) out.push(pill('📉 Chute soudaine', 'warn', d.prevPrice ? `Avant : ${formatPrice(d.prevPrice, d.currency)}` : ''));
   if (f.historicLow) out.push(pill('🏆 Plus bas historique', 'gold'));
   if (f.hot) out.push(pill(d.temperature ? `🔥 ${d.temperature}°` : '🔥 Hot Dealabs', 'hot', 'Deal validé par la communauté Dealabs'));
+  if (d.topRank && d.topRank <= 50) out.push(pill(`📈 N° ${d.topRank} des promos Steam`, 'warn', 'Classement des meilleures ventes Steam en promo'));
+  if (d.age != null && d.age < 1) out.push(pill('✨ Récent', 'gem', 'Sorti il y a moins d’un an'));
   if (f.nintendo) out.push(pill('Nintendo', 'nintendo'));
   if (f.gem) out.push(pill('💎 Pépite', 'gem', 'Très bien noté par les joueurs'));
   if (d.priceNote) out.push(pill(`💶 ${d.priceNote}`, 'muted'));
@@ -371,7 +399,7 @@ function dealPills(d) {
   if (d.rating?.gog) out.push(pill(`GOG ${String(d.rating.gog.toFixed(1)).replace('.', ',')}/5`, 'score', 'Note des joueurs GOG'));
   if (d.rating?.metacritic) out.push(pill(`MC ${d.rating.metacritic}`, 'score', 'Note Metacritic'));
   if (d.rating?.steam) out.push(pill(`Steam ${d.rating.steam} %`, 'score', d.rating.steamText || 'Avis Steam'));
-  if (d.keyshop && d.channel !== 'keyshop') out.push(pill(`🔑 Clé ${formatPrice(d.keyshop.price, d.keyshop.currency)}`, 'key', 'Meilleur prix sur les sites de clés (GG.deals)'));
+  if (d.keyshop && d.channel !== 'keyshop') out.push(pill(`🔑 Clé ${formatPrice(d.keyshop.price, d.keyshop.currency)}`, 'key', 'Meilleur prix repéré sur les sites de clés (marché gris)'));
   if (d.channel === 'physical') out.push(pill('📦 Boîte', 'muted'));
   if (d.channel === 'keyshop' && d.source !== 'ggdeals') out.push(pill('🔑 Site de clés', 'key'));
   if (f.local) out.push(pill('📍 En magasin', 'muted'));
@@ -385,7 +413,7 @@ function dealPills(d) {
 function compareUrl(d) {
   if (d.dealabsUrl) return { label: 'Dealabs', url: d.dealabsUrl };
   if (d.section === 'bundle') return null;
-  if (d.section === 'pc') return { label: 'Comparer', url: `https://gg.deals/search/?title=${encodeURIComponent(d.title)}` };
+  if (d.section === 'pc') return { label: 'Comparer', url: `https://gg.deals/search/?title=${encodeURIComponent(d.label || d.title)}` };
   if (d.source !== 'dealabs') return { label: 'Comparer', url: `https://www.dealabs.com/search?q=${encodeURIComponent(`${d.title} switch`)}` };
   return null;
 }
@@ -408,7 +436,7 @@ function dealCard(d, isHidden) {
   return h('article', { class: `card deal${isHidden ? ' dim' : ''}${d.exceptional ? ' exceptional' : ''}` },
     coverEl,
     h('div', { class: 'body' },
-      h('h3', { class: 'title', title: d.title }, d.title),
+      h('h3', { class: 'title', title: d.title }, d.label || d.title),
       priceBlock(d),
       d.bundle ? h('p', { class: 'highlights' }, d.bundle.highlights.join(' · ')) : null,
       d.others?.length ? h('p', { class: 'others' }, 'Aussi : ', ...d.others.flatMap((o, i) => [i ? ' · ' : '', h('button', { type: 'button', onclick: () => open(o.url) }, `${o.merchant}${o.price != null ? ` ${o.approx ? '≈ ' : ''}${formatPrice(o.price, o.currency)}` : ''}${o.edition ? ` (${o.edition})` : ''}`)])) : null,

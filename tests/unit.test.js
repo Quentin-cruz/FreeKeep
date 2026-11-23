@@ -965,11 +965,11 @@ test('Prix en euros : taux BCE, prix Steam exacts, conversion signalée', () => 
   assert.equal(a.price, 2.99);
   assert.equal(a.merchant, 'Steam');
   assert.equal(a.approx, false);
-  assert.equal(a.offers.epic.price, 5.4);
+  assert.equal(a.offers.epic.price, 6, 'même remise, appliquée au vrai prix en euros');
   assert.equal(a.offers.epic.approx, true);
-  // Revendeur moins cher : prix converti, remise calculée sur le vrai prix Steam
+  // Revendeur moins cher : sa remise appliquée au vrai prix Steam en euros
   const [b] = applyEuros([item({ steam: offer(2, 59.99, 'GameBillet') })], steam, 0.9);
-  assert.equal(b.price, 1.8);
+  assert.equal(b.price, 2);
   assert.equal(b.approx, true);
   assert.equal(b.normalPrice, 59.99);
   assert.equal(b.discount, 97);
@@ -1601,7 +1601,139 @@ test('Accès refusé : la source n’est pas appelée, sans compter comme une pa
   const cache = {};
   const settings = { ...structuredClone(DEFAULT_SETTINGS), dealabs: false, bundles: false, stores: { steam: true } };
   const { res, calls } = await withFetch([], () => fetchSources(settings, cache, now, [], { denied: new Set(['cheapshark', 'rate']) }));
-  assert.equal(calls.length, 0);
+  assert.equal(calls.filter((c) => /cheapshark|ecb/.test(c.url)).length, 0, 'ni CheapShark, ni pour les jeux voulus');
   assert.match(res.cheapshark, /accès/);
-  assert.equal(cache.health, undefined);
+  assert.equal(cache.health?.cheapshark, undefined);
+});
+
+// ===========================================================================
+// v1.7 : sélection (jeux voulus, âge, note, votes)
+// ===========================================================================
+import { judge, selectDeals, firstOnes, minDiscountFor, isAddon, fillReference } from '../extension/src/selection.js';
+import { parseTopSellers, buildWanted, applyLows } from '../extension/src/sources/wanted.js';
+import { cleanLabel } from '../extension/src/deals.js';
+
+const YEARS = (n) => now - n * 365.25 * 24 * 3600e3;
+const ctxOf = (level = 'balanced', extra = {}) => ({ appInfo: {}, ranks: {}, settings: effective({ ...DEFAULT_SETTINGS, level }), now, ...extra });
+const pcDeal = (over = {}) => ({ id: 'x', section: 'pc', channel: 'official', source: 'cheapshark', title: 'Jeu', price: 10, normalPrice: 40, discount: 75, flags: {}, ...over });
+
+test('Sélection : un vieux jeu à -95 % passe après un jeu récent très vendu à -40 %', () => {
+  const appInfo = {
+    1: { v: 3, game: true, rating: 86, reviews: 200000, released: YEARS(13), normal: 39.99 }, // Battlefield 4
+    2: { v: 3, game: true, rating: 93, reviews: 30000, released: YEARS(0.7), normal: 79.99 }, // sorti cette année
+    3: { v: 3, game: true, rating: 62, reviews: 9000, released: YEARS(2), normal: 59.99 },    // mal noté
+    4: { v: 3, game: true, rating: 95, reviews: 300, released: YEARS(1), normal: 19.99 },     // presque personne ne l'a
+  };
+  const ctx = ctxOf('balanced', { appInfo, ranks: { 2: 17 } });
+  const old = judge(pcDeal({ steamAppID: '1', discount: 95 }), ctx);
+  const fresh = judge(pcDeal({ steamAppID: '2', discount: 40, source: 'wanted' }), ctx);
+  assert.deepEqual([old.good, old.why], [false, 'old']);
+  assert.equal(fresh.good, true, 'récent : -40 % suffit');
+  assert.ok(fresh.score > old.score);
+  assert.equal(judge(pcDeal({ steamAppID: '3' }), ctx).why, 'rating');
+  assert.equal(judge(pcDeal({ steamAppID: '4' }), ctx).why, 'rating', 'trop peu d’avis');
+  // Le même vieux jeu reste montré s'il est souhaité, très plébiscité ou en erreur de prix
+  for (const flags of [{ wishlist: true }, { priceError: true }]) assert.ok(judge(pcDeal({ steamAppID: '1', flags }), ctx).good);
+  assert.ok(judge(pcDeal({ steamAppID: '1', temperature: 600, flags: { hot: true } }), ctx).good);
+  assert.ok(!judge(pcDeal({ steamAppID: '1', temperature: 150, flags: { hot: true } }), ctx).good);
+  // « Large » accepte des jeux plus vieux, « Que les affaires de fou » moins
+  const mid = { 5: { v: 3, game: true, rating: 90, reviews: 50000, released: YEARS(5), normal: 39.99 } };
+  assert.deepEqual(['strict', 'balanced', 'wide'].map((l) => judge(pcDeal({ steamAppID: '5' }), ctxOf(l, { appInfo: mid })).good), [false, true, true]);
+});
+
+test('Sélection : remise mini selon l’âge, petits jeux, DLC, prix de référence', () => {
+  assert.deepEqual([0.5, 1.5, 3, 5, null].map((a) => minDiscountFor(a, 60)), [27, 33, 48, 60, 60]);
+  assert.equal(minDiscountFor(0.2, 40), 20, 'jamais moins de -20 %');
+  const ctx = ctxOf('balanced', { appInfo: { 7: { v: 3, game: true, rating: 95, reviews: 20000, released: YEARS(0.1), normal: 7.79 } } });
+  assert.equal(judge(pcDeal({ steamAppID: '7', price: 4.82, normalPrice: 7.79, discount: 38 }), ctx).why, 'price', 'petit jeu, petite remise');
+  assert.ok(isAddon({ section: 'pc', channel: 'official', title: 'Les Sims™ 3 Animaux et Cie', flags: {} }, null));
+  assert.ok(isAddon({ section: 'pc', channel: 'official', title: 'X', flags: {} }, { game: false }));
+  assert.ok(!isAddon({ section: 'pc', channel: 'official', title: 'Les Sims™ 4', flags: {} }, null));
+  assert.ok(!isAddon({ section: 'pc', channel: 'official', title: 'Mass Effect Legendary Edition', flags: {} }, null));
+  const dl = { section: 'pc', channel: 'official', source: 'dealabs', title: 'Clair Obscur: Expedition 33 sur PC', price: 19.07, discount: null, flags: {} };
+  fillReference(dl, { normal: 49.99 });
+  assert.deepEqual([dl.normalPrice, dl.discount], [49.99, 62]);
+  const deluxe = { ...dl, title: 'Clair Obscur (Deluxe Edition à 28,96€)', discount: null, normalPrice: null };
+  fillReference(deluxe, { normal: 49.99 });
+  assert.equal(deluxe.discount, null, 'une édition Deluxe n’a pas le prix du jeu seul');
+  const deals = selectDeals([pcDeal({ id: 'a', title: 'Les Sims™ 3 Kit Diesel' }), pcDeal({ id: 'b', title: 'Big Game', normalPrice: 59.99 })], ctxOf());
+  assert.deepEqual(deals.map((d) => d.id), ['b']);
+});
+
+test('Sélection : section limitée, souhaits et erreurs de prix toujours montrés', () => {
+  const list = Array.from({ length: 40 }, (_, i) => ({ id: String(i), good: true, flags: { wishlist: i === 39 } }));
+  const s = { ...DEFAULT_SETTINGS, level: 'balanced' };
+  const first = firstOnes(list, 'pc', s);
+  assert.equal(first.length, 31);
+  assert.ok(first.some((d) => d.id === '39'));
+  assert.equal(firstOnes(list, 'pc', { ...s, level: 'strict' }).length, 16);
+  assert.equal(firstOnes([{ good: false, flags: {} }], 'pc', s).length, 0);
+});
+
+test('Sélection : Switch et bundles', () => {
+  const ctx = ctxOf();
+  const sw = (over) => ({ section: 'switch', channel: 'eshop', source: 'eshop', discount: 60, flags: {}, ...over });
+  assert.ok(judge(sw({ rank: 120, released: YEARS(2) }), ctx).good);
+  assert.equal(judge(sw({ rank: 1400 }), ctx).why, 'unknown', 'jeu inconnu bradé');
+  assert.equal(judge(sw({ rank: 300, released: YEARS(8) }), ctx).why, 'old');
+  assert.ok(judge(sw({ rank: 20, released: YEARS(8) }), ctx).good, 'vieux mais encore très téléchargé');
+  assert.ok(judge(sw({ rank: 1400, flags: { nintendo: true } }), ctx).good);
+  assert.equal(judge(sw({ source: 'dealabs', channel: 'physical', temperature: 80 }), ctx).why, 'votes');
+  assert.ok(judge(sw({ source: 'dealabs', channel: 'physical', temperature: 400 }), ctx).good);
+
+  const info = (age, rating = 90, reviews = 9000) => ({ v: 3, game: true, rating, reviews, released: YEARS(age) });
+  const appInfo = { 1: info(1), 2: info(2), 3: info(12), 4: info(13), 5: info(1, 60) };
+  const bundle = (appids) => ({ section: 'bundle', channel: 'bundle', source: 'bundle', discount: 90, price: 10, flags: {}, bundle: { appids, good: 4, games: appids.length } });
+  const recent = judge(bundle(['1', '2', '3']), { ...ctx, appInfo });
+  const dusty = judge(bundle(['3', '4', '5']), { ...ctx, appInfo });
+  assert.deepEqual([recent.good, recent.recent, dusty.good, dusty.why], [true, 2, false, 'bundle']);
+  const owned = { hasApp: (id) => id === '1' };
+  assert.equal(judge(bundle(['1', '2', '3']), { ...ctx, appInfo, owned }).recent, 1, 'jeux déjà possédés non comptés');
+});
+
+test('Jeux voulus : ordre des ventes Steam, meilleur prix en euros, stores choisis', () => {
+  const html = '<a href="https://store.steampowered.com/app/10/A/" data-ds-appid="10"></a><a href="https://store.steampowered.com/app/20/B/"></a><a href="https://store.steampowered.com/app/10/A/"></a><a href="https://store.steampowered.com/bundle/5/X/"></a><a href="https://store.steampowered.com/app/30/C/"></a>';
+  assert.deepEqual(parseTopSellers(html), ['10', '20', '30']);
+  const item = (name, price, normal, discount, extra = {}) => ({ name, game: true, price, normal, discount, rating: 92, reviews: 20000, released: YEARS(1), end: null, ...extra });
+  const items = { 10: item('Jeu A', 29.99, 59.99, 50), 20: item('Jeu B', 9.99, 19.99, 50, { rating: 55 }), 30: item('Jeu C', 39.99, 49.99, 20) };
+  const cs = (storeID, steamAppID, salePrice, normalPrice, gameID = 'g' + steamAppID) => ({ storeID: String(storeID), steamAppID, salePrice: String(salePrice), normalPrice: String(normalPrice), dealID: 'd' + storeID + steamAppID, gameID });
+  const offers = [cs(23, '10', 26.99, 59.99), cs(25, '10', 29.5, 59.99), cs(1, '10', 29.99, 59.99), cs(13, '30', 30, 49.99)];
+  const out = buildWanted(['10', '20', '30'], items, offers, { stores: { steam: true, epic: true, ubisoft: false } });
+  assert.deepEqual(out.map((d) => d.title), ['Jeu A', 'Jeu C'], 'mal noté écarté');
+  const a = out[0];
+  assert.equal(a.merchant, 'GameBillet');
+  assert.equal(a.price, 26.99, 'sa remise appliquée au prix en euros');
+  assert.ok(a.approx && a.offers.steam.merchant === 'GameBillet', 'clé Steam moins chère chez un revendeur');
+  assert.equal(a.offers.epic.price, 29.5, 'prix Epic gardé pour le filtre « Epic »');
+  const [solo] = buildWanted(['10'], items, [cs(23, '10', 29.5, 59.99)], { stores: { steam: true } });
+  assert.equal(solo.merchant, 'Steam', 'à peine moins cher qu’un prix exact : ignoré');
+  assert.equal(out[1].platform, 'steam', 'Ubisoft non choisi');
+  applyLows(out, { g10: { cheapestPriceEver: { price: '26.99' } } });
+  assert.ok(a.flags.historicLow && !out[1].flags.historicLow);
+  // Niveau : remise mini selon l'âge
+  const at = (level) => ({ ...DEFAULT_SETTINGS, ...LEVELS[level], level });
+  const w = { source: 'wanted', discount: 33, released: YEARS(0.5), flags: {} };
+  assert.deepEqual(['strict', 'balanced', 'wide'].map((l) => keepAtLevel([{ ...w }], at(l)).length), [0, 1, 1]);
+});
+
+test('Une carte par jeu PC : promo officielle, annonce Dealabs et clé ensemble', () => {
+  const base = { section: 'pc', currency: 'EUR', flags: {} };
+  const deals = groupDeals([
+    { ...base, id: 'cs:1', source: 'cheapshark', channel: 'official', title: 'Dead Space', price: 5.99, normalPrice: 59.99, merchant: 'Steam' },
+    { ...base, id: 'dl:1', source: 'dealabs', channel: 'official', title: 'Dead Space Remake sur PC (Steam)', price: 5.99, merchant: 'Steam', temperature: 366, flags: { hot: true } },
+    { ...base, id: 'dl:2', source: 'dealabs', channel: 'keyshop', title: 'Dead Space sur PC (Dématérialisé - Steam)', price: 4.5, merchant: 'Eneba', temperature: 900, flags: { hot: true } },
+  ]);
+  assert.equal(deals.length, 1);
+  assert.equal(deals[0].merchant, 'Steam', 'le store officiel reste devant la clé');
+  assert.equal(deals[0].keyshop.price, 4.5);
+  assert.equal(deals[0].temperature, 366, 'les votes de la clé ne s’ajoutent pas');
+  assert.ok(deals[0].others.some((o) => o.merchant === '🔑 Eneba'));
+  assert.equal(groupDeals([{ ...base, id: 'a', source: 'cheapshark', channel: 'official', title: 'Dead Space', price: 3, normalPrice: 19.99 }, { ...base, id: 'b', source: 'dealabs', channel: 'official', title: 'Dead Space Remake sur PC', price: 6 }]).length, 2, 'le jeu de 2008 n’est pas le remake');
+  // Titres lisibles
+  assert.equal(cleanLabel({ source: 'dealabs', section: 'pc', title: 'Dordogne sur PC (Dématérialisé - Steam)' }), 'Dordogne');
+  assert.equal(cleanLabel({ source: 'dealabs', section: 'pc', title: 'Star Wars Outlaws à 11.2€ / Deluxe à 14.4€ sur PC' }), 'Star Wars Outlaws');
+  assert.equal(cleanLabel({ source: 'dealabs', section: 'switch', title: 'Paper Mario sur Nintendo Switch (via 22,49€ sur la carte)' }), null, 'prix sous condition : titre complet');
+  assert.equal(extractGameName('Final Fantasy VII Rebirth + carte promotionnelle exclusive Micromania'), 'Final Fantasy VII Rebirth');
+  assert.equal(extractGameName('Mario + The Lapins Crétins Kingdom Battle'), 'Mario + The Lapins Crétins Kingdom Battle');
+  assert.ok(dealKey({ source: 'dealabs', section: 'switch', title: 'Final Fantasy VII Rebirth sur Nintendo Switch 2 + Carte Promotionnelle' }), 'une seule carte pour ce jeu');
 });

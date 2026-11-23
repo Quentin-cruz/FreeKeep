@@ -188,8 +188,8 @@ export const STEPS = [
         const level = LEVELS[d.level] ? d.level : 'balanced';
         const n = est?.counts?.[level];
         warn.hidden = level === 'strict';
-        warn.replaceChildren('⚠️ ', h('strong', {}, n ? `Environ ${n} annonces. ` : level === 'wide' ? 'Énormément d’annonces. ' : 'Beaucoup d’annonces. '),
-          'À l’étape « Ce que tu ne veux pas voir », masque les genres et licences qui ne t’intéressent pas : ça compte vraiment.');
+        warn.replaceChildren('⭐ ', h('strong', {}, n ? `Les ${n} meilleures annonces d’abord. ` : 'Les meilleures annonces d’abord. '),
+          'Le reste attend derrière « Voir tout ». À l’étape « Ce que tu ne veux pas voir », masque les genres et licences qui ne t’intéressent pas.');
       };
       const cards = levelCards(LEVELS[d.level] ? d.level : 'balanced', (v) => { d.level = v; refreshWarn(); });
       refreshWarn();
@@ -204,7 +204,7 @@ export const STEPS = [
       return {
         bodies: {
           level: [cards, wait, warn,
-            more('Les jeux mal notés et les petits jeux bradés sont déjà écartés. Les erreurs de prix et les jeux de ta liste de souhaits sont toujours signalés, quel que soit le niveau.')],
+            more('Les vieux jeux, les jeux mal notés et les petits jeux bradés passent après. Les erreurs de prix et les jeux de ta liste de souhaits sont toujours signalés, quel que soit le niveau.')],
         },
       };
     },

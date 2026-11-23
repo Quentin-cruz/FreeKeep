@@ -8,7 +8,7 @@ import { extractGameName, gameKey } from './titles.js';
 export function effective(settings) {
   const preset = LEVELS[settings.level];
   return preset
-    ? { ...settings, pcMinDiscount: preset.pcMinDiscount, gemMinDiscount: preset.gemMinDiscount, gemMinRating: preset.gemMinRating, switchMinDiscount: preset.switchMinDiscount }
+    ? { ...settings, pcMinDiscount: preset.pcMinDiscount, gemMinDiscount: preset.gemMinDiscount, gemMinRating: preset.gemMinRating, switchMinDiscount: preset.switchMinDiscount, pcMaxAge: preset.pcMaxAge }
     : settings;
 }
 

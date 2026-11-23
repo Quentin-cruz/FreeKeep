@@ -21,7 +21,7 @@ const LAUNCHER_STORES = { epic: 25, ubisoft: 13 };
 const LAUNCHER_PAGES = 2;
 const pause = () => new Promise((r) => setTimeout(r, 250)); // ménage l'API
 
-const dealLink = (dealID) =>
+export const dealLink = (dealID) =>
   `${ENDPOINTS.cheapsharkRedirect}?dealID=${/%[0-9a-f]{2}/i.test(dealID) ? dealID : encodeURIComponent(dealID)}`;
 
 export function steamHeaderImages(appid) {
