@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "FreeKeep<3",
   "short_name": "FreeKeep<3",
-  "version": "1.7.2",
+  "version": "1.7.3",
   "description": "Jeux PC offerts à garder (Epic, Steam, GOG, Prime…) + vraies grosses promos PC et Switch, à ta mesure.",
   "icons": {
     "16": "icons/icon16.png",

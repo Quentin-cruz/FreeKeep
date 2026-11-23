@@ -170,19 +170,65 @@ async function main() {
   assert.match(await where(), /^content\//);
   assert.ok(await run(ob, "document.querySelector('#btn-back').style.visibility !== 'hidden'"));
   console.log('✔ le tutoriel reprend où il en était');
-  for (let i = 0; i < 40 && !(await where()).startsWith('done/'); i++) await next();
+  // Aucune réponse cochée d'avance : on répond « Non », la 1re fréquence ou « Équilibré », sinon « Suite »
+  const answerHere = `(() => {
+    const p = document.querySelector('.part.active');
+    if (!p || document.body.classList.contains('ready')) return false;
+    const pick = (!p.querySelector('[data-answer].on') && p.querySelector('[data-answer=no]'))
+      || (!p.querySelector('.chip.pick.on') && p.querySelector('.chip.pick'))
+      || (!p.querySelector('[data-level].on') && p.querySelector('[data-level=balanced]'));
+    if (!pick) return false;
+    pick.click();
+    return true;
+  })()`;
+  const step = async () => { if (await run(ob, answerHere)) await sleep(700); else await next(); };
+  assert.equal(await run(ob, "document.querySelectorAll('[data-answer].on').length"), 0, 'rien de coché d’avance');
+  for (let i = 0; i < 20 && (await where()) !== 'content/dept'; i++) await step();
+  // Département : « OK » valide et la flèche descend
+  await run(ob, "document.querySelector('[data-part=dept] input').value = '80'; document.querySelector('[data-part=dept] input').dispatchEvent(new Event('input', { bubbles: true }))");
+  await click('[data-part=dept] .btn');
+  await until('content/keyshops');
+  console.log('✔ « OK » au département : la flèche passe à la suite');
+  for (let i = 0; i < 20 && !(await where()).startsWith('level/'); i++) await step();
+  // Page 5 : un message différent pour chaque niveau
+  const callout = () => run(ob, "document.querySelector('[data-part=level] .callout').textContent");
+  assert.match(await callout(), /Clique sur un niveau/);
+  await click('[data-level=strict]');
+  const strict = await callout();
+  await click('[data-level=wide]');
+  const wide = await callout();
+  assert.ok(/Que les affaires de fou/.test(strict) && /Large/.test(wide) && strict !== wide, `${strict} / ${wide}`);
+  console.log('✔ page 5 : un message par niveau');
+  await click('[data-level=balanced]');
+  for (let i = 0; i < 20 && !(await where()).startsWith('steam/'); i++) await step();
+  // Page 6 : session Steam non connectée (profil jetable) → le profil public est proposé à la place
+  await sleep(2500);
+  assert.ok(await run(ob, "!document.querySelector('[data-part=profile]').hidden"), 'session absente : profil proposé');
+  for (let i = 0; i < 40 && !(await where()).startsWith('done/'); i++) await step();
   await until('done//bouton');
+  // L'installation ouvre aussi son propre onglet de tutoriel : on compte ceux qui restent
+  const tutoTabs = async () => (await cdp('Target.getTargets')).result.targetInfos.filter((t) => t.type === 'page' && t.url.includes('onboarding.html')).length;
+  const tabsBefore = await tutoTabs();
   await next();
   await sleep(1500);
   const saved = await run(ob, "import('/src/store.js').then((m) => m.getSettings())");
-  assert.ok(saved.onboarded && saved.prime && saved.autoClick === false);
+  assert.ok(saved.onboarded && saved.prime && saved.autoClick === false && saved.level === 'balanced' && saved.departments === '80', JSON.stringify({ prime: saved.prime, autoClick: saved.autoClick, level: saved.level }));
+  for (const k of ['switch2', 'bundles', 'keyshops', 'hideOwned', 'useWishlist', 'intervalHours']) assert.notEqual(saved[k], undefined, k);
   assert.ok(await run(ob, "import('/src/store.js').then((m) => m.getDraft()).then((d) => d === null)"));
   console.log('✔ réglages enregistrés');
+  await sleep(2500);
+  assert.equal(await tutoTabs(), tabsBefore - 1, 'onglet du tutoriel fermé');
+  console.log('✔ l’onglet du tutoriel se ferme tout seul');
 
   const pop = await open('popup/popup.html?tab=1', 420, 700);
   await sleep(2000);
   assert.ok(await run(pop, "document.querySelector('#onboard').hidden && document.querySelectorAll('.section:not([hidden])').length >= 3"));
   assert.ok(await run(pop, 'document.documentElement.scrollWidth <= innerWidth'));
+  // Vrai format du popup (400 px), avec de gros compteurs : aucun débordement de côté
+  const narrow = await open('popup/popup.html', 400, 600);
+  await sleep(1500);
+  await run(narrow, "document.querySelectorAll('.section .count').forEach((c) => { c.textContent = '188'; })");
+  assert.ok(await run(narrow, 'document.documentElement.scrollWidth <= 400 && [...document.querySelectorAll(".section")].every((s) => s.getBoundingClientRect().right <= 400)'), 'onglets dans la largeur');
   const opt = await open('options/options.html', 1280, 900);
   assert.ok(await run(opt, "document.querySelectorAll('#nav button').length >= 5 && document.querySelector('#access').hidden"));
   console.log('✔ popup et réglages s’affichent');

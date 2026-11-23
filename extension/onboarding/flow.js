@@ -18,7 +18,10 @@ const at = (step, part, seen, done) => {
 
 /** Catégorie remplie : réponse valable, et pour une question, réponse donnée (ou confirmée par « Suite »). */
 export const filled = (step, part, d, done) =>
-  (!part.valid || part.valid(d)) && (!part.ask || part.optional || done.includes(seenKey(step, part)));
+  (!part.valid || part.valid(d)) && (!part.ask || part.optional || (part.key ? d[part.key] !== undefined : done.includes(seenKey(step, part))));
+
+const ANSWER = 'Choisis une réponse.';
+const unanswered = (step, part, d, done) => part.ask && !part.optional && !filled(step, { ...part, valid: null }, d, done);
 
 const isOk = (step, part, d, seen, done) => seen.includes(seenKey(step, part)) && filled(step, part, d, done);
 
@@ -90,8 +93,11 @@ export function follow(steps, d, pos) {
 }
 
 export function currentError(steps, d, pos) {
-  const { parts, p } = locate(steps, d, pos);
-  return parts[p]?.valid && !parts[p].valid(d) ? parts[p].invalidMsg : null;
+  const { step, parts, p, done } = locate(steps, d, pos);
+  const part = parts[p];
+  if (!part) return null;
+  if (part.valid && !part.valid(d)) return part.invalidMsg;
+  return part.key && unanswered(step, part, d, done) ? ANSWER : null;
 }
 
 // Le bouton : confirme la catégorie en cours, puis catégorie suivante, sinon page suivante.
@@ -106,8 +112,8 @@ export function forward(steps, d, pos, { skipPage = false } = {}) {
   }
   const { list, i, step, parts, seen, done } = locate(steps, d, pos);
   if (!skipPage) {
-    const bad = parts.find((x) => x.valid && !x.valid(d));
-    if (bad) return { error: bad.invalidMsg, pos: at(step, bad, seen, done) };
+    const bad = parts.find((x) => (x.valid && !x.valid(d)) || (x.key && unanswered(step, x, d, done)));
+    if (bad) return { error: bad.valid && !bad.valid(d) ? bad.invalidMsg : ANSWER, pos: at(step, bad, seen, done) };
     if (step.valid && !step.valid(d)) return { error: step.invalidMsg, pos: at(step, parts.find((x) => x.id === step.invalidPart) || parts[0], seen, done) };
   }
   return i < list.length - 1 ? { pos: enter(list[i + 1], d, seen, done) } : { done: true };

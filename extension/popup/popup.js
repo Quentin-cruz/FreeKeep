@@ -119,7 +119,7 @@ function render() {
   });
 
   const n = free.available.length;
-  const nHot = [...pc.visible, ...bd.visible, ...sw.visible].filter((d) => d.exceptional).length;
+  const nHot = [...pc.first, ...bd.first, ...sw.first].filter((d) => d.exceptional).length; // seulement ce qui est montré
   $('#subtitle').textContent = !S.meta.lastRefresh
     ? 'Première vérification…'
     : [n ? `${n} ${n > 1 ? 'jeux gratuits' : 'jeu gratuit'}` : null, nHot ? `${nHot} ${nHot > 1 ? 'affaires' : 'affaire'} 🔥` : null]

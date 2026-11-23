@@ -46,7 +46,7 @@ export function yesNo({ value, yes = {}, no = {}, onChange }) {
     el.classList.toggle('on', k === v);
     el.setAttribute('aria-pressed', String(k === v));
   });
-  select(!!value);
+  select(value); // rien de coché tant qu'il n'y a pas de réponse
   return h('div', { class: 'tgrid' }, [...cards.values()]);
 }
 
@@ -257,12 +257,12 @@ export function levelCards(value, onChange) {
 }
 
 // Champ « lien de profil Steam » + bouton de vérification
-export function steamProfileField(value, onChange, { autoTest = false, useSession = () => true } = {}) {
+export function steamProfileField(value, onChange, { autoTest = false, useSession = () => true, onResult = () => {} } = {}) {
   const input = h('input', { type: 'text', class: 'wide', placeholder: 'https://steamcommunity.com/id/ton-pseudo/', value: value || '', autocomplete: 'off', spellcheck: 'false' });
   const status = h('div', { class: 'status' });
   const btn = h('button', { type: 'button', class: 'btn' }, 'Vérifier');
 
-  const test = async () => {
+  const test = async (manual = true) => {
     const v = input.value.trim();
     onChange(v);
     if (!v) {
@@ -278,6 +278,7 @@ export function steamProfileField(value, onChange, { autoTest = false, useSessio
     if (res?.ok) {
       const who = res.profileName ? `${res.profileName} : ` : '';
       const wl = res.wishlistCount == null ? 'liste de souhaits non accessible' : `${res.wishlistCount} jeu${res.wishlistCount > 1 ? 'x' : ''} en liste de souhaits`;
+      onResult(!!res.count, manual);
       if (res.count) {
         status.className = 'status ok';
         status.textContent = `✔ ${who}${res.count} jeux et DLC possédés reconnus, leurs promos seront masquées · ${wl}`;
@@ -291,10 +292,10 @@ export function steamProfileField(value, onChange, { autoTest = false, useSessio
       status.textContent = `✘ ${res?.error || 'erreur inconnue'}`;
     }
   };
-  btn.addEventListener('click', test);
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') test(); });
+  btn.addEventListener('click', () => test(true));
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') test(true); });
   input.addEventListener('change', () => onChange(input.value.trim()));
-  if (autoTest && value) setTimeout(test, 50);
+  if (autoTest && value) setTimeout(() => test(false), 50);
 
   const help = h('details', { class: 'help' },
     h('summary', {}, 'À quoi sert ce lien ? Où le trouver ?'),
@@ -309,15 +310,17 @@ export function steamProfileField(value, onChange, { autoTest = false, useSessio
 
 // Bibliothèque lue via la session du navigateur : interrupteur + vérification.
 // `brief` : sans l'explication (tutoriel, où elle est repliée).
-function sessionField({ name, message, url, site, title, desc, okText }, checked, onChange, { autoTest = false, brief = false } = {}) {
+// `onResult(ok, manual)` : résultat de la vérification (manual = clic sur le bouton).
+function sessionField({ name, message, url, site, title, desc, okText }, checked, onChange, { autoTest = false, brief = false, onResult = () => {} } = {}) {
   const status = h('div', { class: 'status' });
   const btn = h('button', { type: 'button', class: 'btn' }, `Vérifier ma session ${name}`);
-  const test = async () => {
+  const test = async (manual = true) => {
     btn.disabled = true;
     status.className = 'status wait';
     status.textContent = `Lecture de ta bibliothèque ${name}…`;
     const res = await chrome.runtime.sendMessage({ type: message }).catch((e) => ({ ok: false, error: e.message }));
     btn.disabled = false;
+    onResult(!!res?.ok, manual);
     if (res?.ok) {
       status.className = 'status ok';
       status.textContent = `✔ ${okText(res)}`;
@@ -327,10 +330,11 @@ function sessionField({ name, message, url, site, title, desc, okText }, checked
         h('a', { href: url, target: '_blank', rel: 'noopener' }, `ouvrir ${site} pour te connecter`));
     }
   };
-  btn.addEventListener('click', test);
+  btn.addEventListener('click', () => test(true));
+  btn.dataset.manual = 'true'; // la vérification n'est pas une réponse : seul son résultat compte
   const actions = h('div', { class: 'inline' }, btn, status);
   actions.hidden = !checked;
-  if (autoTest && checked) setTimeout(test, 50);
+  if (autoTest && checked) setTimeout(() => test(false), 50);
   return h('div', { class: 'gog-field' },
     switchRow({ title, desc: brief ? null : desc, checked, onChange: (v) => { actions.hidden = !v; onChange(v); } }),
     actions,

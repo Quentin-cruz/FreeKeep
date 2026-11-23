@@ -1428,50 +1428,61 @@ test('Tutoriel : réponses impossibles refusées, avec retour à la bonne questi
   at(flow.forward(STEPS, tutoDraft(), { step: 'steam', part: 'steam' }, { skipPage: true }).pos, { step: 'exclude', part: 'genres' });
 });
 
+// Brouillon comme dans le tutoriel : aucune question n'a de réponse cochée d'avance
+const blankDraft = (o = {}) => {
+  const d = tutoDraft(o);
+  for (const p of STEPS.flatMap((s) => s.parts || [])) if (p.key && !(p.key in o)) delete d[p.key];
+  return d;
+};
+const partOf = (pos) => STEPS.find((s) => s.id === pos.step).parts.find((p) => p.id === pos.part);
+
 test('Tutoriel : la flèche avance quand la réponse est complète, jamais par-dessus une catégorie à remplir', () => {
-  const d = tutoDraft();
+  const d = blankDraft();
+  // Répondre « Oui » à chaque question, puis la flèche va à la suivante
+  const reply = (pos) => { const k = partOf(pos).key; if (k && d[k] === undefined) d[k] = true; return flow.answer(STEPS, d, pos); };
   const path = (pos) => {
     const out = [pos.part];
-    for (let to = pos; (to = flow.follow(STEPS, d, flow.answer(STEPS, d, to)));) out.push(to.part);
+    for (let to = pos; (to = flow.follow(STEPS, d, reply(to)));) out.push(to.part);
     return out;
   };
   const page = flow.select(STEPS, d, { step: 'stores' }, 'stores');
-  assert.deepEqual(path(page), ['stores', 'bundles', 'bundleSites', 'prime']);
+  assert.equal(d.bundles, undefined, 'rien de coché d’avance');
+  assert.deepEqual(path(page), ['stores', 'bundles', 'bundleSites', 'prime', 'primeStores']);
 
   // Pas de saut : une catégorie ne s'ouvre que si celles d'avant sont remplies
-  assert.ok(flow.reachable(STEPS, d, page, 'bundles'));
-  assert.ok(!flow.reachable(STEPS, d, page, 'bundleSites'), 'pas encore ouverte : « Les bundles » d’abord');
-  let pos = flow.follow(STEPS, d, page);
+  const e = blankDraft();
+  const start = flow.select(STEPS, e, { step: 'stores' }, 'stores');
+  assert.ok(flow.reachable(STEPS, e, start, 'bundles'));
+  assert.ok(!flow.reachable(STEPS, e, start, 'prime'), 'pas encore ouverte : « Les bundles » d’abord');
+  let pos = flow.follow(STEPS, e, start);
   assert.equal(pos.part, 'bundles');
-  assert.ok(!flow.reachable(STEPS, d, pos, 'bundleSites'), 'question ouverte mais sans réponse');
-  assert.ok(!flow.complete(STEPS, d, pos));
-  pos = flow.answer(STEPS, d, pos);
-  assert.ok(flow.complete(STEPS, d, pos), 'Oui / Non cliqué : la flèche peut partir');
-  assert.ok(flow.reachable(STEPS, d, pos, 'bundleSites'));
-  assert.ok(!flow.reachable(STEPS, d, pos, 'prime'), 'deux catégories plus bas : non');
-  assert.equal(flow.firstGap(STEPS, d, pos), 'bundleSites');
+  assert.ok(!flow.complete(STEPS, e, pos), 'question ouverte mais sans réponse');
+  assert.equal(flow.forward(STEPS, e, pos).error, 'Choisis une réponse.', '« Suite » ne choisit pas à ta place');
+  assert.ok(!flow.reachable(STEPS, e, pos, 'prime'));
+  e.bundles = false;
+  assert.ok(flow.complete(STEPS, e, pos), 'Non cliqué : la flèche peut partir');
+  assert.ok(flow.reachable(STEPS, e, pos, 'prime'), '« Quels bundles ? » disparaît avec Non');
+  assert.equal(flow.firstGap(STEPS, e, pos), 'prime');
 
   // Page 2 : PC seul, on peut encore cocher la Switch ; tout coché, la flèche descend sur « Switch 2 »
-  const machines = flow.select(STEPS, d, { step: 'platforms' }, 'machines');
-  assert.ok(!flow.complete(STEPS, d, machines));
-  d.switch = true;
-  assert.ok(flow.complete(STEPS, d, machines));
-  const sw2 = flow.follow(STEPS, d, machines);
+  const f = blankDraft();
+  const machines = flow.select(STEPS, f, { step: 'platforms' }, 'machines');
+  assert.ok(!flow.complete(STEPS, f, machines));
+  f.switch = true;
+  assert.ok(flow.complete(STEPS, f, machines));
+  const sw2 = flow.follow(STEPS, f, machines);
   assert.equal(sw2.part, 'switch2');
-  assert.ok(!flow.progress(STEPS, d, sw2).complete, 'Switch 2 sans réponse : pas encore le bouton');
-  assert.ok(flow.progress(STEPS, d, sw2).last, '« Continuer » confirme la réponse affichée');
-  assert.equal(flow.forward(STEPS, d, sw2).pos.step, 'stores');
+  assert.ok(!flow.progress(STEPS, f, sw2).complete, 'Switch 2 sans réponse : pas encore le bouton');
+  assert.match(flow.forward(STEPS, f, sw2).error, /réponse/);
+  f.switch2 = false;
+  assert.equal(flow.forward(STEPS, f, sw2).pos.step, 'stores');
 
-  // « Oui » à Prime ouvre une catégorie de plus : la flèche y va
-  d.switch = false;
-  d.prime = true;
-  let end = page;
-  for (let to; (to = flow.follow(STEPS, d, flow.answer(STEPS, d, end)));) end = to;
-  assert.equal(end.part, 'primeStores');
   // Ancienne sauvegarde, sans réponses notées : ce qui a été vu compte comme répondu
   assert.equal(flow.resumeAt(STEPS, d, { step: 'stores', part: 'prime', seen: ['stores/stores', 'stores/bundles', 'stores/bundleSites', 'stores/prime'] }).part, 'prime');
-  // Nouvelle sauvegarde : on reprend à la première question sans réponse, pas plus bas
-  assert.equal(flow.resumeAt(STEPS, d, { step: 'stores', part: 'prime', seen: ['stores/stores', 'stores/bundles', 'stores/bundleSites', 'stores/prime'], done: [] }).part, 'bundles');
+  // Question sans réponse : on reprend sur elle, pas plus bas
+  assert.equal(flow.resumeAt(STEPS, blankDraft(), { step: 'stores', part: 'prime', seen: ['stores/stores', 'stores/bundles', 'stores/bundleSites', 'stores/prime'], done: [] }).part, 'bundles');
+  // Niveau d'exigence : une question comme les autres
+  assert.equal(flow.forward(STEPS, blankDraft(), flow.select(STEPS, blankDraft(), { step: 'level' }, 'level')).error, 'Choisis une réponse.');
 });
 
 // ---------- Santé des sources ----------

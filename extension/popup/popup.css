@@ -19,6 +19,7 @@
 
 html, body {
   margin: 0;
+  overflow-x: hidden; /* jamais de défilement de côté */
   background: var(--bg);
   color: var(--text);
   font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -73,7 +74,8 @@ a { color: inherit; }
   border-radius: 10px;
 }
 .section {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0; /* les onglets rétrécissent au lieu de déborder */
   border: 0;
   background: transparent;
   color: var(--muted);
@@ -84,8 +86,9 @@ a { color: inherit; }
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 4px;
   white-space: nowrap;
+  overflow: hidden;
 }
 .section:hover { color: var(--text); }
 .section.active { background: var(--surface-2); color: var(--text); box-shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 1px 3px rgba(0,0,0,.3); }

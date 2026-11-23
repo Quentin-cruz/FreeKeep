@@ -1,5 +1,5 @@
 // FreeKeep — tutoriel de premier lancement (relançable depuis les réglages)
-import { LEVELS, DEAL_SOURCES } from '../src/config.js';
+import { DEAL_SOURCES } from '../src/config.js';
 import { getSettings, saveSettings, getDraft, saveDraft, clearDraft } from '../src/store.js';
 import { h } from '../ui/components.js';
 import { STEPS, allowed } from './steps.js';
@@ -16,6 +16,7 @@ const $ = (s) => document.querySelector(s);
 // La flèche ne remonte jamais : modifier une réponse plus haut la laisse où elle est.
 const AFTER_ANSWER = 280;
 const HOVER = 120; // le curseur ne fait que passer : on n'y va pas
+const CLOSE_AFTER = 2500; // fin du tutoriel : le temps de lire « Configuration enregistrée »
 
 let draft = null;
 let pos = null;
@@ -101,6 +102,8 @@ function touched(partId) {
     refreshAccess().then(() => { if (!finished) show(ready); });
     showError('');
     show(ready);
+    const gap = firstGap(STEPS, draft, pos);
+    if (gap && rank(gap) < rank(pos.part) + (ready ? 1 : 0)) nudge(gap);
     return;
   }
   pos = openAbove(pos);
@@ -110,6 +113,14 @@ function touched(partId) {
   show(false);
   if (complete(STEPS, draft, pos)) arm(AFTER_ANSWER);
   else disarm();
+}
+
+// Catégorie validée d'un bouton (OK, vérification réussie) : la flèche passe à la suite, comme après un Oui / Non.
+function validated(partId) {
+  if (finished || ready || partId !== pos.part) return; // plus haut que la flèche : elle ne remonte pas
+  pos = answer(STEPS, draft, pos);
+  saveDraft({ draft, pos, base, at: Date.now() });
+  arm(AFTER_ANSWER);
 }
 
 // Il faut d'abord finir une catégorie : elle se secoue, la flèche ne bouge pas.
@@ -164,6 +175,8 @@ function drawPage() {
       else nudge();
     },
     onTouch: (id) => { if (here()) touched(id); },
+    onDone: (id) => { if (here()) validated(id); },
+    refresh: () => { if (here()) show(ready); },
     changed: async () => { await refreshAccess(); if (here()) settled(); },
   }) : null;
   view = { step, guide };
@@ -205,6 +218,7 @@ function go(to, { error = '', auto = false, hover = false } = {}) {
 }
 
 function next(opts) {
+  if (opts?.skipPage) fillUnanswered(view.step.parts || []);
   const res = forward(STEPS, draft, pos, opts);
   if (res.done) return finish();
   // Accès aux sites : à demander dans le clic, sans attendre la réponse pour avancer.
@@ -217,6 +231,13 @@ function next(opts) {
   go(res.pos, { error: res.error });
 }
 
+// Questions laissées sans réponse (page passée) : le réglage d'avant est gardé.
+function fillUnanswered(parts) {
+  const before = JSON.parse(base);
+  for (const p of parts) if (p.key && draft[p.key] === undefined) draft[p.key] = before[p.key];
+  if (draft.useWishlist !== undefined && draft.notifyWishlist === undefined) draft.notifyWishlist = draft.useWishlist;
+}
+
 async function finish() {
   const btn = $('#btn-next');
   btn.disabled = true;
@@ -225,6 +246,7 @@ async function finish() {
   disarm();
   document.body.classList.remove('ready');
   btn.classList.add('primary');
+  fillUnanswered(STEPS.flatMap((s) => s.parts || []));
   draft.onboarded = true;
   try {
     await saveSettings(draft);
@@ -237,9 +259,6 @@ async function finish() {
   }
   await clearDraft();
   chrome.runtime.sendMessage({ type: 'refresh', force: ['steamlib', 'wishlist', ...DEAL_SOURCES] }).catch(() => {});
-  try {
-    await chrome.action.openPopup();
-  } catch { /* le navigateur refuse : le message à l'écran guide l'utilisateur */ }
   btn.disabled = false;
   btn.textContent = 'Fermer cet onglet';
   btn.onclick = async (e) => {
@@ -250,7 +269,10 @@ async function finish() {
   $('#btn-back').style.visibility = 'hidden';
   document.body.classList.add('saved');
   const box = document.querySelector('.done-box');
-  if (box) box.prepend(h('p', { style: 'font-weight:700;color:var(--accent);margin-bottom:6px' }, '✔ Configuration enregistrée. FreeKeep<3 lance sa première vérification.'));
+  if (box) box.prepend(h('p', { style: 'font-weight:700;color:var(--accent);margin-bottom:6px' }, '✔ Configuration enregistrée. FreeKeep<3 lance sa première vérification. Cet onglet se ferme tout seul.'));
+  // Plus rien à faire ici : le temps de lire la confirmation, puis l'onglet se ferme et le popup s'ouvre
+  // (dans cet ordre : fermer l'onglet après coup refermerait le popup).
+  setTimeout(() => chrome.runtime.sendMessage({ type: 'closeTutorial' }).catch(() => {}), CLOSE_AFTER);
 }
 
 $('#btn-next').addEventListener('click', () => { if (!finished) next(); });
@@ -286,7 +308,8 @@ document.addEventListener('pointermove', (e) => {
   const saved = await getDraft();
   const resume = saved?.base === base && saved.draft ? saved : null;
   draft = structuredClone(resume?.draft || settings);
-  if (!LEVELS[draft.level]) draft.level = 'balanced';
+  // Aucune réponse cochée d'avance : la flèche avance au clic, pas sur une réponse déjà là
+  if (!resume) for (const p of STEPS.flatMap((s) => s.parts || [])) if (p.key) delete draft[p.key];
   draft.excludedGenres = [...(draft.excludedGenres || [])];
   draft.bannedKeywords = [...(draft.bannedKeywords || [])];
   await refreshAccess();

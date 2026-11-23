@@ -10,8 +10,9 @@ export function arrow(className) {
   return el;
 }
 
-// Construit les catégories d'une page. `onGo(partId)` : clic sur un titre ; `onTouch(partId)` : réponse modifiée.
-export function buildParts(step, d, { onGo, onTouch, changed }) {
+// Construit les catégories d'une page. `onGo(partId)` : clic sur un titre ; `onTouch(partId)` : réponse modifiée ;
+// `onDone(partId)` : la catégorie est validée (bouton OK, vérification réussie) ; `refresh()` : redessine.
+export function buildParts(step, d, { onGo, onTouch, onDone, changed, refresh }) {
   const built = step.build ? step.build(d) : {};
   const rows = new Map();
   const root = h('div', { class: `guide${step.parts.length === 1 ? ' single' : ''}` });
@@ -21,7 +22,7 @@ export function buildParts(step, d, { onGo, onTouch, changed }) {
       num, h('span', { class: 'part-title' }, part.title, part.optional ? h('em', {}, 'facultatif') : null));
     const inner = h('div', { class: 'part-inner' },
       part.hint ? h('p', { class: 'part-hint' }, part.hint) : null,
-      part.body ? part.body(d, { changed }) : built.bodies?.[part.id]);
+      part.body ? part.body(d, { changed, refresh, done: () => onDone(part.id) }) : built.bodies?.[part.id]);
     const body = h('div', { class: 'part-body' }, inner);
     const el = h('section', { class: 'part', 'data-part': part.id }, head, body);
     inner.addEventListener('change', () => onTouch(part.id));

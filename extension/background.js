@@ -933,6 +933,15 @@ async function handleMessage(msg, sender) {
     case 'refresh':
       await refresh('manual', { force: msg.force || [] });
       return publicState();
+    case 'closeTutorial': {
+      // Tutoriel terminé : son onglet se ferme, puis le popup s'ouvre (si le navigateur le permet).
+      // Seul l'onglet du tutoriel qui le demande lui-même peut être fermé.
+      const tab = sender?.tab;
+      if (!tab?.id || !sender.url?.startsWith(chrome.runtime.getURL('onboarding/'))) return { ok: false };
+      await chrome.tabs.remove(tab.id).catch(() => {});
+      await chrome.action.openPopup?.({ windowId: tab.windowId }).catch(() => {});
+      return { ok: true };
+    }
     case 'setClaimed':
       await setFlag(msg.key, 'claimed', !!msg.claimed);
       return publicState();

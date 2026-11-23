@@ -13,6 +13,9 @@ export const allowed = new Set();
 export const missing = (d) => originsFor(d).filter((o) => !allowed.has(o));
 
 export const anyDeals = (d) => (d.pc && (d.pcDeals || d.bundles)) || (d.switch && d.switchDeals);
+// Session Steam lue avec succès (page « Tes bibliothèques ») : null = pas encore vérifiée
+let steamOk = null;
+
 export const anyStore = (d) => PC_STORE_ORDER.some((s) => d.stores[s]) || (d.prime && PRIME_STORES.some((s) => d.stores[s]));
 
 const freqLabel = (v) => (v < 1 ? `${Math.round(v * 60)} min` : `${v} h`);
@@ -60,6 +63,7 @@ export const STEPS = [
       {
         id: 'switch2',
         ask: true,
+        key: 'switch2',
         title: 'Les jeux Switch 2 aussi ?',
         when: (d) => d.switch,
         body: (d) => yesNo({
@@ -90,6 +94,7 @@ export const STEPS = [
       {
         id: 'bundles',
         ask: true,
+        key: 'bundles',
         title: 'Les bundles, ça t’intéresse ?',
         hint: 'Des packs de jeux à petit prix.',
         body: (d) => yesNo({ value: d.bundles, onChange: (v) => { d.bundles = v; } }),
@@ -106,6 +111,7 @@ export const STEPS = [
       {
         id: 'prime',
         ask: true,
+        key: 'prime',
         title: 'Tu as Amazon Prime ?',
         hint: 'Prime (ex-Prime Gaming) offre des jeux chaque mois.',
         body: (d) => yesNo({ value: d.prime, yes: { icon: '👑' }, onChange: (v) => { d.prime = v; } }),
@@ -155,11 +161,12 @@ export const STEPS = [
         optional: true,
         hint: 'Pour les promos d’un seul magasin. Les offres nationales s’affichent toujours.',
         when: (d) => d.switch && d.physical,
-        body: (d) => deptInput(d),
+        body: (d, { done }) => deptInput(d, done),
       },
       {
         id: 'keyshops',
         ask: true,
+        key: 'keyshops',
         title: 'Les sites de clés aussi ?',
         hint: 'Eneba, Instant Gaming, G2A… Moins cher, mais pas officiel.',
         body: (d) => yesNo({ value: d.keyshops, yes: { icon: '🔑' }, onChange: (v) => { d.keyshops = v; } }),
@@ -183,18 +190,26 @@ export const STEPS = [
     id: 'level',
     show: anyDeals,
     title: 'Combien de promos veux-tu voir ?',
-    parts: [{ id: 'level', title: 'Niveau d’exigence' }],
+    parts: [{ id: 'level', title: 'Niveau d’exigence', ask: true, key: 'level' }],
     build: (d) => {
       const warn = h('div', { class: 'callout', hidden: true });
       let est = null;
+      // Un message par niveau, pour voir ce que chaque choix change vraiment
       const refreshWarn = () => {
-        const level = LEVELS[d.level] ? d.level : 'balanced';
-        const n = est?.counts?.[level];
-        warn.hidden = level === 'strict';
-        warn.replaceChildren('⭐ ', h('strong', {}, n ? `Les ${n} meilleures annonces d’abord. ` : 'Les meilleures annonces d’abord. '),
-          'Le reste attend derrière « Voir tout ». À l’étape « Ce que tu ne veux pas voir », masque les genres et licences qui ne t’intéressent pas.');
+        const l = LEVELS[d.level];
+        warn.hidden = false;
+        if (!l) return warn.replaceChildren('👆 Clique sur un niveau : je te dis ce qu’il change.');
+        const n = est?.counts?.[d.level];
+        const sizes = [d.pc && d.pcDeals ? `${l.limits.pc} promos PC` : null, d.pc && d.bundles ? `${l.limits.bundle} bundles` : null, d.switch && d.switchDeals ? `${l.limits.switch} promos Switch` : null].filter(Boolean).join(', ');
+        const what = {
+          strict: 'Seulement les énormes remises (−75 % sur un jeu de plus de 4 ans), et les jeux de moins de 4 ans. Tu rateras des promos correctes à −50 %.',
+          balanced: 'De vraies bonnes affaires sur des jeux bien notés de moins de 6 ans. Un jeu récent passe dès −30 %, un plus ancien à −60 %.',
+          wide: 'Plus de choix : jeux jusqu’à 10 ans, remises dès −40 %, notes un peu moins exigeantes. Plus long à parcourir.',
+        }[d.level];
+        warn.replaceChildren(`${l.emoji} `, h('strong', {}, `${l.label} : ${n ? `${n} annonces` : sizes} montrées d’abord. `), what,
+          ' Le reste attend derrière « Voir tout ».');
       };
-      const cards = levelCards(LEVELS[d.level] ? d.level : 'balanced', (v) => { d.level = v; refreshWarn(); });
+      const cards = levelCards(d.level, (v) => { d.level = v; refreshWarn(); });
       refreshWarn();
       const wait = h('p', { class: 'note' }, '⏳ Je compte les annonces avec tes choix…');
       estimate(d, true).then((res) => {
@@ -223,8 +238,12 @@ export const STEPS = [
         title: 'Tes jeux Steam',
         hint: 'Si c’est vert, rien à faire.',
         when: (d) => d.stores.steam,
-        body: (d) => [
-          steamSessionField(d.steamOwnedSync, (v) => { d.steamOwnedSync = v; }, { autoTest: true, brief: true }),
+        body: (d, { done, refresh }) => [
+          steamSessionField(d.steamOwnedSync, (v) => { d.steamOwnedSync = v; steamOk = null; refresh(); }, {
+            autoTest: true, brief: true,
+            // Session lue : le profil ne sert plus à rien. Vérifiée d'un clic : la flèche passe à la suite.
+            onResult: (ok, manual) => { steamOk = ok; refresh(); if (ok && manual) done(); },
+          }),
           more('Aucun mot de passe : il suffit d’être connecté à store.steampowered.com dans ce navigateur.'),
         ],
       },
@@ -232,23 +251,24 @@ export const STEPS = [
         id: 'profile',
         title: 'Ton profil Steam',
         optional: true,
-        hint: 'Utile surtout pour ta liste de souhaits. Sinon, continue.',
-        when: (d) => d.stores.steam,
-        body: (d) => steamProfileField(d.steamProfile, (v) => { d.steamProfile = v; }, { autoTest: true, useSession: () => d.steamOwnedSync }),
+        hint: 'Ta session Steam n’a pas pu être lue : ton profil public peut la remplacer. Sinon, continue.',
+        when: (d) => d.stores.steam && (!d.steamOwnedSync || steamOk === false),
+        body: (d, { done }) => steamProfileField(d.steamProfile, (v) => { d.steamProfile = v; }, { autoTest: true, useSession: () => d.steamOwnedSync, onResult: (ok, manual) => { if (ok && manual) done(); } }),
       },
       {
         id: 'gog',
         title: 'Tes jeux GOG',
         hint: 'Si c’est vert, rien à faire.',
         when: (d) => d.stores.gog,
-        body: (d) => [
-          gogSessionField(d.gogSessionSync, (v) => { d.gogSessionSync = v; }, { autoTest: true, brief: true }),
+        body: (d, { done }) => [
+          gogSessionField(d.gogSessionSync, (v) => { d.gogSessionSync = v; }, { autoTest: true, brief: true, onResult: (ok, manual) => { if (ok && manual) done(); } }),
           more('Aucun mot de passe : il suffit d’être connecté à gog.com dans ce navigateur.'),
         ],
       },
       {
         id: 'owned',
         ask: true,
+        key: 'hideOwned',
         title: 'Masquer les jeux que tu as déjà ?',
         hint: 'Leurs promos n’apparaîtront plus.',
         body: (d) => yesNo({ value: d.hideOwned, yes: { icon: '🙈' }, onChange: (v) => { d.hideOwned = v; } }),
@@ -256,6 +276,7 @@ export const STEPS = [
       {
         id: 'wishlist',
         ask: true,
+        key: 'useWishlist',
         title: 'Mettre en avant ta liste de souhaits Steam ?',
         hint: 'Alerte dès qu’un de ces jeux passe à -50 % ou plus.',
         when: (d) => d.stores.steam,
@@ -335,6 +356,7 @@ export const STEPS = [
       {
         id: 'freq',
         ask: true,
+        key: 'intervalHours',
         title: 'Vérifier tous les combien ?',
         hint: 'Les erreurs de prix partent vite : 5 à 15 minutes.',
         body: (d) => [
@@ -345,6 +367,7 @@ export const STEPS = [
       {
         id: 'autoClick',
         ask: true,
+        key: 'autoClick',
         title: 'Cliquer sur « Obtenir » à ta place ?',
         hint: 'Expérimental : agit sur ton compte du store. Jamais d’achat payant.',
         when: (d) => d.pc && d.freeGames,
@@ -372,10 +395,10 @@ function feature(ico, title, text) {
   return h('div', { class: 'feature' }, h('span', { class: 'ico' }, ico), h('strong', {}, title), h('small', {}, text));
 }
 
-function deptInput(d) {
+function deptInput(d, done = () => {}) {
   const input = h('input', { type: 'text', class: 'short', placeholder: 'ex. 80, 60', value: d.departments || '', 'data-autofocus': true, 'aria-label': 'Ton département' });
   input.addEventListener('input', () => { d.departments = input.value.trim(); });
-  const ok = h('button', { type: 'button', class: 'btn', onclick: () => input.blur() }, 'OK');
+  const ok = h('button', { type: 'button', class: 'btn', 'data-manual': true, onclick: () => { input.blur(); done(); } }, 'OK');
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') ok.click(); });
   return h('div', { class: 'inline' }, input, ok);
 }
