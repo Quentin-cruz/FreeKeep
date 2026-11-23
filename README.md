@@ -23,7 +23,7 @@ Extension Chrome / Opera GX / Edge / Brave (Manifest V3) organisée en quatre se
 
 **Mise à jour** : le popup prévient quand GitHub a une version plus récente (une lecture par jour du numéro de version, désactivable). Remplace alors le contenu du dossier `extension/`, puis clique sur ↻ (Recharger) sur la carte FreeKeep<3. Ton historique est conservé.
 
-**Sauvegarde** : Réglages → Sources & données → Exporter / Importer (réglages, jeux récupérés, éléments masqués), pour un autre PC ou une réinstallation. L'import ajoute sans rien effacer. La clé GG.deals n'est ni exportée ni synchronisée : elle reste sur ton ordinateur.
+**Sauvegarde** : Réglages → Sources & données → Exporter / Importer (réglages, jeux récupérés, éléments masqués), pour un autre PC ou une réinstallation. L'import ajoute sans rien effacer.
 
 ## Personnalisation
 
@@ -92,7 +92,7 @@ Chaque bon plan Switch est classé **Switch** (jouable sur Switch 1, et donc aus
   - au démarrage du navigateur ;
   - à l'ouverture du popup si la dernière date de plus de 30 min.
 - **Réglages → État des sources** : chaque source y est affichée en direct (✔ nombre de résultats ou ✘ erreur), avec l'heure de la prochaine vérification et un bouton « Vérifier maintenant ».
-- Pour ne pas se faire bloquer par les API, chaque source garde ses résultats un minimum de temps : environ 15 min pour CheapShark, l'eShop et (lors des vérifications automatiques) Epic, Steam et GamerPower, 4 min pour Dealabs, 50 min pour GG.deals.
+- Pour ne pas se faire bloquer par les API, chaque source garde ses résultats un minimum de temps : environ 15 min pour CheapShark, l'eShop et (lors des vérifications automatiques) Epic, Steam et GamerPower, 4 min pour Dealabs, 14 min pour la recherche de clés NEXARDA, 55 min pour les meilleures ventes de clés.
 - **Source en panne** : elle est rappelée de moins en moins souvent (10 min, 20, 40… puis toutes les 6 h). Ses derniers prix restent affichés 24 h au plus, avec leur âge. Une source qui tombe d'un coup à zéro est signalée, et son ancien résultat gardé.
 
 ## 🎁 Gratuits
@@ -120,7 +120,8 @@ Chaque bon plan Switch est classé **Switch** (jouable sur Switch 1, et donc aus
 | Steam | Meilleures ventes en promo (les jeux voulus), prix officiels en euros, note, date de sortie, promos de ta liste de souhaits |
 | [CheapShark](https://www.cheapshark.com) | Promos sur 30+ stores officiels (Steam, GOG, Humble, Fanatical, GMG, Gamesplanet, Battle.net…), avec la note Metacritic et les avis Steam |
 | [Dealabs](https://www.dealabs.com) | Deals **hot** validés par la communauté, y compris sur les sites de clés (Eneba, Instant Gaming, G2A…), et **erreurs de prix** (avec le groupe « erreur de prix ») |
-| [GG.deals](https://gg.deals) *(facultatif)* | Prix des **sites de clés** en euros, plus bas historiques, surveillance des gros jeux |
+| [NEXARDA](https://www.nexarda.com) | Pour **chaque promo PC affichée** : le meilleur prix sur **35 sites de clés** (G2A, Kinguin, Eneba, Gamivo, K4G, Instant Gaming, HRK, Driffle, Loaded…), en euros, code promo compris. API publique, **aucun compte** |
+| [Eneba](https://www.eneba.com), [Instant Gaming](https://www.instant-gaming.com) | Leurs **meilleures ventes de clés Steam**, comparées au prix Steam en euros, pour repérer les grosses affaires « clé » même sans promo officielle |
 
 Ce qui est gardé (seuils réglables) :
 - **Gros jeu** : vendu 29 $ ou plus, Metacritic 75+ ou avis Steam 80 %+, remise d'au moins 60 %.
@@ -128,7 +129,7 @@ Ce qui est gardé (seuils réglables) :
 
 Badges : ⚠️ erreur de prix · 📉 chute soudaine (-30 % depuis la vérif précédente) · 🏆 plus bas historique · 🔥 hot Dealabs · 🔑 prix sur les sites de clés.
 
-**Activer les sites de clés** : crée un compte gratuit sur gg.deals, puis Settings → API → copie ta clé dans les réglages de FreeKeep. FreeKeep surveille alors les prix « clé » de ~60 gros jeux populaires et des promos en cours. Il te prévient si un prix chute brutalement.
+**Sites de clés** : rien à configurer, aucun compte. Si « 🔑 Sites de clés » est coché, FreeKeep<3 cherche sur [NEXARDA](https://www.nexarda.com) le prix « clé » de chaque promo PC affichée (les plus vendues d'abord, une quinzaine d'appels par vérification, chaque prix relu toutes les 6 h), et lit les meilleures ventes de clés Steam d'Eneba et d'Instant Gaming. Le badge « 🔑 Clé » n'apparaît que si la clé est moins chère que la promo ; un clic ouvre l'offre, et le code promo éventuel est indiqué. Une clé n'apparaît seule que si c'est une vraie affaire (-50 % ou plus, et nettement sous le prix Steam du moment). Il te prévient si un prix chute brutalement ; le 🏆 plus bas arrive après un mois de suivi.
 
 ## 🎮 Switch
 
@@ -160,13 +161,15 @@ extension/
 │   ├── store.js, util.js
 │   └── sources/
 │       ├── epic.js, steam.js, gamerpower.js      # gratuits
-│       ├── cheapshark.js, ggdeals.js             # promos PC
+│       ├── cheapshark.js                         # promos PC
 │       ├── eshop.js                              # promos Switch
 │       ├── dealabs.js                            # boîtes, clés, erreurs de prix, jeux offerts (RSS)
 │       ├── dealabspages.js                       # température, prix de référence, offres récentes
 │       ├── gog.js, ea.js                         # promos officielles en euros
 │       ├── bundles.js, storebundles.js           # Humble, Fanatical… ; Steam, GOG, itch.io
 │       ├── switchkeys.js                         # clés Switch (Eneba, Kinguin, Instant Gaming)
+│       ├── pckeys.js                             # clés Steam PC (Eneba, Instant Gaming), sans compte
+│       ├── nexarda.js                            # prix « clé » de chaque promo PC (35 sites), sans compte
 │       ├── steamstore.js, rates.js               # prix Steam en euros, taux BCE
 │       └── goglibrary.js                         # jeux GOG via la session gog.com
 ├── src/prefs.js, src/genres.js            # personnalisation : sections, exclusions, jeux possédés
@@ -209,9 +212,9 @@ Une version précédente (0.3) a aussi été testée de bout en bout dans Chrome
 - **Prix en euros** : exacts pour Steam, GOG, EA, l'eShop, les clés Switch, les bundles et Dealabs. CheapShark (Epic, Ubisoft, revendeurs) et GamerPower ne donnent que des dollars : la remise est appliquée au prix Steam en euros quand il est connu, sinon le prix est converti au taux de la Banque centrale européenne. Dans les deux cas, il est précédé de « ≈ ».
 - **Bundles** : le prix n'est pas connu pour Digiphile et certains Fanatical. Seul le contenu est comparé.
 - **G2A** bloque les lectures automatiques : ses offres n'apparaissent que si elles sont postées sur Dealabs.
-- **Clés PC** : sans clé API GG.deals, seules celles postées sur Dealabs sont vues.
+- **Clés PC** : environ 1 jeu sur 4 n'est pas dans le catalogue NEXARDA (par exemple Red Dead Redemption 2 ou Hollow Knight) : il n'a alors de prix « clé » que s'il est dans les meilleures ventes d'Eneba ou d'Instant Gaming, ou posté sur Dealabs. Au premier lancement, les prix « clé » arrivent au fil des vérifications (quelques jeux à chaque fois). Pas de vrai historique : le 🏆 plus bas est celui vu par FreeKeep<3, après un mois de suivi.
 - **Dealabs** : les flux par groupe ne donnent pas la température (le flux « Hot » la met en tête du titre, FreeKeep<3 la retire). FreeKeep s'appuie donc sur le flux « Hot » officiel et garde un historique de 14 jours. Un deal peut avoir expiré même s'il est encore listé.
-- Dealabs, CheapShark, Nintendo et GG.deals peuvent changer leurs API. Si une source tombe, un bandeau le signale, l'État des sources passe en ✘ et les dernières données connues restent affichées, 24 h au plus.
+- Dealabs, CheapShark, Nintendo, NEXARDA, Eneba et Instant Gaming peuvent changer leurs pages ou leurs API. Si une source tombe, un bandeau le signale, l'État des sources passe en ✘ et les dernières données connues restent affichées, 24 h au plus.
 - Navigateur fermé = pas de vérification : la suivante se fait au redémarrage.
 - Les sites de clés sont du marché gris : prix plus bas, mais pas de garantie éditeur.
 - **Amazon Prime n'a pas d'API publique** (la page des jeux Luna est générée en JavaScript). Les jeux Prime sont repérés via LootScraper, GamerPower et Dealabs : il peut en manquer, surtout les jeux Luna en cloud.
@@ -222,4 +225,4 @@ Une version précédente (0.3) a aussi été testée de bout en bout dans Chrome
 
 ---
 
-Données : Epic Games Store, Steam, GOG, [GamerPower](https://www.gamerpower.com), [CheapShark](https://www.cheapshark.com), Nintendo eShop, [Dealabs](https://www.dealabs.com), [GG.deals](https://gg.deals). FreeKeep<3 n'est affilié à aucun de ces services.
+Données : Epic Games Store, Steam, GOG, [GamerPower](https://www.gamerpower.com), [CheapShark](https://www.cheapshark.com), Nintendo eShop, [Dealabs](https://www.dealabs.com), [NEXARDA](https://www.nexarda.com), Eneba, Instant Gaming. FreeKeep<3 n'est affilié à aucun de ces services.

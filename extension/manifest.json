@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "FreeKeep<3",
   "short_name": "FreeKeep<3",
-  "version": "1.7.3",
+  "version": "1.8.0",
   "description": "Jeux PC offerts à garder (Epic, Steam, GOG, Prime…) + vraies grosses promos PC et Switch, à ta mesure.",
   "icons": {
     "16": "icons/icon16.png",
@@ -52,9 +52,9 @@
     "https://www.humblebundle.com/*",
     "https://www.fanatical.com/*",
     "https://www.greenmangamingbundles.com/*",
-    "https://api.gg.deals/*",
     "https://searching.nintendo-europe.com/*",
     "https://api.ec.nintendo.com/*",
+    "https://www.nexarda.com/*",
     "https://www.eneba.com/*",
     "https://www.kinguin.net/*",
     "https://www.instant-gaming.com/*"

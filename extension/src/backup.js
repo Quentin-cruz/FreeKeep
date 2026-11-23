@@ -1,4 +1,4 @@
-// Sauvegarde : réglages, jeux récupérés, éléments masqués. La clé GG.deals n'en fait jamais partie.
+// Sauvegarde : réglages, jeux récupérés, éléments masqués.
 // À la lecture, rien n'est cru sur parole : seuls les champs connus, du bon type, sont repris.
 import { DEFAULT_SETTINGS, LEVELS, INTERVALS } from './config.js';
 
@@ -6,7 +6,7 @@ const APP = 'FreeKeep<3';
 export const MAX_FILE = 5 * 1024 * 1024;
 
 export function makeBackup(settings, { states = {}, dealStates = {} } = {}, now = Date.now()) {
-  const { ggdealsKey, onboarded, ...rest } = settings;
+  const { ggdealsKey, onboarded, ...rest } = settings; // ggdealsKey : ancienne version
   return { app: APP, format: 1, date: new Date(now).toISOString(), settings: rest, states, dealStates };
 }
 

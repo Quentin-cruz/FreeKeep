@@ -32,16 +32,17 @@ export function originsFor(settings) {
   add(bundle('keys'), 'https://www.fanatical.com/*', 'https://www.greenmangamingbundles.com/*');
   add(bundle('indie'), ITCH, 'https://www.indiegala.com/*');
   add(w.switchDeals, NINTENDO);
-  add(w.switchDeals && w.keyshops, 'https://www.eneba.com/*', 'https://www.kinguin.net/*', 'https://www.instant-gaming.com/*');
+  add(w.keyshops && (w.switchDeals || (w.pcDeals && st.steam)), 'https://www.eneba.com/*', 'https://www.instant-gaming.com/*');
+  add(w.keyshops && w.switchDeals, 'https://www.kinguin.net/*');
+  add(w.keyshops && w.pcDeals && st.steam, 'https://www.nexarda.com/*');
   add(settings.dealabs && (w.free || w.pcDeals || w.switchDeals || w.bundles), DEALABS);
-  add(settings.ggdealsKey && w.pcDeals, 'https://api.gg.deals/*');
   return [...new Set(out)];
 }
 
 // Sites sans lesquels une source ne peut pas marcher (les autres se contentent de ce qui est autorisé).
 const SOURCE_SITES = {
-  lootscraper: [LOOT], cheapshark: [CHEAPSHARK], watchlist: [CHEAPSHARK], gog: [GOG_CATALOG], ea: ['https://www.ea.com/*'], eshop: NINTENDO,
-  dealabs: [DEALABS], dealabsPages: [DEALABS], itchbundles: [ITCH], ggdeals: ['https://api.gg.deals/*'], goglib: [GOG], rate: ['https://www.ecb.europa.eu/*'],
+  lootscraper: [LOOT], cheapshark: [CHEAPSHARK], gog: [GOG_CATALOG], ea: ['https://www.ea.com/*'], eshop: NINTENDO,
+  dealabs: [DEALABS], dealabsPages: [DEALABS], itchbundles: [ITCH], goglib: [GOG], rate: ['https://www.ecb.europa.eu/*'],
 };
 export const DENIED = 'accès non autorisé';
 

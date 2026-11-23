@@ -1,6 +1,6 @@
 // Accès au stockage de l'extension.
 //  - chrome.storage.sync  : réglages (suivent ton compte Chrome)
-//  - chrome.storage.local : jeux, états (récupéré / masqué), cache des sources, clé GG.deals
+//  - chrome.storage.local : jeux, états (récupéré / masqué), cache des sources
 //  - chrome.storage.session : onglets ouverts via « Récupérer »
 import { DEFAULT_SETTINGS } from './config.js';
 
@@ -33,22 +33,20 @@ const sum = (text) => {
 };
 
 export async function getSettings() {
-  const [all, { ggdealsKey }] = await Promise.all([chrome.storage.sync.get(null), chrome.storage.local.get('ggdealsKey')]);
-  const { bannedChunks, bannedSum, ...settings } = all.settings || {};
+  const all = await chrome.storage.sync.get(null);
+  const { bannedChunks, bannedSum, ggdealsKey, ...settings } = all.settings || {};
   if (bannedChunks) settings.bannedKeywords = Array.from({ length: bannedChunks }, (_, i) => all[`banned_${i}`] || []).flat();
   return {
     ...DEFAULT_SETTINGS,
     ...settings,
     stores: { ...DEFAULT_SETTINGS.stores, ...(settings.stores || {}) },
     bundleStores: { ...DEFAULT_SETTINGS.bundleStores, ...(settings.bundleStores || {}) },
-    // Ancienne version : la clé était dans les réglages synchronisés
-    ggdealsKey: ggdealsKey ?? settings.ggdealsKey ?? '',
   };
 }
 
 /** Lève une erreur si le navigateur refuse (liste vraiment trop longue, quota dépassé). */
 export async function saveSettings(settings) {
-  const { ggdealsKey = '', ...rest } = settings;
+  const { ggdealsKey, ...rest } = settings;
   const values = { settings: rest };
   const words = rest.bannedKeywords || [];
   if (bytes(words) > INLINE_MAX) {
@@ -56,15 +54,14 @@ export async function saveSettings(settings) {
     values.settings = { ...rest, bannedKeywords: [], bannedChunks: chunks.length, bannedSum: sum(words.join('\n')) };
     chunks.forEach((c, i) => { values[`banned_${i}`] = c; });
   }
-  const { ggdealsKey: before } = await chrome.storage.local.get('ggdealsKey');
-  if (before !== ggdealsKey) await chrome.storage.local.set({ ggdealsKey });
   await chrome.storage.sync.set(values);
   const stale = Object.keys(await chrome.storage.sync.get(null)).filter((k) => CHUNK.test(k) && !(k in values));
   if (stale.length) await chrome.storage.sync.remove(stale);
 }
 
-// La clé GG.deals quitte les réglages synchronisés (versions 1.5 et avant).
-export async function migrateKey() {
+// GG.deals n'est plus utilisé (il fallait un compte) : on efface l'ancienne clé, où qu'elle soit.
+export async function forgetGgDealsKey() {
+  await chrome.storage.local.remove('ggdealsKey');
   const { settings } = await chrome.storage.sync.get('settings');
   if (settings && 'ggdealsKey' in settings) await saveSettings(await getSettings());
 }

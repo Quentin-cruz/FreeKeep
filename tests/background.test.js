@@ -407,17 +407,15 @@ test('Tutoriel quitté en route : réponses gardées et alertes après 30 min', 
   assert.ok(notified.length > 0);
 });
 
-test('Réglages : longues listes de licences découpées, clé GG.deals hors synchronisation', async () => {
-  const { getSettings, saveSettings, migrateKey } = await import('../extension/src/store.js');
+test('Réglages : longues listes de licences découpées, ancienne clé GG.deals effacée', async () => {
+  const { getSettings, saveSettings, forgetGgDealsKey } = await import('../extension/src/store.js');
   await setup();
   const words = Array.from({ length: 900 }, (_, i) => `licence très longue numéro ${i}`);
-  await saveSettings({ ...(await getSettings()), bannedKeywords: words, ggdealsKey: 'secret' });
+  await saveSettings({ ...(await getSettings()), bannedKeywords: words });
   const raw = await chrome.storage.sync.get(null);
   for (const [k, v] of Object.entries(raw)) assert.ok(new TextEncoder().encode(k + JSON.stringify(v)).length < 8192, k);
-  assert.ok(!JSON.stringify(raw).includes('secret'));
   const back = await getSettings();
   assert.deepEqual(back.bannedKeywords, words);
-  assert.equal(back.ggdealsKey, 'secret');
   assert.ok(!('bannedChunks' in back));
   // Un mot changé se voit dans `settings` (sinon rien ne serait revérifié)
   await saveSettings({ ...back, bannedKeywords: [...words.slice(0, -1), 'autre'] });
@@ -426,15 +424,13 @@ test('Réglages : longues listes de licences découpées, clé GG.deals hors syn
   await saveSettings({ ...back, bannedKeywords: ['LEGO'] });
   assert.deepEqual(Object.keys(await chrome.storage.sync.get(null)), ['settings']);
   assert.deepEqual((await getSettings()).bannedKeywords, ['LEGO']);
-  // Ancienne version : la clé était synchronisée
-  await chrome.storage.local.clear();
+  // Anciennes versions : la clé GG.deals (synchronisée ou locale) ne sert plus et disparaît
+  await chrome.storage.local.set({ ggdealsKey: 'locale' });
   await chrome.storage.sync.set({ settings: { ...DEFAULT_SETTINGS, ggdealsKey: 'ancienne' } });
-  assert.equal((await getSettings()).ggdealsKey, 'ancienne');
-  await migrateKey();
+  assert.ok(!('ggdealsKey' in (await getSettings())));
+  await forgetGgDealsKey();
   assert.ok(!('ggdealsKey' in (await chrome.storage.sync.get('settings')).settings));
-  assert.equal((await getSettings()).ggdealsKey, 'ancienne');
-  await send({ type: 'resetData' });
-  assert.equal((await getSettings()).ggdealsKey, 'ancienne', 'Réinitialiser garde les réglages');
+  assert.equal((await chrome.storage.local.get('ggdealsKey')).ggdealsKey, undefined);
 });
 
 test('Importer une sauvegarde ne perd aucun jeu récupéré', async () => {

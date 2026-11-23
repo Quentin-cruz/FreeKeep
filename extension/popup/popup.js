@@ -139,7 +139,7 @@ function render() {
   const sources = {
     free: ['Epic, Steam, GOG, ', h('a', { href: 'https://feed.eikowagenknecht.com/lootscraper/', target: '_blank' }, 'LootScraper'), ', ', h('a', { href: 'https://www.gamerpower.com', target: '_blank' }, 'GamerPower'), S.settings.dealabs ? ', Dealabs' : ''],
     bundle: ['Bundles : ', h('a', { href: 'https://barter.vg', target: '_blank' }, 'Barter.vg'), ', Humble Bundle, Fanatical, GMG, Digiphile, Steam, GOG, itch.io, IndieGala'],
-    pc: ['Prix : Steam, ', h('a', { href: 'https://www.cheapshark.com', target: '_blank' }, 'CheapShark'), ', GOG, EA, Barter.vg, Dealabs', S.settings.ggdealsKey ? [', ', h('a', { href: 'https://gg.deals', target: '_blank' }, 'GG.deals')] : ''],
+    pc: ['Prix : Steam, ', h('a', { href: 'https://www.cheapshark.com', target: '_blank' }, 'CheapShark'), ', GOG, EA, Barter.vg, Dealabs', S.settings.keyshops !== false ? [', Eneba, Instant Gaming, ', h('a', { href: 'https://www.nexarda.com', target: '_blank' }, 'NEXARDA')] : ''],
     switch: ['Prix : eShop, Eneba, Kinguin, Instant Gaming, ', h('a', { href: 'https://www.dealabs.com', target: '_blank' }, 'Dealabs')],
   }[ui.section];
   $('.sources').replaceChildren('Données : ', ...sources.flat());
@@ -157,12 +157,12 @@ function renderBanner() {
   }
   const names = {
     epic: 'Epic Games', steam: 'Steam', gamerpower: 'GamerPower', lootscraper: 'LootScraper', cheapshark: 'CheapShark', wanted: 'meilleures ventes Steam', eshop: 'eShop Nintendo',
-    dealabs: 'Dealabs', ggdeals: 'GG.deals', gog: 'GOG', ea: 'EA', bundles: 'bundles', storebundles: 'bundles Steam et GOG', itchbundles: 'itch.io', switchkeys: 'clés Switch', dealabsPages: 'pages Dealabs', wishlist: 'souhaits Steam', watchlist: 'CheapShark', bons_plans: 'bons plans',
+    dealabs: 'Dealabs', pckeys: 'clés PC', gog: 'GOG', ea: 'EA', bundles: 'bundles', storebundles: 'bundles Steam et GOG', itchbundles: 'itch.io', switchkeys: 'clés Switch', dealabsPages: 'pages Dealabs', wishlist: 'souhaits Steam', watchlist: 'CheapShark', bons_plans: 'bons plans',
   };
   const relevant = {
     bundle: ['bundles', 'storebundles', 'itchbundles', 'dealabs', 'bons_plans'],
     free: ['epic', 'steam', 'gamerpower', 'lootscraper'],
-    pc: ['cheapshark', 'wanted', 'gog', 'ea', 'dealabs', 'dealabsPages', 'ggdeals', 'watchlist', 'wishlist', 'bons_plans'],
+    pc: ['cheapshark', 'wanted', 'gog', 'ea', 'dealabs', 'dealabsPages', 'pckeys', 'wishlist', 'bons_plans'],
     switch: ['eshop', 'switchkeys', 'dealabs', 'dealabsPages', 'bons_plans'],
   }[ui.section];
   const all = { ...(S.meta.errors || {}), ...(S.meta.dealErrors || {}) };
@@ -399,9 +399,15 @@ function dealPills(d) {
   if (d.rating?.gog) out.push(pill(`GOG ${String(d.rating.gog.toFixed(1)).replace('.', ',')}/5`, 'score', 'Note des joueurs GOG'));
   if (d.rating?.metacritic) out.push(pill(`MC ${d.rating.metacritic}`, 'score', 'Note Metacritic'));
   if (d.rating?.steam) out.push(pill(`Steam ${d.rating.steam} %`, 'score', d.rating.steamText || 'Avis Steam'));
-  if (d.keyshop && d.channel !== 'keyshop') out.push(pill(`🔑 Clé ${formatPrice(d.keyshop.price, d.keyshop.currency)}`, 'key', 'Meilleur prix repéré sur les sites de clés (marché gris)'));
+  if (d.keyshop && d.channel !== 'keyshop') {
+    const k = d.keyshop;
+    const tip = `Meilleur prix repéré sur les sites de clés (marché gris)${k.merchant ? ` : ${k.merchant}` : ''}${k.code ? `, avec le code ${k.code}` : ''}`;
+    const text = `🔑 Clé ${formatPrice(k.price, k.currency)}${k.code ? ` (code ${k.code})` : ''}`;
+    out.push(k.url ? h('button', { type: 'button', class: 'pill key link', title: tip, onclick: () => open(k.url) }, text) : pill(text, 'key', tip));
+  }
+  if (d.channel === 'keyshop' && d.code) out.push(pill(`🏷️ Code ${d.code}`, 'key', 'Code promo déjà compté dans le prix'));
   if (d.channel === 'physical') out.push(pill('📦 Boîte', 'muted'));
-  if (d.channel === 'keyshop' && d.source !== 'ggdeals') out.push(pill('🔑 Site de clés', 'key'));
+  if (d.channel === 'keyshop' && d.source !== 'pckeys') out.push(pill('🔑 Site de clés', 'key'));
   if (f.local) out.push(pill('📍 En magasin', 'muted'));
   if (d.end) {
     const left = d.end - Date.now();

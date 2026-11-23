@@ -111,19 +111,12 @@ const PANELS = {
         settings.switch ? selectRow({ title: 'Remise mini eShop', desc: 'Les jeux Nintendo sont gardés dès -20 %', value: settings.switchMinDiscount, options: [20, 30, 40, 50, 60, 70].map((v) => [v, `-${v} %`]), onChange: (v) => { settings.switchMinDiscount = Number(v); settings.level = 'custom'; save({ rerender: true }); } }) : null,
       ),
     );
-    const ggKey = h('input', { type: 'text', class: 'wide mono', placeholder: 'Colle ta clé API GG.deals', value: settings.ggdealsKey || '', autocomplete: 'off', spellcheck: 'false' });
-    let t = null;
-    ggKey.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => set('ggdealsKey')(ggKey.value.trim()), 500); });
-
     return [
       h('h1', {}, 'Ce que je veux voir'),
       h('p', { class: 'lead' }, 'Chaque section désactivée disparaît du popup.'),
       box('Sections', null, h('div', { class: 'rows' }, sections)),
       w.pcDeals || w.switchDeals ? box('Niveau d’exigence', 'Les meilleures annonces d’abord : jeux récents, bien notés, demandés. Le reste attend derrière « Voir tout ».',
         levelCards(custom ? null : settings.level, (v) => { settings.level = v; save({ rerender: true }); }), adv) : null,
-      w.pcDeals && settings.keyshops && settings.stores.steam ? box('Surveillance des sites de clés (facultatif)',
-        'Avec une clé API GG.deals gratuite, FreeKeep<3 affiche le prix « clé » de chaque promo et te prévient si un gros jeu chute soudainement. Crée un compte sur gg.deals → Settings → API.',
-        h('div', { class: 'inline' }, ggKey, h('a', { class: 'btn', href: 'https://gg.deals/settings/', target: '_blank', rel: 'noopener' }, 'Obtenir une clé'))) : null,
     ];
   },
 
@@ -264,7 +257,7 @@ const PANELS = {
         selectRow({ title: 'Garder les deals pendant', value: settings.dealMaxAgeDays, options: [[3, '3 jours'], [7, '7 jours'], [14, '14 jours']], onChange: (v) => set('dealMaxAgeDays')(Number(v)) }),
       )),
       box('Données', null, h('div', { class: 'rows' },
-        h('div', { class: 'row' }, h('span', { class: 'row-text' }, h('strong', {}, 'Sauvegarde'), h('small', {}, 'Réglages, jeux récupérés et éléments masqués, pour un autre PC ou une réinstallation. La clé GG.deals n’y est pas.'), backupMsg),
+        h('div', { class: 'row' }, h('span', { class: 'row-text' }, h('strong', {}, 'Sauvegarde'), h('small', {}, 'Réglages, jeux récupérés et éléments masqués, pour un autre PC ou une réinstallation.'), backupMsg),
           h('button', { type: 'button', class: 'btn', onclick: exportBackup }, 'Exporter'), h('button', { type: 'button', class: 'btn', onclick: () => file.click() }, 'Importer'), file),
         switchRow({ title: 'Me prévenir des nouvelles versions', desc: 'Lit une fois par jour le numéro de version sur GitHub. Rien n’est envoyé ni installé.', checked: settings.checkUpdates, onChange: set('checkUpdates') }),
         h('div', { class: 'row' }, h('span', { class: 'row-text' }, h('strong', {}, 'Tout réinitialiser'), h('small', {}, 'Efface l’historique des jeux récupérés, les éléments masqués et le cache. Les réglages sont conservés.')), reset))),
@@ -273,7 +266,7 @@ const PANELS = {
         h('a', { href: 'https://www.cheapshark.com', target: '_blank' }, 'CheapShark'), ' (prix convertis au taux de la Banque centrale européenne), GOG, EA, eShop Nintendo, Eneba, Kinguin, Instant Gaming, Fanatical, Humble Bundle, ',
         h('a', { href: 'https://barter.vg', target: '_blank' }, 'Barter.vg'), ', ',
         h('a', { href: 'https://www.dealabs.com', target: '_blank' }, 'Dealabs'), ', ',
-        h('a', { href: 'https://gg.deals', target: '_blank' }, 'GG.deals'), '. FreeKeep<3 n’est affilié à aucun de ces services.'),
+        h('a', { href: 'https://www.nexarda.com', target: '_blank' }, 'NEXARDA'), '. FreeKeep<3 n’est affilié à aucun de ces services.'),
     ];
   },
 };
@@ -354,10 +347,10 @@ const SOURCE_INFO = {
   storebundles: ['Bundles des stores', 'Steam et GOG'],
   itchbundles: ['Bundles indés', 'itch.io, sans DRM'],
   switchkeys: ['Clés Switch', 'Eneba, Kinguin, Instant Gaming, comparés à l’eShop'],
+  pckeys: ['Clés PC', 'Eneba, Instant Gaming + 35 sites de clés via NEXARDA, comparés au prix Steam (sans compte)'],
   dealabsPages: ['Dealabs (pages)', 'Température, prix de référence, offres des 30 derniers jours'],
   eshop: ['eShop Nintendo', 'Promos Switch, prix et dates de fin'],
   dealabs: ['Dealabs', 'Boîtes, clés, erreurs de prix + jeux offerts (Prime, MS Store, Battle.net)'],
-  ggdeals: ['GG.deals', 'Prix des sites de clés (clé API)'],
 };
 
 async function refreshSources() {
@@ -375,7 +368,7 @@ async function refreshSources() {
     let pill;
     let detail = '';
     if (!st) {
-      const why = id === 'ggdeals' && !settings.ggdealsKey ? 'Pas de clé' : id === 'steamlib' && !settings.steamProfile && !settings.steamOwnedSync ? 'Non lié' : 'Désactivée';
+      const why = id === 'steamlib' && !settings.steamProfile && !settings.steamOwnedSync ? 'Non lié' : 'Désactivée';
       pill = h('span', { class: 'state off' }, why);
     } else if (st.ok) {
       pill = h('span', { class: 'state ok' }, `✔ ${st.count} ${st.count > 1 ? 'résultats' : 'résultat'}`);
@@ -398,7 +391,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     if (card) refreshLibCard(card);
   }
   // Réglages modifiés ailleurs (tutoriel) : on recharge
-  if ((area === 'sync' && changes.settings || area === 'local' && changes.ggdealsKey) && JSON.stringify(changes.settings?.newValue) !== JSON.stringify(settings)) {
+  if (area === 'sync' && changes.settings && JSON.stringify(changes.settings?.newValue) !== JSON.stringify(settings)) {
     getSettings().then((s) => {
       if (JSON.stringify(s) === JSON.stringify(settings)) return;
       settings = s;

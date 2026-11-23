@@ -3,7 +3,8 @@ import { fetchCheapShark, fetchPopularAppIds } from './sources/cheapshark.js';
 import { fetchWanted } from './sources/wanted.js';
 import { fetchEshop } from './sources/eshop.js';
 import { fetchDealabs, mergeDealabsItems, classifyDealabs, dealabsFreebie } from './sources/dealabs.js';
-import { fetchGgDeals, ggKeyshopDeals } from './sources/ggdeals.js';
+import { fetchPcKeys, mergeKeyPrices } from './sources/pckeys.js';
+import { lookupNexarda } from './sources/nexarda.js';
 import { fetchDealabsPages } from './sources/dealabspages.js';
 import { fetchGog } from './sources/gog.js';
 import { fetchEa } from './sources/ea.js';
@@ -34,9 +35,9 @@ const GAPS = {
   switchkeys: 2 * 60 * MIN,
   wishlist: 28 * MIN,
   rate: 12 * 60 * MIN,
-  watchlist: 7 * DAY,   // liste des gros jeux surveillés sur les sites de clés
-  ggdeals: 50 * MIN,    // GG.deals : 1 000 prix/heure max
+  pckeys: 14 * MIN,     // recherche ciblée NEXARDA : 16 appels par passage
 };
+const LIST_GAP = 55 * MIN; // meilleures ventes Eneba / Instant Gaming + recherche Steam
 
 /**
  * @param cache   cache persistant par source (modifié en place)
@@ -60,6 +61,7 @@ const enabledSources = (settings, w) => {
     storebundles: w.bundles && settings.bundleStores?.stores !== false && !!(st.steam || st.gog),
     itchbundles: w.bundles && settings.bundleStores?.indie !== false,
     switchkeys: w.switchDeals && settings.keyshops !== false,
+    pckeys: w.pcDeals && settings.keyshops !== false && !!st.steam,
     dealabsPages: !!settings.dealabs && (w.pcDeals || w.switchDeals || w.free),
     dealabs: !!settings.dealabs && (w.pcDeals || w.switchDeals || w.free || w.bundles),
   };
@@ -72,6 +74,9 @@ export async function fetchDealSources(rawSettings, cache, now = Date.now(), for
   const settings = { ...rawSettings, pcDeals: w.pcDeals, switchDeals: w.switchDeals };
   const wide = { ...settings, ...WIDEST, switch2: true };
   const errors = {};
+  // Anciennes sources (GG.deals demandait un compte) : remplacées par `pckeys`.
+  delete cache.ggdeals;
+  delete cache.watchlist;
   const run = async (name, enabled, job) => {
     if (!enabled) {
       delete cache[name];
@@ -158,11 +163,25 @@ export async function fetchDealSources(rawSettings, cache, now = Date.now(), for
     return { items: ok.flatMap((r) => r.value) };
   });
 
-  const withKey = settings.pcDeals && !!settings.ggdealsKey && settings.keyshops !== false && !!settings.stores?.steam;
-  await run('watchlist', withKey, async () => ({ appids: await fetchPopularAppIds() }));
-  await run('ggdeals', withKey, async () => {
-    const ids = [...(cache.cheapshark?.items || []).map((d) => d.steamAppID), ...(cache.watchlist?.appids || [])];
-    return { prices: await fetchGgDeals(ids, settings.ggdealsKey) };
+  // Après les autres sources Steam, pour ne pas saturer la recherche du store
+  // Deux volets : meilleures ventes d'Eneba / Instant Gaming, et recherche ciblée (NEXARDA)
+  // des promos officielles affichées, quelques jeux par vérification.
+  await run('pckeys', on.pckeys, async (prev) => {
+    const refs = { ...(prev?.refs || {}) };
+    const lows = { ...(prev?.lows || {}) };
+    const nx = structuredClone(prev?.nx || {});
+    // Les promos affichées, les plus vendues d'abord
+    const targets = [...(cache.wanted?.items || []), ...(cache.wishlist?.items || []), ...(cache.cheapshark?.items || [])].map((d) => d.steamAppID);
+    const listFresh = prev?.base && now - (prev.listAt || 0) < LIST_GAP;
+    const [listing, found] = await Promise.allSettled([
+      listFresh ? prev.base : fetchPcKeys(refs, lows, now),
+      lookupNexarda(targets, nx, now),
+    ]);
+    if (listing.status === 'rejected' && found.status === 'rejected') throw listing.reason;
+    const base = listing.status === 'fulfilled' ? listing.value : prev?.base || { items: [], prices: {} };
+    const listAt = listing.status === 'fulfilled' && !listFresh ? now : prev?.listAt || 0;
+    const { items, prices } = mergeKeyPrices(base, found.status === 'fulfilled' ? found.value : {}, lows, now);
+    return { items, prices, base, listAt, refs, lows, nx };
   });
   return errors;
 }
@@ -181,7 +200,6 @@ export function assembleDeals(rawSettings, cache, history, now = Date.now(), err
   // Une source en panne depuis plus d'un jour n'est plus montrée : ses prix ont sans doute changé.
   const read = (name) => (isStale(cache[name], now) ? null : cache[name]);
   const items = (name) => (on[name] ? keepAtLevel(structuredClone(read(name)?.items || []), settings) : []);
-  const withKey = settings.pcDeals && !!settings.ggdealsKey && settings.keyshops !== false && !!settings.stores?.steam;
   // « Stores sélectionnés au-dessus » : seulement les bundles des stores cochés
   const bundleWanted = (d) => !!d.store && settings.bundleStores?.[d.store] !== false && (d.store !== 'stores' || !d.platform || !!settings.stores?.[d.platform]);
 
@@ -190,7 +208,7 @@ export function assembleDeals(rawSettings, cache, history, now = Date.now(), err
   const dealabs = dealabsRaw
     .map((it) => classifyDealabs(it, settings, now))
     .filter((d) => d && (d.section === 'bundle' ? w.bundles : d.section === 'pc' ? settings.pcDeals : settings.switchDeals));
-  const gg = read('ggdeals')?.prices || {};
+  const keyPrices = on.pckeys ? read('pckeys')?.prices || {} : {};
   const freebies = w.free
     ? dealabsRaw.map((it) => dealabsFreebie(it, { stores: w.stores, prime: w.prime, maxAgeDays: settings.dealMaxAgeDays || 7 }, now)).filter(Boolean)
     : [];
@@ -207,10 +225,10 @@ export function assembleDeals(rawSettings, cache, history, now = Date.now(), err
       switchkeys: items('switchkeys').filter((d) => settings.switch2 || d.platform !== 'switch2'),
       eshop: items('eshop').filter((d) => settings.switch2 || d.platform !== 'switch2'),
       dealabs: dealabs.filter((d) => d.section !== 'bundle' || bundleWanted(d)),
-      ggdeals: settings.pcDeals ? ggKeyshopDeals(gg) : [],
+      pckeys: on.pckeys ? structuredClone(read('pckeys')?.items || []) : [],
     },
     history,
-    gg,
+    keyPrices,
     now,
   );
 
@@ -227,9 +245,9 @@ export function assembleDeals(rawSettings, cache, history, now = Date.now(), err
     switchkeys: cache.switchkeys?.items?.length,
     dealabsPages: cache.dealabsPages?.raw?.length,
     dealabs: dealabs.length + freebies.length,
-    ggdeals: cache.ggdeals ? Object.keys(cache.ggdeals.prices || {}).length : undefined,
+    pckeys: cache.pckeys ? Object.keys(cache.pckeys.prices || {}).length : undefined,
   };
-  const enabled = { ...on, ggdeals: withKey };
+  const enabled = on;
   const status = {};
   for (const name of Object.keys(enabled)) {
     if (!enabled[name]) continue;

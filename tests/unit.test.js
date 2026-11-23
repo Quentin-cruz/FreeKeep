@@ -122,12 +122,14 @@ import { detectSite } from '../extension/src/sources/gamerpower.js';
 import { parseCheapShark, applyHistoricLows } from '../extension/src/sources/cheapshark.js';
 import { parseEshop, applyEshopPrices } from '../extension/src/sources/eshop.js';
 import { parseRss, classifyDealabs, mergeDealabsItems, mentionsSwitch1 } from '../extension/src/sources/dealabs.js';
-import { parseGgDeals, ggKeyshopDeals } from '../extension/src/sources/ggdeals.js';
+import { parsePcKeyName, parseEnebaPc, parseInstantGamingPc, pickSteamRef, buildPcKeyDeals, mergeKeyPrices } from '../extension/src/sources/pckeys.js';
+import { parseNexardaFind, parseNexardaPrices, lookupNexarda } from '../extension/src/sources/nexarda.js';
+import { normTitle } from '../extension/src/util.js';
 import { buildDeals } from '../extension/src/deals.js';
 import { parsePrice, titleContains } from '../extension/src/util.js';
 import {
   cheapsharkAAAFixture, cheapsharkGemsFixture, cheapsharkGamesFixture, eshopSearchFixture, eshopNintendoFixture,
-  eshopPriceFixture, dealabsFeeds, ggdealsFixture,
+  eshopPriceFixture, dealabsFeeds, enebaPcFixture, igPcFixture, steamStoreSearchFixture, nexardaFindFixture, nexardaPricesFixture,
 } from './fixtures.js';
 
 const S = { ...DEFAULT_SETTINGS, departments: '80', switch: true };
@@ -231,16 +233,104 @@ test('Dealabs : tri physique / clés / erreur de prix / magasins locaux', () => 
   assert.equal(dealabsItems({ ...S, departments: '80, 83' }).length, 6);
 });
 
-test('GG.deals : prix clés + bons plans clés exceptionnels', () => {
-  const prices = parseGgDeals(ggdealsFixture());
-  assert.equal(prices['900101'].keyshop, 7.49);
-  assert.ok(!prices['900102']);
-  const keyDeals = ggKeyshopDeals(prices);
-  const ow = keyDeals.find((d) => d.title === 'Open World Epic');
-  assert.ok(ow.candidate && ow.flags.historicLow);
-  assert.equal(ow.discount, 70);
-  assert.ok(!keyDeals.find((d) => d.title === 'Mega Shooter 4').candidate);
-  assert.throws(() => parseGgDeals({ success: false, data: { message: 'Too Many Requests' } }), /Too Many/);
+// Clés PC lues sur Eneba et Instant Gaming, comparées au prix Steam : aucun compte nécessaire.
+const pcKeyRefs = (names, at = now) => Object.fromEntries(names.map((n) => [normTitle(n), { ref: pickSteamRef(steamStoreSearchFixture(n), n), at }]));
+const pcKeys = (lows = {}, at = now) => {
+  const keys = [...parseEnebaPc(enebaPcFixture()), ...parseInstantGamingPc(igPcFixture())];
+  return buildPcKeyDeals(keys, pcKeyRefs(['Mega Shooter 4', 'Open World Epic', 'Indie Gem']), lows, at);
+};
+
+test('Clés PC : noms Eneba / Instant Gaming, régions, DLC', () => {
+  assert.deepEqual(parsePcKeyName('Elden Ring (PC) Clé Steam EUROPE'), { name: 'Elden Ring' });
+  assert.deepEqual(parsePcKeyName('Ready or Not Steam Key (PC) GLOBAL'), { name: 'Ready or Not' });
+  assert.deepEqual(parsePcKeyName('Human : Fall Flat clé Steam GLOBAL'), { name: 'Human : Fall Flat' });
+  assert.deepEqual(parsePcKeyName('Football Manager 27 - PC & Mac (Steam)'), { name: 'Football Manager 27' });
+  assert.equal(parsePcKeyName('Elden Ring Steam Key NORTH AMERICA'), null, 'autre région');
+  assert.equal(parsePcKeyName('Elden Ring - PC (Steam) - US'), null, 'autre région');
+  assert.equal(parsePcKeyName('Elden Ring - Season Pass Steam Key GLOBAL'), null, 'pas un jeu');
+  assert.equal(parsePcKeyName('Elden Ring - Xbox Series X|S'), null, 'pas une clé Steam');
+
+  const en = parseEnebaPc(enebaPcFixture());
+  assert.deepEqual(en.map((k) => [k.name, k.price]), [['Mega Shooter 4', 7.49], ['Open World Epic', 17.99]], 'rupture, autre région, DLC et carte écartés');
+  const ig = parseInstantGamingPc(igPcFixture());
+  assert.deepEqual(ig.map((k) => [k.name, k.price]), [['Open World Epic', 18.49], ['Indie Gem', 4.99]], 'prix JSON ou affiché');
+  assert.throws(() => parseEnebaPc('<html></html>'), /Eneba/);
+
+  const ref = pickSteamRef(steamStoreSearchFixture('Open World Epic'), 'Open World Epic');
+  assert.deepEqual(ref, { appid: '900301', title: 'Open World Epic', regular: 59.99, now: 59.99, meta: 88 }, 'le jeu, pas sa bande-son');
+  assert.equal(pickSteamRef(steamStoreSearchFixture('Inconnu'), 'Inconnu'), null);
+});
+
+test('Clés PC : meilleur prix par jeu, vraies affaires seulement, plus bas suivi sans GG.deals', () => {
+  const { items, prices } = pcKeys();
+  const owe = items.find((d) => d.steamAppID === '900301');
+  assert.equal(owe.price, 17.99, 'Eneba moins cher qu’Instant Gaming');
+  assert.equal(owe.merchant, 'Eneba');
+  assert.equal(owe.discount, 70);
+  assert.ok(owe.candidate && !owe.flags.historicLow, 'pas encore assez de suivi pour parler de record');
+  assert.equal(owe.rating.metacritic, 88);
+  assert.ok(!items.find((d) => d.steamAppID === '900101').candidate, '-24 % : pas une affaire');
+  assert.ok(!items.find((d) => d.steamAppID === '900500').candidate, 'à peine moins cher que la promo Steam');
+  assert.deepEqual(prices['900101'], { keyshop: 7.49, currency: 'EUR', url: 'https://www.eneba.com/fr/steam-mega', merchant: 'Eneba' });
+
+  // Suivi depuis plus d'un mois, jamais vu aussi bas : plus bas historique
+  const lows = { 900301: { price: 18.5, since: now - 40 * 24 * 3600e3 } };
+  assert.ok(pcKeys(lows).items.find((d) => d.steamAppID === '900301').flags.historicLow);
+  assert.equal(lows['900301'].price, 17.99, 'plus bas mis à jour');
+});
+
+test('NEXARDA : meilleure clé Steam, sans compte, code promo compris', () => {
+  assert.equal(parseNexardaFind(nexardaFindFixture(900101)), 11);
+  assert.equal(parseNexardaFind(nexardaFindFixture(1)), null, 'absent du catalogue');
+  assert.throws(() => parseNexardaFind({ success: false, code: 'rate_limited', message: 'Too many requests' }), /Too many/);
+  const mega = parseNexardaPrices(nexardaPricesFixture(11));
+  assert.deepEqual({ ...mega, url: undefined }, { keyshop: 6.49, currency: 'EUR', url: undefined, merchant: 'Gamivo', code: 'NEXARDA10', shops: 2 });
+  assert.ok(mega.url.startsWith('https://nexarda.co/'), 'lien NEXARDA gardé tel quel');
+  const owe = parseNexardaPrices(nexardaPricesFixture(31));
+  assert.equal(owe.merchant, 'HRK Game', 'Amazon, autre région, Deluxe et rupture écartés');
+  assert.equal(owe.keyshop, 12.4);
+  assert.equal(parseNexardaPrices(nexardaPricesFixture(99)), null);
+  assert.throws(() => parseNexardaPrices({ success: true, prices: { currency: 'GBP', list: [] } }), /GBP/);
+});
+
+test('NEXARDA : quelques jeux par vérification, absents retenus, prix relus toutes les 6 h', async () => {
+  const real = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    const u = new URL(url);
+    const body = u.pathname.endsWith('/find') ? nexardaFindFixture(Number(u.searchParams.get('steam'))) : nexardaPricesFixture(Number(u.searchParams.get('id')));
+    return new Response(JSON.stringify(body));
+  };
+  try {
+    const limits = { perRun: 3, pause: 0, priceTtl: 6 * 3600e3, foundTtl: 30 * 86400e3, missTtl: 3 * 86400e3 };
+    const cache = {};
+    const ids = ['900101', '42', '900301', '900101'];
+    let out = await lookupNexarda(ids, cache, now, limits);
+    assert.equal(calls.length, 3, 'budget respecté');
+    assert.deepEqual(Object.keys(out), ['900101']);
+    assert.equal(cache.ids['42'].id, null, 'absent retenu');
+    out = await lookupNexarda(ids, cache, now + 60e3, limits);
+    assert.deepEqual(Object.keys(out).sort(), ['900101', '900301'], 'la suite au passage suivant');
+    assert.equal(calls.length, 5, 'ni le jeu absent ni le prix récent ne sont redemandés');
+    await lookupNexarda(ids, cache, now + 7 * 3600e3, limits);
+    assert.ok(calls.slice(5).every((u) => u.includes('/prices')), 'numéros NEXARDA gardés, prix relus');
+  } finally {
+    globalThis.fetch = real;
+  }
+});
+
+test('Clés PC : le prix NEXARDA plus bas remplace celui des meilleures ventes', () => {
+  const lows = {};
+  const built = pcKeys(lows);
+  const found = { 900101: { keyshop: 6.49, currency: 'EUR', url: 'https://nexarda.co/plg/1', merchant: 'Gamivo', code: 'NEXARDA10', shops: 2 }, 900301: { keyshop: 19, currency: 'EUR', url: 'https://nexarda.co/plg/2', merchant: 'HRK Game' } };
+  const { items, prices } = mergeKeyPrices(built, found, lows, now);
+  assert.equal(prices['900101'].keyshop, 6.49);
+  assert.equal(prices['900301'].keyshop, 17.99, 'Eneba reste moins cher');
+  const mega = items.find((d) => d.steamAppID === '900101');
+  assert.deepEqual([mega.price, mega.merchant, mega.code, mega.discount], [6.49, 'Gamivo', 'NEXARDA10', 34]);
+  assert.equal(built.items.find((d) => d.steamAppID === '900101').price, 7.49, 'la liste d’origine n’est pas modifiée');
+  assert.equal(lows['900101'].price, 6.49);
 });
 
 test('buildDeals : fusion Dealabs ↔ eShop, prix clé, affaires exceptionnelles, chute soudaine', () => {
@@ -248,15 +338,15 @@ test('buildDeals : fusion Dealabs ↔ eShop, prix clé, affaires exceptionnelles
   applyHistoricLows(cs, cheapsharkGamesFixture());
   const es = parseEshop([eshopSearchFixture(), eshopNintendoFixture()], S);
   applyEshopPrices(es, eshopPriceFixture(now));
-  const gg = parseGgDeals(ggdealsFixture());
+  const keys = pcKeys();
   const history = {};
   const lists = () => ({
     cheapshark: structuredClone(cs),
     eshop: structuredClone(es.filter((i) => i.onSale !== false)),
     dealabs: dealabsItems(),
-    ggdeals: ggKeyshopDeals(gg),
+    pckeys: structuredClone(keys.items),
   });
-  const deals = buildDeals(lists(), history, gg, now);
+  const deals = buildDeals(lists(), history, keys.prices, now);
 
   const sw = deals.filter((d) => d.section === 'switch');
   const pc = deals.filter((d) => d.section === 'pc');
@@ -274,9 +364,10 @@ test('buildDeals : fusion Dealabs ↔ eShop, prix clé, affaires exceptionnelles
   assert.equal(deals[0].flags.priceError, true, 'erreur de prix en tête');
 
   // 2e vérification : le prix clé d'Open World Epic chute de 17,99 € à 8,99 €
-  const gg2 = structuredClone(gg);
-  gg2['900301'].keyshop = 8.99;
-  const deals2 = buildDeals({ ...lists(), ggdeals: ggKeyshopDeals(gg2) }, history, gg2, now + 3 * 3600e3);
+  const keys2 = structuredClone(keys);
+  keys2.items.find((d) => d.steamAppID === '900301').price = 8.99;
+  keys2.prices['900301'].keyshop = 8.99;
+  const deals2 = buildDeals({ ...lists(), pckeys: keys2.items }, history, keys2.prices, now + 3 * 3600e3);
   const ow = deals2.find((d) => d.title === 'Open World Epic');
   assert.ok(ow.flags.drop && ow.exceptional);
   assert.equal(ow.prevPrice, 17.99);
@@ -1619,14 +1710,15 @@ test('Accès : seulement les sites utiles aux choix, tous déclarés dans le man
   const sw = tutoDraft({ pc: false, switch: true });
   assert.ok(has(sw, 'nintendo') && has(sw, 'eneba') && has(sw, 'dealabs'));
   for (const x of ['gog', 'ea.com', 'humble', 'itch', 'cheapshark', 'ubisoft', 'gg.deals']) assert.ok(!has(sw, x), x);
-  assert.ok(!has(tutoDraft(), 'nintendo') && !has(tutoDraft(), 'gg.deals'));
-  assert.ok(has(tutoDraft({ ggdealsKey: 'k' }), 'gg.deals'));
+  assert.ok(!has(tutoDraft(), 'nintendo') && !has(tutoDraft(), 'kinguin'));
+  assert.ok(has(tutoDraft(), 'eneba') && has(tutoDraft(), 'instant-gaming'), 'clés PC sans compte');
+  assert.ok(!has(tutoDraft({ keyshops: false }), 'eneba'));
   assert.ok(!has(tutoDraft({ bundles: false }), 'humble'));
   const noGog = tutoDraft();
   noGog.stores.gog = false;
   assert.ok(!has(noGog, 'gog.com'));
   assert.deepEqual(originsFor(tutoDraft({ pc: false, switch: false })), []);
-  const all = tutoDraft({ switch: true, prime: true, ggdealsKey: 'k' });
+  const all = tutoDraft({ switch: true, prime: true });
   for (const k of Object.keys(all.stores)) all.stores[k] = true;
   const used = originsFor(all);
   for (const o of used) assert.ok(manifest.optional_host_permissions.includes(o), o);

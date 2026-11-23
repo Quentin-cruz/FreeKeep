@@ -19,7 +19,7 @@ import { tasteFrom, genresToHide, rankFranchises, filterHits, recommendedLevel, 
 import { isExceptional } from './src/deals.js';
 import { effective, wants, hiddenReason, makeOwnedIndex, sameGameStrict, extractGameName, steamOnly, showsGame } from './src/prefs.js';
 import {
-  getSettings, saveSettings, migrateKey, getDraft, saveDraft, getData, saveData, locked, updateData, stateFor, patchState, keysForHistory, getClaimTabs, updateClaimTabs,
+  getSettings, saveSettings, forgetGgDealsKey, getDraft, saveDraft, getData, saveData, locked, updateData, stateFor, patchState, keysForHistory, getClaimTabs, updateClaimTabs,
 } from './src/store.js';
 import { isNewer, fetchLatestVersion, CHECK_EVERY } from './src/update.js';
 import { mergeStates } from './src/backup.js';
@@ -43,7 +43,7 @@ const storeName = (g) => STORES[g.store]?.short || g.store;
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
-  await migrateKey().catch((e) => console.warn('[FreeKeep] clé GG.deals :', e));
+  await forgetGgDealsKey().catch((e) => console.warn('[FreeKeep] ancienne clé GG.deals :', e));
   await updateScripts();
   await scheduleAlarm();
   const settings = await getSettings();
@@ -77,7 +77,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 // Réglages qui ne demandent qu'un nouveau tri (pas de nouveau téléchargement)
 const CHEAP_SETTINGS = ['notifyNew', 'notifyLastDay', 'notifyDeals', 'notifyWishlist', 'autoClick', 'intervalHours', 'onboarded', 'checkUpdates'];
 // Réglages qui changent ce qu'on demande aux API
-const REFETCH_SETTINGS = ['pc', 'switch', 'stores', 'ggdealsKey', 'keyshops', 'bundles', 'pcDeals', 'switchDeals'];
+const REFETCH_SETTINGS = ['pc', 'switch', 'stores', 'keyshops', 'bundles', 'pcDeals', 'switchDeals'];
 const LIBRARY_SETTINGS = ['steamProfile', 'steamOwnedSync', 'useWishlist'];
 const GOG_SETTINGS = ['gogSessionSync'];
 const NOTIFY_SETTINGS = ['notifyNew', 'notifyLastDay', 'notifyDeals', 'notifyWishlist'];
@@ -86,8 +86,6 @@ const changedSettings = (a, b) => Object.keys({ ...a, ...b }).filter((k) => JSON
 const needsRefresh = (changed) => changed.some((k) => !CHEAP_SETTINGS.includes(k));
 
 chrome.storage.onChanged.addListener((changes, area) => {
-  // Clé GG.deals : gardée sur cet ordinateur, hors des réglages synchronisés
-  if (area === 'local' && changes.ggdealsKey && (changes.ggdealsKey.oldValue || '') !== (changes.ggdealsKey.newValue || '')) settingsRefresh(['ggdeals', 'watchlist']);
   if (area !== 'sync' || !changes.settings) return;
   const before = changes.settings.oldValue || {};
   const after = changes.settings.newValue || {};
@@ -985,11 +983,7 @@ async function handleMessage(msg, sender) {
     case 'resetData':
       // Une vérification en cours réenregistrerait les anciennes données : on la laisse finir d'abord.
       while (running || next) await (next?.promise || running).catch(() => {});
-      await locked(async () => {
-        const { ggdealsKey } = await chrome.storage.local.get('ggdealsKey'); // un réglage, donc conservé
-        await chrome.storage.local.clear();
-        if (ggdealsKey) await chrome.storage.local.set({ ggdealsKey });
-      });
+      await locked(() => chrome.storage.local.clear());
       await refresh('reset');
       return publicState();
     case 'importStates':

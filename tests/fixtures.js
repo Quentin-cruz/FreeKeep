@@ -327,15 +327,45 @@ export function dealabsFeeds(now = Date.now()) {
   };
 }
 
-export function ggdealsFixture() {
-  return {
-    success: true,
-    data: {
-      900101: { title: 'Mega Shooter 4', url: 'https://gg.deals/game/mega-shooter-4/', prices: { currentRetail: '9.89', currentKeyshops: '7.49', historicalRetail: '9.89', historicalKeyshops: '6.99', currency: 'EUR' } },
-      900301: { title: 'Open World Epic', url: 'https://gg.deals/game/open-world-epic/', prices: { currentRetail: '59.99', currentKeyshops: '17.99', historicalRetail: '29.99', historicalKeyshops: '18.50', currency: 'EUR' } },
-      900102: null,
-    },
+// Page « jeux Steam » d'Eneba : état Apollo intégré à la page.
+export function enebaPcFixture() {
+  const product = (id, name, cents, extra = {}) => ({
+    [`Product:${id}`]: { __typename: 'Product', name, slug: `steam-${id}`, type: { value: extra.type || 'GAME' }, 'cheapestAuction({"currency":"EUR"})': { __ref: `Auction:${id}` } },
+    [`Auction:${id}`]: { __typename: 'Auction', isInStock: extra.stock ?? true, 'price({"currency":"EUR"})': { amount: cents, currency: 'EUR' }, 'msrp({"currency":"EUR"})': { amount: 9999 } },
+  });
+  const state = {
+    ...product('mega', 'Mega Shooter 4 (PC) Clé Steam EUROPE', 749),
+    ...product('owe', 'Open World Epic Steam Key (PC) GLOBAL', 1799),
+    ...product('us', 'Open World Epic Steam Key NORTH AMERICA', 999),
+    ...product('pass', 'Open World Epic - Season Pass Steam Key GLOBAL', 499),
+    ...product('gone', 'Indie Gem clé Steam GLOBAL', 199, { stock: false }),
+    ...product('card', 'Steam Gift Card 20 EUR', 1900, { type: 'GIFTCARD' }),
   };
+  return `<html><body><script id="__APOLLO_STATE__" type="application/json">${JSON.stringify(state)}</script></body></html>`;
+}
+
+// Page « PC Steam » d'Instant Gaming : prix dans un bloc JSON pour certains jeux, dans la carte pour les autres.
+export function igPcFixture() {
+  const card = (id, title, price) => `<article class="item"><a class="cover video" href="https://www.instant-gaming.com/fr/${id}-acheter-x/" title="acheter ${title}"><div class="discount">-50%</div></a>
+    <div class="information"><span class="title" title="${title}">${title}</span>${price ? `<div class="
+ price
+ ">${price}&nbsp;€</div>` : ''}</div></article>`;
+  return `<script>var x = [{"item_id":101,"price":"18.49","price_eur":"18.49"}];</script>
+    ${card(101, 'Open World Epic - PC (Steam)')}
+    ${card(102, 'Indie Gem - PC &amp; Mac (Steam)', '4.99')}
+    ${card(103, 'Mega Shooter 4 - Xbox Series X|S', '5.00')}
+    ${card(104, 'Open World Epic - PC (Steam) - US', '9.99')}`;
+}
+
+// Recherche du store Steam (api/storesearch), prix en centimes d'euro.
+export function steamStoreSearchFixture(name) {
+  const app = (id, n, initial, final = initial, metascore = '') => ({ type: 'app', name: n, id, price: { currency: 'EUR', initial, final }, metascore });
+  const all = {
+    'Mega Shooter 4': [app(900101, 'Mega Shooter 4', 989)],
+    'Open World Epic': [app(900399, 'Open World Epic Soundtrack', 999), app(900301, 'Open World Epic™', 5999, 5999, '88')],
+    'Indie Gem': [app(900500, 'Indie Gem', 1499, 549)],
+  };
+  return { total: (all[name] || []).length, items: all[name] || [] };
 }
 
 export function steamGamesXmlFixture() {
@@ -434,4 +464,34 @@ export function dealabsTemperatureFeeds(now = Date.now()) {
     hot: rss('Dealabs : Hot', [{ ...moon, title: `119° - ${title}` }, free]),
     switch: rss('Dealabs : Jeux Nintendo Switch', [{ ...moon, title }]),
   };
+}
+
+// NEXARDA : /api/v3/find?steam=… puis /api/v3/prices?type=game&id=…&currency=EUR
+export function nexardaFindFixture(appid) {
+  const known = { 900101: 11, 900301: 31 };
+  return known[appid]
+    ? { success: true, code: 'game_found', message: 'Here is the video game info.', game: { id: known[appid], name: 'x' } }
+    : { success: false, code: 'game_not_found', message: 'No video game found with the given Steam App ID.' };
+}
+export function nexardaPricesFixture(id) {
+  const offer = (store, type, price, o = {}) => ({
+    url: `https://nexarda.co/plg/${id}${store.length}${Math.round(price * 100)}?currency=EUR`,
+    store: { name: store, type, official: type === 'Official Store' },
+    edition: o.edition || 'Standard Edition', region: o.region || 'Global', platform: o.platform || 'Steam',
+    available: o.available ?? true, price, discount: 0,
+    coupon: o.code ? { available: true, discount: 10, code: o.code, price_without: price * 1.1 } : { available: false, discount: 0, code: '', price_without: price },
+  });
+  const lists = {
+    11: [offer('Steam', 'Official Store', 9.89), offer('Gamivo', 'Marketplace', 6.49, { code: 'NEXARDA10' }), offer('Kinguin', 'Marketplace', 6.99)],
+    31: [
+      offer('Steam', 'Official Store', 29.99),
+      offer('Amazon', 'Marketplace', 5), // objets physiques : écarté
+      offer('G2A', 'Marketplace', 7.5, { region: 'North America' }), // autre région : écartée
+      offer('K4G', 'Marketplace', 8, { edition: 'Deluxe Edition' }), // autre édition
+      offer('Eneba', 'Marketplace', 9, { available: false }),
+      offer('HRK Game', 'Key Seller', 12.4),
+      offer('Instant Gaming', 'Key Seller', 13.1),
+    ],
+  };
+  return { success: true, code: 'game_prices_found', prices: { currency: 'EUR', list: lists[id] || [] } };
 }

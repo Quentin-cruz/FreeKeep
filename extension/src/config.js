@@ -141,7 +141,10 @@ export const ENDPOINTS = {
   enebaSwitch: 'https://www.eneba.com/fr/store/nintendo-games',
   kinguin: 'https://www.kinguin.net/services/library/api/v1/products/search',
   igSwitch: 'https://www.instant-gaming.com/fr/nintendo/',
-  ggdeals: 'https://api.gg.deals/v1/prices/by-steam-app-id/',
+  enebaPc: 'https://www.eneba.com/fr/store/steam-games',
+  igPc: 'https://www.instant-gaming.com/fr/pc/steam/',
+  nexardaFind: 'https://www.nexarda.com/api/v3/find',
+  nexardaPrices: 'https://www.nexarda.com/api/v3/prices',
   steamCommunity: 'https://steamcommunity.com',
   steamWishlist: 'https://api.steampowered.com/IWishlistService/GetWishlist/v1/',
   steamStoreSearch: 'https://store.steampowered.com/api/storesearch/',
@@ -177,7 +180,6 @@ export const DEFAULT_SETTINGS = {
   gemMinRating: 90,
   switchMinDiscount: 40,
   pcMaxAge: 6,            // au-delà, un jeu passe derrière « Voir tout » (ans)
-  ggdealsKey: '',         // clé API GG.deals (facultative) -> prix des sites de clés
 
   // Ce que je ne veux pas voir
   excludedGenres: ['adult'],
@@ -210,7 +212,7 @@ export const DEFAULT_SETTINGS = {
 };
 
 // Sources à relire quand un réglage de bons plans change.
-export const DEAL_SOURCES = ['cheapshark', 'wanted', 'eshop', 'ggdeals', 'gog', 'ea', 'bundles', 'storebundles', 'itchbundles', 'switchkeys', 'dealabsPages'];
+export const DEAL_SOURCES = ['cheapshark', 'wanted', 'eshop', 'pckeys', 'gog', 'ea', 'bundles', 'storebundles', 'itchbundles', 'switchkeys', 'dealabsPages'];
 
 // Fréquence des vérifications, en heures.
 export const INTERVALS = [

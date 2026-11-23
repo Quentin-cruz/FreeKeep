@@ -68,7 +68,7 @@ export function groupDeals(deals) {
       flags,
       ids: sorted.map((d) => d.id),
       steamAppID: best.steamAppID || sorted.find((d) => d.steamAppID)?.steamAppID || null,
-      ...(key && !best.keyshop ? { keyshop: { price: key.price, currency: key.currency, url: key.url } } : {}),
+      ...(key && !best.keyshop ? { keyshop: { price: key.price, currency: key.currency, url: key.url, merchant: key.merchant || null, code: key.code || null } } : {}),
       temperature: peers.some((d) => d.temperature != null) ? Math.max(...peers.map((d) => d.temperature ?? 0)) : best.temperature ?? null,
       normalPrice: best.normalPrice ?? sorted.find((d) => d.normalPrice)?.normalPrice ?? null,
       discount: best.discount ?? (best.price != null && sorted.find((d) => d.normalPrice > best.price) ? Math.round((1 - best.price / sorted.find((d) => d.normalPrice > best.price).normalPrice) * 100) : null),
@@ -181,11 +181,11 @@ export function mergeLaunchers(main, extras) {
 }
 
 /**
- * @param lists   { cheapshark, ggdeals, eshop, dealabs } — items déjà filtrés par chaque source
+ * @param lists   { cheapshark, pckeys, eshop, dealabs } — items déjà filtrés par chaque source
  * @param history { [id]: { price, at } } — dernier prix vu (modifié en place)
- * @param gg      { [appid]: prix GG.deals } — pour afficher le prix « clé » à côté d'une promo officielle
+ * @param keys    { [appid]: { keyshop, currency, url } } — meilleur prix « clé », affiché à côté d'une promo officielle
  */
-export function buildDeals(lists, history = {}, gg = {}, now = Date.now()) {
+export function buildDeals(lists, history = {}, keys = {}, now = Date.now()) {
   const official = [
     ...mergeLaunchers(lists.cheapshark || [], [
       ...(lists.wanted || []), ...(lists.wishlist || []), ...(lists.gog || []), ...(lists.ea || []),
@@ -208,13 +208,13 @@ export function buildDeals(lists, history = {}, gg = {}, now = Date.now()) {
     }
   }
 
-  // GG.deals : prix « clé » affiché sur les promos officielles + bons plans clés exceptionnels.
+  // Sites de clés : prix « clé » affiché sur les promos officielles + bons plans clés exceptionnels.
   for (const d of official) {
-    const p = d.steamAppID && gg[d.steamAppID];
-    if (p?.keyshop != null) d.keyshop = { price: p.keyshop, currency: p.currency, url: p.url };
+    const p = d.steamAppID && keys[d.steamAppID];
+    if (p?.keyshop != null && p.keyshop < d.price) d.keyshop = { price: p.keyshop, currency: p.currency, url: p.url, merchant: p.merchant || null, code: p.code || null };
   }
   const keyDeals = [];
-  for (const k of lists.ggdeals || []) {
+  for (const k of lists.pckeys || []) {
     if (official.some((o) => o.steamAppID && o.steamAppID === k.steamAppID)) continue;
     keyDeals.push(k);
   }
@@ -238,7 +238,7 @@ export function buildDeals(lists, history = {}, gg = {}, now = Date.now()) {
   }
   for (const [id, h] of Object.entries(history)) if (now - h.at > 30 * DAY) delete history[id];
 
-  return groupDeals(all.filter((d) => d.source !== 'ggdeals' || d.candidate || d.flags.drop))
+  return groupDeals(all.filter((d) => d.source !== 'pckeys' || d.candidate || d.flags.drop))
     .map((d) => ({ ...d, ...(cleanLabel(d) ? { label: cleanLabel(d) } : {}), exceptional: isExceptional(d), score: scoreDeal(d) }))
     .sort((a, b) => b.score - a.score);
 }
